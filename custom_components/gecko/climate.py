@@ -127,7 +127,7 @@ class GeckoClimate(GeckoEntityAvailabilityMixin, CoordinatorEntity[GeckoVesselCo
     
     def _update_from_zone(self) -> None:
         """Update state attributes from zone data."""
-        if self._zone.status:
+        if self._zone.status is not None:
             self._attr_hvac_action = _HVAC_ACTION_MAP.get(
                 self._zone.status, HVACAction.IDLE
             )

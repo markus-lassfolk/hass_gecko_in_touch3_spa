@@ -178,9 +178,14 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
 
             if rgb_color is not None and callable(set_color_method):
                 r, g, b = rgb_color
-                # Use provided brightness as the intensity channel, or keep existing
+                # Use provided brightness as the intensity channel, or keep existing, default to full
                 existing_rgbi = getattr(zone, 'rgbi', None)
-                i = brightness if brightness is not None else (existing_rgbi.i if existing_rgbi else None)
+                if brightness is not None:
+                    i = brightness
+                elif existing_rgbi is not None:
+                    i = existing_rgbi.i
+                else:
+                    i = 255
                 set_color_method(r, g, b, i)
             elif brightness is not None and callable(set_color_method):
                 # Keep existing color, update brightness/intensity

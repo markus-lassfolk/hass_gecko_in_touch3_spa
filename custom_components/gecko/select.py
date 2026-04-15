@@ -137,13 +137,17 @@ class GeckoWatercareSelectEntity(GeckoEntityAvailabilityMixin, CoordinatorEntity
         """Handle operation mode update events from gecko_iot_client.
 
         This callback is invoked from gecko_iot_client's background thread,
-        so we must schedule the state update on the event loop.
+        so all state modifications are scheduled on the event loop via
+        call_soon_threadsafe to avoid race conditions.
         """
         try:
             new_option = operation_mode_controller.mode_name
-            if new_option != self._attr_current_option:
+
+            def _update_and_write() -> None:
                 self._attr_current_option = new_option
-                self.hass.loop.call_soon_threadsafe(self.async_write_ha_state)
+                self.async_write_ha_state()
+
+            self.hass.loop.call_soon_threadsafe(_update_and_write)
         except Exception as e:
             _LOGGER.debug("Error handling operation mode update for %s: %s", self._attr_name, e)
 
