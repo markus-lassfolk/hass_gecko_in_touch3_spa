@@ -5,7 +5,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components.light import ColorMode, LightEntity
+from homeassistant.components.light import (
+    ATTR_BRIGHTNESS,
+    ATTR_RGB_COLOR,
+    ColorMode,
+    LightEntity,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -96,10 +101,10 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
             identifiers={(DOMAIN, str(coordinator.vessel_id))},
         )
         
-        # Set basic light features
-        self._attr_supported_color_modes = {ColorMode.ONOFF}
+        # Support both on/off and RGB color control
+        self._attr_supported_color_modes = {ColorMode.ONOFF, ColorMode.RGB}
         self._attr_color_mode = ColorMode.ONOFF
-        
+
         # Initialize state and availability (will be set by async_added_to_hass event registration)
         self._attr_available = False
         self._update_state()
@@ -118,8 +123,29 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
         zone = self._get_zone_state()
         if zone:
             self._attr_is_on = getattr(zone, 'active', False)
+
+            # Update RGB color and brightness if available
+            rgbi = getattr(zone, 'rgbi', None)
+            if rgbi is not None:
+                self._attr_rgb_color = (rgbi.r, rgbi.g, rgbi.b)
+                self._attr_brightness = rgbi.i
+                self._attr_color_mode = ColorMode.RGB
+            else:
+                self._attr_rgb_color = None
+                self._attr_brightness = None
+                self._attr_color_mode = ColorMode.ONOFF
         else:
             self._attr_is_on = None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        zone = self._get_zone_state()
+        if zone:
+            effect = getattr(zone, 'effect', None)
+            if effect is not None:
+                return {"effect": effect}
+        return {}
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -128,26 +154,45 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
         # Availability is now updated via CONNECTIVITY_UPDATE events, not polling
         self.async_write_ha_state()
 
-    async def async_turn_on(self, **kwargs) -> None:
-        """Turn the light on."""
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn the light on, optionally with color and brightness."""
         try:
             # Check if gecko client is connected
             gecko_client = await self.coordinator.get_gecko_client()
             if not gecko_client:
                 _LOGGER.error("No gecko client available for %s", self._attr_name)
                 return
-                
+
             # Get the light zone from coordinator and activate it
             light_zones = self.coordinator.get_zones_by_type(ZoneType.LIGHTING_ZONE)
             zone = next((z for z in light_zones if z.id == self._zone.id), None)
-            if zone:
-                activate_method = getattr(zone, "activate", None)
-                if activate_method and callable(activate_method):
-                    activate_method()
-                else:
-                    _LOGGER.warning("Zone %s does not have activate method", zone.id)
-            else:
+            if not zone:
                 _LOGGER.warning("Could not find lighting zone %s", self._zone.id)
+                return
+
+            rgb_color = kwargs.get(ATTR_RGB_COLOR)
+            brightness = kwargs.get(ATTR_BRIGHTNESS)
+
+            set_color_method = getattr(zone, "set_color", None)
+            activate_method = getattr(zone, "activate", None)
+
+            if rgb_color is not None and callable(set_color_method):
+                r, g, b = rgb_color
+                # Use provided brightness as the intensity channel, or keep existing
+                existing_rgbi = getattr(zone, 'rgbi', None)
+                i = brightness if brightness is not None else (existing_rgbi.i if existing_rgbi else None)
+                set_color_method(r, g, b, i)
+            elif brightness is not None and callable(set_color_method):
+                # Keep existing color, update brightness/intensity
+                existing_rgbi = getattr(zone, 'rgbi', None)
+                if existing_rgbi is not None:
+                    set_color_method(existing_rgbi.r, existing_rgbi.g, existing_rgbi.b, brightness)
+                elif callable(activate_method):
+                    activate_method()
+            elif callable(activate_method):
+                activate_method()
+            else:
+                _LOGGER.warning("Zone %s has no activate or set_color method", zone.id)
         except Exception as e:
             _LOGGER.error("Error turning on light %s: %s", self._attr_name, e)
 

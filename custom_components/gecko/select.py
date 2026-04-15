@@ -16,6 +16,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import GeckoVesselCoordinator
 from .entity import GeckoEntityAvailabilityMixin
+from gecko_iot_client.models.events import EventChannel
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -98,13 +99,53 @@ class GeckoWatercareSelectEntity(GeckoEntityAvailabilityMixin, CoordinatorEntity
         
         # Initialize availability (will be updated by mixin when added to hass)
         self._attr_available = False
+        
+        # Track whether the operation mode event callback has been registered
+        self._operation_mode_callback_registered: bool = False
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
         # Call parent classes - this ensures the mixin's connectivity registration happens
         await super().async_added_to_hass()
+        # Register for real-time operation mode updates
+        await self._manage_operation_mode_callback(register=True)
         # Update state immediately when added
         await self._async_update_state()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """When entity is removed from hass."""
+        await self._manage_operation_mode_callback(register=False)
+        await super().async_will_remove_from_hass()
+
+    async def _manage_operation_mode_callback(self, register: bool) -> None:
+        """Register or unregister the operation mode event callback."""
+        if register == self._operation_mode_callback_registered:
+            return
+
+        gecko_client = await self.coordinator.get_gecko_client()
+        if not gecko_client:
+            return
+
+        if register:
+            gecko_client.on(EventChannel.OPERATION_MODE_UPDATE, self._on_operation_mode_update)
+        else:
+            gecko_client.off(EventChannel.OPERATION_MODE_UPDATE, self._on_operation_mode_update)
+
+        self._operation_mode_callback_registered = register
+
+    def _on_operation_mode_update(self, operation_mode_controller) -> None:
+        """Handle operation mode update events from gecko_iot_client.
+
+        This callback is invoked from gecko_iot_client's background thread,
+        so we must schedule the state update on the event loop.
+        """
+        try:
+            new_option = operation_mode_controller.mode_name
+            if new_option != self._attr_current_option:
+                self._attr_current_option = new_option
+                self.hass.loop.call_soon_threadsafe(self.async_write_ha_state)
+        except Exception as e:
+            _LOGGER.debug("Error handling operation mode update for %s: %s", self._attr_name, e)
 
     @callback
     def _handle_coordinator_update(self) -> None:
