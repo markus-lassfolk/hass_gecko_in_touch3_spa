@@ -1,0 +1,19 @@
+# Fallback for editors / pylint runs that do not merge ``[tool.pylint.*]`` from pyproject.toml.
+# Keep in sync with ``[tool.pylint.*]`` in pyproject.toml.
+
+[MAIN]
+py-version = 3.13
+
+[FORMAT]
+max-line-length = 120
+
+[MESSAGES CONTROL]
+disable =
+    import-error,
+    too-many-instance-attributes,
+    too-many-public-methods,
+    too-many-arguments,
+    too-many-positional-arguments,
+    too-many-locals,
+    too-many-return-statements,
+    broad-exception-caught,

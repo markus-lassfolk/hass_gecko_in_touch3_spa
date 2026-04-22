@@ -1,0 +1,9 @@
+# CI / local: Home Assistant test harness + Ruff (transitive deps resolved by pip).
+# For editor type-checking (Pylance/pyright), use a project venv and select it:
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements_test.txt
+#   .venv/bin/pip install awsiotsdk==1.26.0
+#   .venv/bin/pip install --no-deps gecko-iot-client==0.2.5
+# (Versions also listed in requirements_test_gecko.txt for parity with manifest.json.)
+#
+pytest-homeassistant-custom-component==0.13.205
+ruff==0.9.6

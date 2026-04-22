@@ -21,6 +21,19 @@
       "default": "[%key:common::config_flow::create_entry::authenticated%]"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Cloud REST & alerts",
+        "description": "Optional Gecko Cloud REST polling: vessel summary tiles (numbers/strings merged as cloud.rest.* when MQTT is sparse or disconnected) and a separate alerts poll (unread messages scope + vessel actions). Uses only IDs from this config entry.",
+        "data": {
+          "cloud_rest_poll_interval": "Poll interval (seconds, 0 = disabled)",
+          "cloud_rest_only_when_mqtt_down": "Only poll when MQTT is disconnected",
+          "alerts_poll_interval": "Alerts poll interval (seconds, 0 = off). Uses account messages/unread and vessel actions from REST."
+        }
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "rf_strength": {

@@ -1,0 +1,4 @@
+# Pin with Home Assistant integration (custom_components/gecko/manifest.json)
+gecko-iot-client==0.2.5
+awsiotsdk==1.26.0
+aiohttp>=3.9

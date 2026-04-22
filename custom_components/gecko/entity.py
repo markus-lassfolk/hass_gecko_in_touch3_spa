@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from gecko_iot_client.models.events import EventChannel
 from gecko_iot_client import GeckoIotClient
+from gecko_iot_client.models.events import EventChannel
 from homeassistant.core import HomeAssistant
+
 from .coordinator import GeckoVesselCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ class GeckoEntityAvailabilityMixin:
     @property
     def available(self) -> bool:
         """Return if entity is available.
-        
+
         Override the cached property to make availability truly dynamic.
         """
         return self._attr_available
@@ -49,15 +50,19 @@ class GeckoEntityAvailabilityMixin:
             return
 
         if register:
-            gecko_client.on(EventChannel.CONNECTIVITY_UPDATE, self._on_connectivity_update)
+            gecko_client.on(
+                EventChannel.CONNECTIVITY_UPDATE, self._on_connectivity_update
+            )
         else:
-            gecko_client.off(EventChannel.CONNECTIVITY_UPDATE, self._on_connectivity_update)
+            gecko_client.off(
+                EventChannel.CONNECTIVITY_UPDATE, self._on_connectivity_update
+            )
 
         self._connectivity_callback_registered = register
 
     def _on_connectivity_update(self, connectivity_status) -> None:
         """Handle connectivity update events from gecko_iot_client.
-        
+
         This callback is invoked from gecko_iot_client's background thread,
         so we must schedule the state update on the event loop.
         """
@@ -72,9 +77,7 @@ class GeckoEntityAvailabilityMixin:
             )
             self._attr_available = new_availability
             # Use the proper thread-safe method to write state from background thread
-            self.hass.loop.call_soon_threadsafe(
-                self.async_write_ha_state
-            )
+            self.hass.loop.call_soon_threadsafe(self.async_write_ha_state)
 
     def _update_availability(self) -> None:
         """Update availability from gecko_iot_client's is_connected property."""
@@ -86,7 +89,7 @@ class GeckoEntityAvailabilityMixin:
         gecko_client = self._get_gecko_client_sync()
         if not gecko_client:
             return False
-        
+
         return gecko_client.is_connected
 
     def _get_gecko_client_sync(self) -> GeckoIotClient | None:
@@ -97,6 +100,5 @@ class GeckoEntityAvailabilityMixin:
         if not connection_manager:
             return None
 
-        connection = connection_manager._connections.get(self.coordinator.monitor_id)
+        connection = connection_manager.get_connection(self.coordinator.monitor_id)
         return connection.gecko_client if connection else None
-

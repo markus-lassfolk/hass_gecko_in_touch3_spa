@@ -1,37 +1,48 @@
 ---
 name: Bug Report
-about: Create a report to help us improve
+about: Report a problem with Gecko Full Community Integration for Home Assistant
 title: "[BUG] "
 labels: bug
 assignees: ''
 
 ---
 
-## Describe the Bug
-A clear and concise description of what the bug is.
+## Describe the bug
+A clear and concise description of what went wrong.
 
-## To Reproduce
+## To reproduce
 Steps to reproduce the behavior:
 1. Go to '...'
 2. Click on '....'
 3. Scroll down to '....'
 4. See error
 
-## Expected Behavior
-A clear and concise description of what you expected to happen.
+## Expected behavior
+What you expected to happen.
 
 ## Screenshots
-If applicable, add screenshots to help explain your problem.
+If applicable, add screenshots.
 
 ## Environment
-- Home Assistant Version: [e.g. 2025.12.0]
-- Gecko Integration Version: [e.g. 1.0.0]
-- Spa Model: [e.g. in.touch 3 / in.touch 3+]
+- **Home Assistant:** [e.g. 2026.4.0]
+- **Integration:** Gecko Full Community (`custom_components/gecko` — check **manifest.json** `version`, e.g. 2.1.6)
+- **Spa / gateway:** [e.g. in.touch 3+, monitor firmware if known]
+- **Relevant options:** [e.g. cloud REST poll interval, alerts poll interval, “only when MQTT down” on/off]
 
 ## Logs
-```
-Paste relevant logs here
+Enable debug logging if possible:
+
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.gecko: debug
 ```
 
-## Additional Context
-Add any other context about the problem here.
+Then paste the relevant section (redact tokens / URLs with embedded JWTs if you paste raw lines).
+
+## Diagnostics (optional)
+If the issue is entities or shadow mapping: **Settings → Devices & services → Gecko → Download diagnostics** and attach the JSON (it is structured for support; still review for anything you do not want public).
+
+## Additional context
+MQTT vs REST behavior, automations using `gecko.*` actions, or anything else that helps reproduce the issue.

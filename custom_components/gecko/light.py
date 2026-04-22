@@ -5,20 +5,22 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components.light import ColorMode, LightEntity
+from gecko_iot_client.models.zone_types import ZoneType
+from homeassistant.components.light import (
+    ATTR_BRIGHTNESS,
+    ATTR_RGB_COLOR,
+    ColorMode,
+    LightEntity,
+)
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.core import callback
 
 from .const import DOMAIN
 from .coordinator import GeckoVesselCoordinator
 from .entity import GeckoEntityAvailabilityMixin
-
-from gecko_iot_client.models.zone_types import ZoneType
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,26 +31,30 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Gecko light entities from a config entry."""
-    
+
     # Get runtime data with per-vessel coordinators
     runtime_data = config_entry.runtime_data
     if not runtime_data or not runtime_data.coordinators:
-        _LOGGER.error("No coordinators found in runtime_data for config entry %s", config_entry.entry_id)
+        _LOGGER.error(
+            "No coordinators found in runtime_data for config entry %s",
+            config_entry.entry_id,
+        )
         return
-    
+
     # Track created entities to avoid duplicates
     created_entity_ids = set()
-    
+
     # Create entity discovery function for each coordinator
     def create_discovery_callback(coordinator: GeckoVesselCoordinator):
         """Create a discovery callback for a specific coordinator."""
+
         def discover_new_light_entities():
             """Discover new light entities for new zones."""
             new_entities = []
-            
+
             # Get light zones for this vessel's coordinator (no monitor_id needed)
             light_zones = coordinator.get_zones_by_type(ZoneType.LIGHTING_ZONE)
-            
+
             for zone in light_zones:
                 # Check if entity already exists
                 entity_id = f"{coordinator.vessel_name}_light_{zone.id}".lower()
@@ -56,25 +62,28 @@ async def async_setup_entry(
                     entity = GeckoLight(coordinator, config_entry, zone)
                     new_entities.append(entity)
                     created_entity_ids.add(entity_id)
-            
+
             if new_entities:
                 async_add_entities(new_entities)
-        
+
         return discover_new_light_entities
-    
+
     # Set up entities for each vessel coordinator
     for coordinator in runtime_data.coordinators:
         # Initial entity discovery for this coordinator
         discovery_callback = create_discovery_callback(coordinator)
         discovery_callback()
-        
+
         # Register callback for dynamic entity creation
         coordinator.register_zone_update_callback(discovery_callback)
 
 
 class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
     """Representation of a Gecko light."""
+
     coordinator: GeckoVesselCoordinator
+
+    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -84,22 +93,30 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
     ) -> None:
         """Initialize the light."""
         super().__init__(coordinator)
-        
+
         self._zone = zone
+        self._rgb_color_capable = callable(getattr(zone, "set_color", None))
         self.entity_id = f"light.{coordinator.vessel_name}_light_{zone.id}".lower()
-        
-        self._attr_name = f"{coordinator.vessel_name} light zone {zone.id}"
-        self._attr_unique_id = f"{config_entry.entry_id}_{coordinator.vessel_name}_light_{zone.id}"
-        
+
+        self._attr_name = f"Light zone {zone.id}"
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{coordinator.vessel_name}_light_{zone.id}"
+        )
+
         # Device info for grouping entities - reference the actual device created in __init__.py
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, str(coordinator.vessel_id))},
         )
-        
-        # Set basic light features
-        self._attr_supported_color_modes = {ColorMode.ONOFF}
-        self._attr_color_mode = ColorMode.ONOFF
-        
+
+        # RGB-capable zones: only ColorMode.RGB — HA forbids mixing ONOFF with other
+        # modes (ONOFF must be the sole supported mode if present). RGB implies on/off.
+        if self._rgb_color_capable:
+            self._attr_supported_color_modes = {ColorMode.RGB}
+            self._attr_color_mode = ColorMode.RGB
+        else:
+            self._attr_supported_color_modes = {ColorMode.ONOFF}
+            self._attr_color_mode = ColorMode.ONOFF
+
         # Initialize state and availability (will be set by async_added_to_hass event registration)
         self._attr_available = False
         self._update_state()
@@ -117,9 +134,31 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
         """Update entity state from zone data."""
         zone = self._get_zone_state()
         if zone:
-            self._attr_is_on = getattr(zone, 'active', False)
+            self._attr_is_on = getattr(zone, "active", False)
+            rgbi = getattr(zone, "rgbi", None)
+            if rgbi is not None:
+                self._attr_rgb_color = (rgbi.r, rgbi.g, rgbi.b)
+                self._attr_brightness = rgbi.i
+                self._attr_color_mode = ColorMode.RGB
+            else:
+                self._attr_rgb_color = None
+                self._attr_brightness = None
+                # Stay in RGB when the zone supports color; ONOFF is not supported then.
+                self._attr_color_mode = (
+                    ColorMode.RGB if self._rgb_color_capable else ColorMode.ONOFF
+                )
         else:
             self._attr_is_on = None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return effect name when the zone exposes one."""
+        zone = self._get_zone_state()
+        if zone:
+            effect = getattr(zone, "effect", None)
+            if effect is not None:
+                return {"effect": effect}
+        return {}
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -128,26 +167,47 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
         # Availability is now updated via CONNECTIVITY_UPDATE events, not polling
         self.async_write_ha_state()
 
-    async def async_turn_on(self, **kwargs) -> None:
-        """Turn the light on."""
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn the light on, optionally with RGB color and brightness."""
         try:
-            # Check if gecko client is connected
             gecko_client = await self.coordinator.get_gecko_client()
             if not gecko_client:
                 _LOGGER.error("No gecko client available for %s", self._attr_name)
                 return
-                
-            # Get the light zone from coordinator and activate it
+
             light_zones = self.coordinator.get_zones_by_type(ZoneType.LIGHTING_ZONE)
             zone = next((z for z in light_zones if z.id == self._zone.id), None)
-            if zone:
-                activate_method = getattr(zone, "activate", None)
-                if activate_method and callable(activate_method):
-                    activate_method()
-                else:
-                    _LOGGER.warning("Zone %s does not have activate method", zone.id)
-            else:
+            if not zone:
                 _LOGGER.warning("Could not find lighting zone %s", self._zone.id)
+                return
+
+            rgb_color = kwargs.get(ATTR_RGB_COLOR)
+            brightness = kwargs.get(ATTR_BRIGHTNESS)
+            set_color_method = getattr(zone, "set_color", None)
+            activate_method = getattr(zone, "activate", None)
+
+            if rgb_color is not None and callable(set_color_method):
+                r, g, b = rgb_color
+                existing_rgbi = getattr(zone, "rgbi", None)
+                if brightness is not None:
+                    i = brightness
+                elif existing_rgbi is not None:
+                    i = existing_rgbi.i
+                else:
+                    i = 255
+                set_color_method(r, g, b, i)
+            elif brightness is not None and callable(set_color_method):
+                existing_rgbi = getattr(zone, "rgbi", None)
+                if existing_rgbi is not None:
+                    set_color_method(
+                        existing_rgbi.r, existing_rgbi.g, existing_rgbi.b, brightness
+                    )
+                else:
+                    set_color_method(255, 255, 255, brightness)
+            elif callable(activate_method):
+                activate_method()
+            else:
+                _LOGGER.warning("Zone %s has no activate or set_color method", zone.id)
         except Exception as e:
             _LOGGER.error("Error turning on light %s: %s", self._attr_name, e)
 
@@ -159,7 +219,7 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
             if not gecko_client:
                 _LOGGER.error("No gecko client available for %s", self._attr_name)
                 return
-                
+
             # Get the light zone from coordinator and deactivate it
             light_zones = self.coordinator.get_zones_by_type(ZoneType.LIGHTING_ZONE)
             zone = next((z for z in light_zones if z.id == self._zone.id), None)

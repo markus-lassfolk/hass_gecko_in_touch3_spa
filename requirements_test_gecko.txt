@@ -1,0 +1,5 @@
+# Gecko integration runtime wheels (must match custom_components/gecko/manifest.json "requirements").
+# CI installs ``awsiotsdk`` normally (pulls awscrt), then ``gecko-iot-client`` with ``--no-deps`` so
+# pip does not reconcile gecko-iot-client's aiohttp floor with homeassistant's pinned aiohttp.
+awsiotsdk==1.26.0
+gecko-iot-client==0.2.5

@@ -1,23 +1,25 @@
 ---
 name: Feature Request
-about: Suggest an idea for this integration
+about: Suggest an improvement for Gecko Full Community Integration
 title: "[FEATURE] "
 labels: enhancement
 assignees: ''
 
 ---
 
-## Is your feature request related to a problem?
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+## Problem / motivation
+What is missing or painful today? (e.g. a shadow path, REST route, entity type, or automation need.)
 
-## Describe the solution you'd like
-A clear and concise description of what you want to happen.
+## Proposed solution
+What should the integration do? If it involves the **device shadow**, describe the path or attach a **sanitized** `gecko.dump_shadow_snapshot` export when possible.
 
-## Describe alternatives you've considered
-A clear and concise description of any alternative solutions or features you've considered.
+## Alternatives considered
+Other ways you could solve this (scripts, MQTT manually, app-only workflow, etc.).
+
+## Spa / API context
+- **Hardware:** [e.g. in.touch 3+]
+- **Data source:** [MQTT shadow / REST tiles / REST alerts / other]
+- **403 or unavailable API:** note if you already know the Gecko Cloud route returns forbidden for consumer tokens.
 
 ## Additional context
-Add any other context or screenshots about the feature request here.
-
-## Spa Model
-Which spa model(s) would benefit from this feature?
+Screenshots, links to Gecko app behavior, or related issues in [markus-lassfolk/hass_gecko_in_touch3_spa](https://github.com/markus-lassfolk/hass_gecko_in_touch3_spa).

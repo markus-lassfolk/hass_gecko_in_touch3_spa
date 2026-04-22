@@ -1,0 +1,61 @@
+[project]
+name = "hass-gecko-integration"
+version = "0"
+description = "Home Assistant custom integration: Gecko (HACS)"
+readme = "README.md"
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.ruff]
+target-version = "py313"
+src = ["custom_components/gecko", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+ignore = [
+    "E501",  # line length
+    "B904",  # raise-without-from-inside-except (common in HA integrations)
+    "B905",  # zip(strict=) not used consistently across codebase
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B008"]  # pytest fixtures in args
+
+# Pylance / pyright: homeassistant is a dev dependency (see requirements_test.txt + requirements_test_gecko.txt).
+[tool.pyright]
+include = ["custom_components", "tests"]
+pythonVersion = "3.13"
+typeCheckingMode = "basic"
+
+# Pylint 3.x: use underscore section names (``messages_control``), not spaced keys.
+[tool.pylint.main]
+py-version = "3.13"
+
+[tool.pylint.messages_control]
+disable = [
+    "import-error",
+    "too-many-instance-attributes",
+    "too-many-public-methods",
+    "too-many-arguments",
+    "too-many-positional-arguments",
+    "too-many-locals",
+    "too-many-return-statements",
+    "broad-exception-caught",
+]
+
+[tool.pylint.format]
+max-line-length = 120
