@@ -58,7 +58,6 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self,
         hass: HomeAssistant,
         entry_id: str,
-        account_id: str,
         vessel_id: str,
         monitor_id: str,
         vessel_name: str,
@@ -71,7 +70,6 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=UPDATE_INTERVAL_SECONDS),
         )
         self.entry_id = entry_id
-        self.account_id = account_id
         self.vessel_id = vessel_id
         self.monitor_id = monitor_id
         self.vessel_name = vessel_name
@@ -157,6 +155,13 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return {}
         return dict(entry.options)
 
+    def _config_account_id(self) -> str:
+        """Account id from config entry (always current; not a copy from setup time)."""
+        entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if not entry:
+            return ""
+        return str(entry.data.get("account_id", "")).strip()
+
     async def _async_poll_cloud_tiles_if_due(
         self,
         connection: GeckoMonitorConnection | None,
@@ -168,7 +173,8 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 CONF_CLOUD_REST_POLL_INTERVAL, DEFAULT_CLOUD_REST_POLL_INTERVAL
             )
         )
-        if interval <= 0 or not self.account_id:
+        account_id = self._config_account_id()
+        if interval <= 0 or not account_id:
             return
 
         only_when_mqtt_down = bool(
@@ -199,13 +205,15 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if (
                 rd.rest_vessels_response_cache is not None
                 and rd.rest_vessels_response_cache_mono is not None
+                and rd.rest_vessels_cache_account_id == account_id
                 and (now - rd.rest_vessels_response_cache_mono) < interval
             ):
                 vessels = rd.rest_vessels_response_cache
             else:
-                vessels = await api.async_get_vessels(str(self.account_id))
+                vessels = await api.async_get_vessels(str(account_id))
                 rd.rest_vessels_response_cache = vessels
                 rd.rest_vessels_response_cache_mono = now
+                rd.rest_vessels_cache_account_id = account_id
         except Exception as err:
             _LOGGER.debug(
                 "Cloud tile REST poll skipped for %s: %s", self.vessel_name, err
@@ -232,7 +240,8 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         interval = int(
             opts.get(CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL)
         )
-        if interval <= 0 or not self.account_id:
+        account_id = self._config_account_id()
+        if interval <= 0 or not account_id:
             return
 
         now = time.monotonic()
@@ -252,7 +261,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         err: str | None = None
         try:
             messages_payload = await api.async_get_messages_unread(
-                str(self.account_id)
+                str(account_id)
             )
         except Exception as exc:
             err = f"messages_unread:{type(exc).__name__}"
@@ -263,7 +272,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
         try:
             actions_payload = await api.async_get_vessel_actions_v2(
-                str(self.account_id), str(self.vessel_id)
+                str(account_id), str(self.vessel_id)
             )
         except Exception as exc:
             aerr = f"actions:{type(exc).__name__}"

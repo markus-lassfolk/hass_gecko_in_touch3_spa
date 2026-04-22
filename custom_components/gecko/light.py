@@ -103,10 +103,11 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
             identifiers={(DOMAIN, str(coordinator.vessel_id))},
         )
         
-        # HA does not allow ONOFF together with RGB; RGB implies on/off control.
+        # RGB-capable zones still report ONOFF when the device has not sent rgbi yet
+        # (HA must not use ColorMode.RGB without ATTR_RGB_COLOR).
         if callable(getattr(zone, "set_color", None)):
-            self._attr_supported_color_modes = {ColorMode.RGB}
-            self._attr_color_mode = ColorMode.RGB
+            self._attr_supported_color_modes = {ColorMode.RGB, ColorMode.ONOFF}
+            self._attr_color_mode = ColorMode.ONOFF
         else:
             self._attr_supported_color_modes = {ColorMode.ONOFF}
             self._attr_color_mode = ColorMode.ONOFF
@@ -137,12 +138,7 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
             else:
                 self._attr_rgb_color = None
                 self._attr_brightness = None
-                # color_mode must stay within supported_color_modes (set in __init__).
-                supported = self._attr_supported_color_modes
-                if supported and ColorMode.RGB in supported:
-                    self._attr_color_mode = ColorMode.RGB
-                else:
-                    self._attr_color_mode = ColorMode.ONOFF
+                self._attr_color_mode = ColorMode.ONOFF
         else:
             self._attr_is_on = None
 

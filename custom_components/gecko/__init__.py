@@ -26,26 +26,127 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 _LOGGER = logging.getLogger(__name__)
 
+_TARGET_ENTRY_VERSION = 2
+
+
+async def _async_resolve_missing_account_id(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> str | None:
+    """Resolve Gecko cloud account_id using stored OAuth tokens (same path as config flow)."""
+    try:
+        implementation = (
+            await config_entry_oauth2_flow.async_get_config_entry_implementation(
+                hass, entry
+            )
+        )
+    except Exception as err:
+        _LOGGER.warning(
+            "Gecko migration: cannot load OAuth implementation for entry %s: %s",
+            entry.entry_id,
+            err,
+        )
+        return None
+
+    session = config_entry_oauth2_flow.OAuth2Session(hass, entry, implementation)
+    try:
+        await session.async_ensure_token_valid()
+    except Exception as err:
+        _LOGGER.warning(
+            "Gecko migration: token refresh failed for entry %s: %s",
+            entry.entry_id,
+            err,
+        )
+        return None
+
+    token = session.token or {}
+    access = token.get("access_token")
+    if not access:
+        _LOGGER.warning(
+            "Gecko migration: no access token for entry %s after ensure_token_valid",
+            entry.entry_id,
+        )
+        return None
+
+    from .api import ConfigFlowGeckoApi
+
+    api_client = ConfigFlowGeckoApi(hass, access)
+    try:
+        user_id = await api_client.async_get_user_id()
+        user_data = await api_client.async_get_user_info(user_id)
+    except Exception as err:
+        _LOGGER.warning(
+            "Gecko migration: user/account API failed for entry %s: %s",
+            entry.entry_id,
+            err,
+        )
+        return None
+
+    account_data = user_data.get("account") or {}
+    account_id = str(account_data.get("accountId", "")).strip()
+    if not account_id:
+        _LOGGER.warning(
+            "Gecko migration: user endpoint returned no accountId for entry %s",
+            entry.entry_id,
+        )
+        return None
+
+    return account_id
+
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate config entry to latest version."""
-    if entry.version > 2:
+    if entry.version > _TARGET_ENTRY_VERSION:
         return False
 
-    if entry.version < 2:
+    need_version_bump = entry.version < _TARGET_ENTRY_VERSION
+    existing_account = str(entry.data.get("account_id", "")).strip()
+
+    resolved_account = existing_account
+    if not resolved_account:
         _LOGGER.info(
-            "Migrating Gecko config entry %s from version %s to 2",
+            "Gecko migration: resolving account_id for entry %s (stored version %s)",
             entry.entry_id,
             entry.version,
         )
-        hass.config_entries.async_update_entry(entry, version=2)
+        resolved_account = (
+            await _async_resolve_missing_account_id(hass, entry) or ""
+        ).strip()
+
+    if not resolved_account and not existing_account:
+        _LOGGER.error(
+            "Gecko migration: could not resolve account_id for entry %s; "
+            "cloud REST tile metrics and alerts stay disabled until API access works "
+            "(check network or re-authenticate).",
+            entry.entry_id,
+        )
+
+    current = hass.config_entries.async_get_entry(entry.entry_id)
+    if current is None:
+        return False
+
+    if need_version_bump:
+        if resolved_account:
+            data = dict(current.data)
+            data["account_id"] = resolved_account
+            hass.config_entries.async_update_entry(
+                current,
+                data=data,
+                version=_TARGET_ENTRY_VERSION,
+            )
+        else:
+            hass.config_entries.async_update_entry(
+                current, version=_TARGET_ENTRY_VERSION
+            )
+    elif resolved_account and str(current.data.get("account_id", "")).strip() != resolved_account:
+        data = dict(current.data)
+        data["account_id"] = resolved_account
+        hass.config_entries.async_update_entry(current, data=data)
 
     return True
 
 
 async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     """Set up the Gecko component."""
-    await async_setup_services(hass)
     # Register hardcoded OAuth implementation with PKCE (no user credentials needed)
     config_entry_oauth2_flow.async_register_implementation(
         hass,
@@ -71,6 +172,9 @@ class GeckoRuntimeData:
         default=None, repr=False, compare=False
     )
     rest_vessels_response_cache_mono: float | None = field(
+        default=None, repr=False, compare=False
+    )
+    rest_vessels_cache_account_id: str | None = field(
         default=None, repr=False, compare=False
     )
 
@@ -107,7 +211,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.warning("No vessels found in config entry")
     
     coordinators = []
-    account_id = str(entry.data.get("account_id", ""))
     for vessel in vessels:
         vessel_id = vessel.get("vesselId")
         monitor_id = vessel.get("monitorId")
@@ -116,7 +219,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator = GeckoVesselCoordinator(
             hass=hass,
             entry_id=entry.entry_id,
-            account_id=account_id,
             vessel_id=vessel_id,
             monitor_id=monitor_id,
             vessel_name=vessel_name,
@@ -144,7 +246,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Set up platforms immediately - entities will be created when zone data becomes available
     await hass.config_entries.async_forward_entry_setups(entry, _PLATFORMS)
 
-    # Re-register domain services after a prior unload removed them (async_setup runs once per HA).
+    # Domain services (async_setup runs only once per HA restart; unload may remove them).
     await async_setup_services(hass)
 
     _LOGGER.info("Gecko integration setup completed for %d vessels", vessels_count)
