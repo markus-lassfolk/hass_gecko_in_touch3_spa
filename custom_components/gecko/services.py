@@ -227,7 +227,7 @@ async def async_handle_dump_shadow_snapshot(
     )
     dump_dir = Path(hass.config.config_dir) / "gecko_shadow_dumps"
     out_path = (dump_dir / fname).resolve()
-    if not str(out_path).startswith(str(dump_dir.resolve())):
+    if not str(out_path).startswith(str(dump_dir.resolve()) + os.sep):
         raise HomeAssistantError("Invalid export path")
 
     payload = build_shadow_export_payload(

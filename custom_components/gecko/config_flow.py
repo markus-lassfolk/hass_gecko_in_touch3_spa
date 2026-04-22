@@ -35,6 +35,7 @@ class ConfigFlow(
     """Config flow to handle Gecko OAuth2 authentication."""
 
     DOMAIN = DOMAIN
+    VERSION = 2
     
     async def async_step_user(self, user_input=None):
         """Handle a flow initialized by the user."""
@@ -224,6 +225,3 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)
-
-
-ConfigFlow.version = 2
