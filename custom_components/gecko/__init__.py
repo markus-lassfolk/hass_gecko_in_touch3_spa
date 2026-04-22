@@ -23,6 +23,7 @@ from .connection_manager import async_get_connection_manager
 from .services import async_remove_services, async_setup_services
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+_LOGGER = logging.getLogger(__name__)
 
 _LOGGER = logging.getLogger(__name__)
 
