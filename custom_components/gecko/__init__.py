@@ -36,6 +36,39 @@ _LOGGER = logging.getLogger(__name__)
 _TARGET_ENTRY_VERSION = 2
 
 
+def _rest_alerts_entities_enabled(entry: ConfigEntry) -> bool:
+    """REST alert entities are only useful while alerts polling is enabled."""
+    return (
+        int(entry.options.get(CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL))
+        > 0
+    )
+
+
+def _rest_alerts_toggle_state_key(entry_id: str) -> str:
+    """Stable hass.data key for alerts-toggle reload bookkeeping (one string, no tuple collisions)."""
+    return f"{DOMAIN}.rest_alerts_entities_enabled.{entry_id}"
+
+
+async def _async_reload_if_rest_alerts_toggle(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Reload when alerts poll interval crosses zero so alert platforms add/remove."""
+    key = _rest_alerts_toggle_state_key(entry.entry_id)
+    prev = hass.data.get(key)
+    now = _rest_alerts_entities_enabled(entry)
+    hass.data[key] = now
+    if prev is not None and prev != now:
+
+        async def _deferred_reload() -> None:
+            # Yield so the options update / listener stack can finish before reload.
+            await asyncio.sleep(0)
+            current = hass.config_entries.async_get_entry(entry.entry_id)
+            if current and current.state is ConfigEntryState.LOADED:
+                await hass.config_entries.async_reload(entry.entry_id)
+
+        hass.async_create_task(_deferred_reload())
+
+
 async def _async_resolve_missing_account_id(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> str | None:
@@ -311,6 +344,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Domain services (async_setup runs only once per HA restart; unload may remove them).
     await async_setup_services(hass)
+
+    hass.data[_rest_alerts_toggle_state_key(entry.entry_id)] = (
+        _rest_alerts_entities_enabled(entry)
+    )
+    entry.async_on_unload(
+        entry.async_add_update_listener(_async_reload_if_rest_alerts_toggle)
+    )
 
     _LOGGER.info("Gecko integration setup completed for %d vessels", vessels_count)
 

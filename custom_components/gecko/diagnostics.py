@@ -90,6 +90,9 @@ def _get_connection_diagnostics(connection_manager: Any) -> dict[str, Any]:
             "vessel_name": connection.vessel_name,
             "is_connected": connection.is_connected,
             "callback_count": len(connection.update_callbacks),
+            # Broker URL embeds JWTs; keep an explicit placeholder so diagnostics
+            # never regresses to dumping raw credentials via future serialization.
+            "websocket_url": "<REDACTED>",
         }
 
         if connection.connectivity_status:
