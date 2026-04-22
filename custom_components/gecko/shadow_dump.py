@@ -221,12 +221,16 @@ def _deep_sanitize(obj: Any) -> Any:
                 out[k] = [_deep_sanitize(i) for i in v]
             elif isinstance(v, str):
                 out[k] = _redact_string_scalars(v)
-            elif isinstance(v, (int, float)) and str(k).lower() in {
-                "latitude",
-                "longitude",
-                "geolat",
-                "geolon",
-            }:
+            elif (
+                isinstance(v, (int, float))
+                and not isinstance(v, bool)
+                and str(k).lower() in {
+                    "latitude",
+                    "longitude",
+                    "geolat",
+                    "geolon",
+                }
+            ):
                 out[k] = None
             else:
                 out[k] = v
