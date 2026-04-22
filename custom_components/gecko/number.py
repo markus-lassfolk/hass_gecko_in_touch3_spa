@@ -82,8 +82,7 @@ class GeckoUnknownZoneSetpointNumber(
         config_entry: ConfigEntry,
         path: str,
     ) -> None:
-        NumberEntity.__init__(self)
-        CoordinatorEntity.__init__(self, coordinator)
+        super().__init__(coordinator)
         self._path = path
         parsed = parse_unknown_zone_setpoint_path(path)
         if not parsed:
@@ -119,6 +118,7 @@ class GeckoUnknownZoneSetpointNumber(
         self._attr_native_value = (
             float(raw) if raw is not None else float(self._attr_native_min_value)
         )
+        self._attr_available = False
 
     @callback
     def _handle_coordinator_update(self) -> None:

@@ -251,8 +251,7 @@ class GeckoShadowBoolBinarySensor(
         config_entry: ConfigEntry,
         path: str,
     ) -> None:
-        BinarySensorEntity.__init__(self)
-        CoordinatorEntity.__init__(self, coordinator)
+        super().__init__(coordinator)
         self._path = path
         vessel_slug = coordinator.vessel_name.lower().replace(" ", "_").replace(
             "-", "_"
@@ -282,6 +281,7 @@ class GeckoShadowBoolBinarySensor(
         )
         raw = coordinator.get_shadow_bool_value(path)
         self._attr_is_on = bool(raw) if raw is not None else False
+        self._attr_available = False
 
     @callback
     def _handle_coordinator_update(self) -> None:
