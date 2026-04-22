@@ -41,7 +41,6 @@ async def async_setup_entry(
     initial: list[NumberEntity] = []
 
     for coordinator in coordinators:
-        await coordinator.async_ensure_initial_setup()
         for path in coordinator.take_pending_number_paths():
             initial.append(
                 GeckoUnknownZoneSetpointNumber(coordinator, config_entry, path)

@@ -44,8 +44,9 @@ def _rest_alerts_entities_enabled(entry: ConfigEntry) -> bool:
     )
 
 
-def _rest_alerts_toggle_state_key(entry_id: str) -> tuple[str, str, str]:
-    return (DOMAIN, entry_id, "rest_alerts_entities_enabled")
+def _rest_alerts_toggle_state_key(entry_id: str) -> str:
+    """Stable hass.data key for alerts-toggle reload bookkeeping (one string, no tuple collisions)."""
+    return f"{DOMAIN}.rest_alerts_entities_enabled.{entry_id}"
 
 
 async def _async_reload_if_rest_alerts_toggle(
@@ -163,16 +164,14 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return False
 
     if need_version_bump:
+        data = dict(current.data)
         if resolved_account:
-            data = dict(current.data)
             data["account_id"] = resolved_account
-            hass.config_entries.async_update_entry(
-                current,
-                data=data,
-                version=_TARGET_ENTRY_VERSION,
-            )
-        else:
-            return False
+        hass.config_entries.async_update_entry(
+            current,
+            data=data,
+            version=_TARGET_ENTRY_VERSION,
+        )
     elif (
         resolved_account
         and str(current.data.get("account_id", "")).strip() != resolved_account
@@ -324,6 +323,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except KeyError as ex:
         # Missing required data (e.g., 'refresh_token') indicates auth issues
         raise ConfigEntryNotReady(f"Failed to connect to Gecko device: {ex}") from ex
+
+    # One refresh + zone wait before platforms so each platform does not repeat the wait.
+    for coordinator in entry.runtime_data.coordinators:
+        await coordinator.async_ensure_initial_setup()
 
     # Set up platforms immediately - entities will be created when zone data becomes available
     await hass.config_entries.async_forward_entry_setups(entry, _PLATFORMS)

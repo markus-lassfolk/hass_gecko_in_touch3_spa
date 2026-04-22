@@ -56,7 +56,6 @@ async def async_setup_entry(
     initial_entities: list[SensorEntity] = []
 
     for coordinator in coordinators:
-        await coordinator.async_ensure_initial_setup()
         pending = coordinator.take_pending_new_metric_paths()
         if pending:
             initial_entities.extend(

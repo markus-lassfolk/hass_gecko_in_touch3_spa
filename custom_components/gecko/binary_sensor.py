@@ -107,7 +107,6 @@ async def async_setup_entry(
                 GeckoRestActiveAlertsBinarySensor(coordinator, config_entry)
             )
 
-        await coordinator.async_ensure_initial_setup()
         for path in coordinator.take_pending_bool_paths():
             entities.append(
                 GeckoShadowBoolBinarySensor(coordinator, config_entry, path)
