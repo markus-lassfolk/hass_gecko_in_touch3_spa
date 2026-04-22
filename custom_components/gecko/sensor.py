@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -26,10 +27,11 @@ _LOGGER = logging.getLogger(__name__)
 def _metric_enabled_by_default(path: str) -> bool:
     """Expose likely water-chemistry metrics by default; other shadow leaves stay disabled."""
     lower = path.lower()
+    if re.search(r"(^|\.|_)ph($|\.|_)", lower):
+        return True
     return any(
         k in lower
         for k in (
-            "ph",
             "orp",
             "chlorine",
             "bromine",
@@ -136,6 +138,7 @@ class GeckoShadowMetricSensor(
         if dc == "ph":
             self._attr_device_class = SensorDeviceClass.PH
             self._attr_suggested_display_precision = 2
+            self._attr_state_class = SensorStateClass.MEASUREMENT
         elif dc == "temperature":
             self._attr_device_class = SensorDeviceClass.TEMPERATURE
             self._attr_state_class = SensorStateClass.MEASUREMENT

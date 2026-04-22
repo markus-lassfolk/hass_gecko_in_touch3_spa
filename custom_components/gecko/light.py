@@ -101,7 +101,7 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
             identifiers={(DOMAIN, str(coordinator.vessel_id))},
         )
         
-        self._attr_supported_color_modes = {ColorMode.ONOFF, ColorMode.RGB}
+        self._attr_supported_color_modes = {ColorMode.RGB}
         self._attr_color_mode = ColorMode.ONOFF
         
         # Initialize state and availability (will be set by async_added_to_hass event registration)

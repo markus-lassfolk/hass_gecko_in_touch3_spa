@@ -154,6 +154,7 @@ def infer_sensor_metadata(path: str) -> tuple[str | None, str | None]:
         unit = "mV"
     elif "temperature" in lower or lower.endswith("_temp") or "temp_" in lower:
         device_class = "temperature"
+        unit = "°C"
     elif "chlorine" in lower or "bromine" in lower or "sanitizer" in lower:
         unit = "ppm"
     elif "tds" in lower or "salinity" in lower:
