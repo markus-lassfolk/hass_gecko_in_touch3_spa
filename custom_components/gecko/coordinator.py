@@ -561,7 +561,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else:
                 _LOGGER.error("Failed to reconnect %s", self.vessel_name)
 
-        except (ClientError, TimeoutError, OSError, RuntimeError) as e:
+        except Exception as e:
             _LOGGER.error("Failed to reconnect %s: %s", self.vessel_name, e)
 
     async def get_gecko_client(self):
@@ -580,7 +580,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             return None
 
-        except (ClientError, TimeoutError, OSError, RuntimeError) as e:
+        except Exception as e:
             _LOGGER.error(
                 "Failed to get gecko client for vessel %s: %s", self.vessel_name, e
             )

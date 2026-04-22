@@ -36,31 +36,6 @@ _LOGGER = logging.getLogger(__name__)
 _TARGET_ENTRY_VERSION = 2
 
 
-def _rest_alerts_entities_enabled(entry: ConfigEntry) -> bool:
-    """REST alert entities are only useful while alerts polling is enabled."""
-    return (
-        int(entry.options.get(CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL))
-        > 0
-    )
-
-
-def _rest_alerts_toggle_state_key(entry_id: str) -> str:
-    """Stable hass.data key for alerts-toggle reload bookkeeping (one string, no tuple collisions)."""
-    return f"{DOMAIN}.rest_alerts_entities_enabled.{entry_id}"
-
-
-async def _async_reload_if_rest_alerts_toggle(
-    hass: HomeAssistant, entry: ConfigEntry
-) -> None:
-    """Reload when alerts poll interval crosses zero so alert platforms add/remove."""
-    key = _rest_alerts_toggle_state_key(entry.entry_id)
-    prev = hass.data.get(key)
-    now = _rest_alerts_entities_enabled(entry)
-    hass.data[key] = now
-    if prev is not None and prev != now:
-        await hass.config_entries.async_reload(entry.entry_id)
-
-
 async def _async_resolve_missing_account_id(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> str | None:
@@ -337,13 +312,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Domain services (async_setup runs only once per HA restart; unload may remove them).
     await async_setup_services(hass)
 
-    hass.data[_rest_alerts_toggle_state_key(entry.entry_id)] = (
-        _rest_alerts_entities_enabled(entry)
-    )
-    entry.async_on_unload(
-        entry.async_add_update_listener(_async_reload_if_rest_alerts_toggle)
-    )
-
     _LOGGER.info("Gecko integration setup completed for %d vessels", vessels_count)
 
     return True
@@ -455,7 +423,6 @@ async def _setup_vessel_gecko_client(
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    hass.data.pop(_rest_alerts_toggle_state_key(entry.entry_id), None)
     # Clean up all vessel coordinators
     runtime_data: GeckoRuntimeData = entry.runtime_data
     for coordinator in runtime_data.coordinators:
