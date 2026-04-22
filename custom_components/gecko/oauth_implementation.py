@@ -35,9 +35,7 @@ _active_pkce_verifier: contextvars.ContextVar[str | None] = contextvars.ContextV
 _PKCE_VERIFIER_TTL_SEC = 1800.0
 
 
-def _drop_stale_pkce_verifier(
-    hass: HomeAssistant, flow_id: str, *_args: Any
-) -> None:
+def _drop_stale_pkce_verifier(hass: HomeAssistant, flow_id: str, *_args: Any) -> None:
     store = hass.data.get(_DATA_KEY_PKCE_VERIFIERS)
     if isinstance(store, dict):
         store.pop(flow_id, None)

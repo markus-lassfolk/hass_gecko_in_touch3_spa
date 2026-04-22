@@ -204,14 +204,16 @@ class GeckoOptionsFlow(config_entries.OptionsFlowWithConfigEntry):
         if user_input is not None:
             # Check if REST alerts interval crossed zero boundary
             old_alerts = int(
-                self.options.get(CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL)
+                self.options.get(
+                    CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL
+                )
             )
             new_alerts = int(
                 user_input.get(CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL)
             )
             old_enabled = old_alerts > 0
             new_enabled = new_alerts > 0
-            
+
             if old_enabled != new_enabled:
                 # Alerts toggle changed - need reload for platform setup
                 return self.async_update_reload_and_abort(
@@ -219,7 +221,7 @@ class GeckoOptionsFlow(config_entries.OptionsFlowWithConfigEntry):
                     reason="reconfigure_successful",
                     options=user_input,
                 )
-            
+
             return self.async_create_entry(title="", data=user_input)
 
         opts = self.options
