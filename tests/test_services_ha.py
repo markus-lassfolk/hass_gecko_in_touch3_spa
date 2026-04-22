@@ -44,7 +44,9 @@ async def test_async_setup_and_remove_services(hass: HomeAssistant) -> None:
 async def test_async_setup_services_idempotent(hass: HomeAssistant) -> None:
     await gecko_services.async_setup_services(hass)
     await gecko_services.async_setup_services(hass)
-    assert hass.services.has_service(DOMAIN, gecko_services.SERVICE_PUBLISH_ZONE_DESIRED)
+    assert hass.services.has_service(
+        DOMAIN, gecko_services.SERVICE_PUBLISH_ZONE_DESIRED
+    )
 
 
 async def test_bind_service_handler_passes_hass(hass: HomeAssistant) -> None:
@@ -150,9 +152,7 @@ async def test_async_handle_publish_feature_desired(
     published: list[dict] = []
 
     client = SimpleNamespace(
-        transporter=SimpleNamespace(
-            publish_desired_state=lambda d: published.append(d)
-        )
+        transporter=SimpleNamespace(publish_desired_state=lambda d: published.append(d))
     )
 
     async def _fake_client(_h: HomeAssistant, _c: ServiceCall):
@@ -184,9 +184,7 @@ async def test_async_handle_publish_desired_state(
     published: list[dict] = []
 
     client = SimpleNamespace(
-        transporter=SimpleNamespace(
-            publish_desired_state=lambda d: published.append(d)
-        )
+        transporter=SimpleNamespace(publish_desired_state=lambda d: published.append(d))
     )
 
     async def _fake_client(_h: HomeAssistant, _c: ServiceCall):

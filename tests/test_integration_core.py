@@ -18,7 +18,9 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
-async def test_oauth_gecko_api_async_get_access_token_without_gecko_client_init() -> None:
+async def test_oauth_gecko_api_async_get_access_token_without_gecko_client_init() -> (
+    None
+):
     """Avoid constructing ``GeckoApiClient`` (background threads) in the HA test harness."""
     session = MagicMock()
     session.async_ensure_token_valid = AsyncMock()
@@ -73,7 +75,6 @@ async def test_async_migrate_entry_future_version_no_op(
 async def test_entity_mixin_check_is_connected_uses_connection_manager(
     hass: HomeAssistant,
 ) -> None:
-
     class _Probe(GeckoEntityAvailabilityMixin):
         def __init__(self) -> None:
             self.hass = hass

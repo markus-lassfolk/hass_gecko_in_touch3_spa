@@ -61,7 +61,6 @@ async def test_get_connection_status_missing_and_present(
 async def test_async_remove_callback(
     hass: HomeAssistant, gecko_manager: GeckoConnectionManager
 ) -> None:
-
     def cb(_zones):
         return None
 
