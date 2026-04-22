@@ -263,6 +263,47 @@ def test_extract_vessel_action_strings_empty() -> None:
     assert cloud_tiles.extract_vessel_action_strings({"status": {}}) == {}
 
 
+def test_extract_vessel_action_instructions_clamped_to_ha_limit() -> None:
+    """Joined instruction text must not exceed HA sensor native_value length."""
+    from custom_components.gecko.const import MAX_SENSOR_STATE_LENGTH
+
+    long_bits = ["part one " * 40, "part two " * 40, "part three " * 40]
+    vessel = {
+        "status": {
+            "actions": [
+                {
+                    "type": "raise_orp_chlorine",
+                    "title": "Raise Your ORP",
+                    "instructions": [{"text": t} for t in long_bits],
+                }
+            ]
+        }
+    }
+    s = cloud_tiles.extract_vessel_action_strings(vessel)
+    instr = s["cloud.rest.actions.raise_orp_chlorine.instructions"]
+    assert len(instr) == MAX_SENSOR_STATE_LENGTH
+    assert instr.endswith("...")
+
+
+def test_extract_vessel_action_instructions_plain_string() -> None:
+    vessel = {
+        "status": {
+            "actions": [
+                {
+                    "type": "raise_orp_chlorine",
+                    "title": "Raise Your ORP",
+                    "instructions": "One line of advice from the API.",
+                }
+            ]
+        }
+    }
+    s = cloud_tiles.extract_vessel_action_strings(vessel)
+    assert (
+        s["cloud.rest.actions.raise_orp_chlorine.instructions"]
+        == "One line of advice from the API."
+    )
+
+
 def test_extract_vessel_action_metrics() -> None:
     m = cloud_tiles.extract_vessel_action_metrics(_V6_VESSEL_DETAIL)
     assert m["cloud.rest.actions.count"] == 2

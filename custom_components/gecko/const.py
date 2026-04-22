@@ -44,3 +44,15 @@ API_BASE_URL = "https://api.geckowatermonitor.com"
 CONFIG_TIMEOUT = (
     20.0  # Default timeout for GeckoIotClient configuration loading in seconds
 )
+
+# Home Assistant core rejects ``Sensor.native_value`` strings longer than this.
+MAX_SENSOR_STATE_LENGTH = 255
+
+
+def clamp_sensor_native_str(value: str, max_len: int = MAX_SENSOR_STATE_LENGTH) -> str:
+    """Clamp string sensor state to a length Home Assistant accepts."""
+    if len(value) <= max_len:
+        return value
+    if max_len <= 3:
+        return value[:max_len]
+    return value[: max_len - 3] + "..."

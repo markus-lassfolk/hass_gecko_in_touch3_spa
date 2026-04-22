@@ -27,8 +27,10 @@ def test_path_looks_sensitive() -> None:
 
 def test_string_value_ok() -> None:
     assert shadow_metrics._string_value_ok("ok")
+    assert shadow_metrics._string_value_ok("x" * 255)
     assert not shadow_metrics._string_value_ok("")
     assert not shadow_metrics._string_value_ok("eyJxxx")
+    assert not shadow_metrics._string_value_ok("x" * 256)
     assert not shadow_metrics._string_value_ok("x" * 300)
 
 
@@ -368,6 +370,7 @@ def test_metric_path_to_entity_slug_empty_path() -> None:
         ("cloud.rest.disc.text", "Status Text"),
         ("cloud.rest.disc.waterStatusColor", "Status Water Status Color"),
         ("cloud.rest.disc.lastUpdatedText", "Status Last Updated Text"),
+        ("cloud.rest.disc_elements.temp_c", "Status Temp C"),
     ],
 )
 def test_humanize_shadow_path(path: str, expected: str) -> None:

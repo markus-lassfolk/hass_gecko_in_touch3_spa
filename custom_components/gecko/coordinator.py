@@ -45,6 +45,7 @@ from .const import (
     DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
     DOMAIN,
+    clamp_sensor_native_str,
 )
 from .rest_alerts import build_alerts_snapshot
 from .shadow_metrics import (
@@ -144,6 +145,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
         self._last_alerts_poll_monotonic: float | None = None
         self._last_zone_shadow_refresh_mono: float | None = None
+        self._account_id_resolve_attempted = False
 
     def register_zone_update_callback(self, callback):
         """Register a callback to be called when zone data updates."""
@@ -201,7 +203,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_lazy_resolve_account_id(self) -> str:
         """Try once to resolve and persist account_id if missing from config entry."""
-        if getattr(self, "_account_id_resolve_attempted", False):
+        if self._account_id_resolve_attempted:
             return ""
         self._account_id_resolve_attempted = True
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
@@ -558,7 +560,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         mqtt_strings = extract_extension_strings(state) if state else {}
         merged_strings: dict[str, str] = dict(self._cloud_string_metrics)
         merged_strings.update(mqtt_strings)
-        self._shadow_string_values = merged_strings
+        self._shadow_string_values = {
+            k: clamp_sensor_native_str(v) for k, v in merged_strings.items()
+        }
         new_string_paths = (
             set(self._shadow_string_values) - self._registered_string_paths
         )

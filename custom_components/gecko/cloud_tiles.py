@@ -12,6 +12,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from .const import clamp_sensor_native_str
+
 
 def _num(v: Any) -> float | int | None:
     if isinstance(v, bool) or v is None:
@@ -86,11 +88,9 @@ def _temp_c(disc: dict[str, Any], status: dict[str, Any]) -> float | int | None:
 def _string_leaf(v: Any) -> str | None:
     if isinstance(v, str) and v.strip():
         s = v.strip()
-        if len(s) > 256:
-            return None
         if s.startswith("eyJ"):
             return None
-        return s
+        return clamp_sensor_native_str(s)
     return None
 
 
@@ -189,14 +189,19 @@ def extract_cloud_tile_metrics(vessel: dict[str, Any]) -> dict[str, float | int]
 
 def _iter_readings_dicts(vessel: dict[str, Any]):
     """Yield (key, readings_dict) from both top-level and status-nested locations."""
-    _KEYS = ("readings", "monitorReadings", "reportReadings", "computedReadings")
-    for rk in _KEYS:
+    readings_root_keys = (
+        "readings",
+        "monitorReadings",
+        "reportReadings",
+        "computedReadings",
+    )
+    for rk in readings_root_keys:
         rd = vessel.get(rk)
         if isinstance(rd, dict):
             yield rk, rd
     status = vessel.get("status")
     if isinstance(status, dict):
-        for rk in _KEYS:
+        for rk in readings_root_keys:
             rd = status.get(rk)
             if isinstance(rd, dict):
                 yield rk, rd
@@ -279,15 +284,18 @@ def extract_vessel_action_strings(
         if title:
             out[f"cloud.rest.actions.{atype}"] = title
         instructions = action.get("instructions")
+        joined: str | None = None
         if isinstance(instructions, list):
             texts = [
                 _string_leaf(i.get("text")) for i in instructions if isinstance(i, dict)
             ]
-            joined = " | ".join(t for t in texts if t)
-            if joined:
-                if len(joined) > 255:
-                    joined = joined[:252] + "..."
-                out[f"cloud.rest.actions.{atype}.instructions"] = joined
+            joined = " | ".join(t for t in texts if t) or None
+        elif isinstance(instructions, str) and instructions.strip():
+            joined = instructions.strip()
+        if joined:
+            out[f"cloud.rest.actions.{atype}.instructions"] = clamp_sensor_native_str(
+                joined
+            )
     return out
 
 

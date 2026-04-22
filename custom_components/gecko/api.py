@@ -1,3 +1,5 @@
+"""Gecko REST helpers layered on ``gecko_iot_client`` (OAuth session, HA HTTP client)."""
+
 import logging
 from typing import Any
 

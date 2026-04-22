@@ -63,7 +63,7 @@ def _path_looks_sensitive(path: str) -> bool:
 
 
 def _string_value_ok(s: str) -> bool:
-    if not s or len(s) > 256:
+    if not s or len(s) > 255:
         return False
     if s.startswith("eyJ"):
         return False
@@ -429,6 +429,8 @@ _CONTEXT_ALIASES: dict[str, str] = {
     "readings": "",
     "actions": "Action",
     "disc": "Status",
+    # REST vessel list ``status.discElements`` / ``disc_elements`` (app dashboard tile).
+    "disc_elements": "Status",
 }
 
 _CONTEXT_PROMOTING_PARENTS = frozenset(
@@ -543,9 +545,7 @@ def metric_path_to_entity_slug(path: str, max_len: int = 48) -> str:
         slug = "metric"
     if len(slug) > max_len:
         digest = hashlib.sha256(path.encode("utf-8")).hexdigest()[:8]
-        keep = max_len - len(digest) - 1
-        if keep < 1:
-            keep = 1
+        keep = max(max_len - len(digest) - 1, 1)
         slug = f"{slug[:keep]}_{digest}"
     return slug
 
@@ -635,7 +635,7 @@ def infer_sensor_metadata(
 
     if device_class is None and lower.startswith("cloud.rest.readings."):
         reading_key = path.split(".")[-1].lower()
-        _READINGS_PPM = frozenset(
+        readings_ppm_leaves = frozenset(
             {
                 "totalalkalinity",
                 "totalhardness",
@@ -646,7 +646,7 @@ def infer_sensor_metadata(
                 "adjustedtotalalkalinity",
             }
         )
-        if reading_key in _READINGS_PPM:
+        if reading_key in readings_ppm_leaves:
             unit = "ppm"
 
     return device_class, unit
@@ -776,10 +776,11 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
     )
     if chem_tokens.intersection(segs):
         return True
-    if re.search(
-        r"\b(chlorine|bromine|salinity|tds|sanitizer|alkalinity|hardness|calcium|cyanuric|bromide|turbidity|conductivity)\b",
-        lower,
-    ):
+    _chem_word_re = (
+        r"\b(chlorine|bromine|salinity|tds|sanitizer|alkalinity|hardness|"
+        r"calcium|cyanuric|bromide|turbidity|conductivity)\b"
+    )
+    if re.search(_chem_word_re, lower):
         return True
     if lower.startswith("cloud.rest.") and any(
         tail in lower
