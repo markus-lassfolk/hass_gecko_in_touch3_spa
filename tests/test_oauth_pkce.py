@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from aiohttp import ClientError
-
 from custom_components.gecko.const import DOMAIN
 from custom_components.gecko.oauth_implementation import (
     _DATA_KEY_PKCE_VERIFIERS,
@@ -97,7 +96,7 @@ async def test_async_resolve_external_data_requires_redirect_uri() -> None:
         )
 
 
-async def test_async_resolve_external_data_requires_stored_verifier_when_flow_id() -> None:
+async def test_async_resolve_external_data_missing_stored_verifier() -> None:
     impl = _make_impl()
     with pytest.raises(ClientError):
         await impl.async_resolve_external_data(
