@@ -181,7 +181,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if inspect.iscoroutine(result):
                         await result
             except Exception as ex:
-                _LOGGER.error(
+                _LOGGER.warning(
                     "Error in zone update callback for vessel %s: %s",
                     self.vessel_name,
                     ex,

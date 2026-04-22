@@ -278,11 +278,12 @@ def _migrate_options_defaults(hass: HomeAssistant, entry: ConfigEntry) -> None:
         )
         changed = True
 
-    if not changed:
-        return
-
-    # Mark migration as done
+    # Mark migration as done (even if no changes, to avoid rechecking on every setup)
     opts["_options_defaults_migrated"] = True
+
+    if not changed:
+        hass.config_entries.async_update_entry(entry, options=opts)
+        return
 
     _LOGGER.info(
         "Migrated cloud REST options to new defaults for entry %s "
