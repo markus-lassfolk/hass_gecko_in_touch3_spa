@@ -123,7 +123,7 @@ class GeckoConnectionManager:
 
             # Update connection status based on connectivity
             if hasattr(connectivity_status, "vessel_status"):
-                # If vessel is running but transporter is not connected, we may need to refresh token
+                # RUNNING vessel can lag MQTT; token refresh may still be required.
                 vessel_running = str(connectivity_status.vessel_status) == "RUNNING"
                 if vessel_running and not connection.is_connected:
                     _LOGGER.warning(
@@ -272,16 +272,6 @@ class GeckoConnectionManager:
 
         try:
             refresh_callback = connection.refresh_token_callback
-            if (
-                not refresh_callback
-                and hasattr(connection.gecko_client, "transporter")
-                and hasattr(
-                    connection.gecko_client.transporter, "_token_refresh_callback"
-                )
-            ):
-                refresh_callback = (
-                    connection.gecko_client.transporter._token_refresh_callback
-                )
 
             if not refresh_callback or not callable(refresh_callback):
                 _LOGGER.error(
@@ -391,7 +381,7 @@ class GeckoConnectionManager:
                 # Wait briefly before getting new token
                 await asyncio.sleep(TOKEN_REFRESH_DELAY)
 
-                # Use the stored refresh callback from connection object (avoids accessing private attributes)
+                # Callback stored on the connection at connect time.
                 refresh_callback = connection.refresh_token_callback
 
                 if not refresh_callback or not callable(refresh_callback):
