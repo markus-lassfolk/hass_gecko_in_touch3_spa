@@ -18,7 +18,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL, DOMAIN
 from .coordinator import GeckoVesselCoordinator
 from .connection_manager import GECKO_CONNECTION_MANAGER_KEY
 from .entity import GeckoEntityAvailabilityMixin
@@ -96,9 +96,14 @@ async def async_setup_entry(
                 coordinator.vessel_name,
             )
 
-        entities.append(
-            GeckoRestActiveAlertsBinarySensor(coordinator, config_entry)
-        )
+        if int(
+            config_entry.options.get(
+                CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL
+            )
+        ) > 0:
+            entities.append(
+                GeckoRestActiveAlertsBinarySensor(coordinator, config_entry)
+            )
 
         await coordinator.async_ensure_initial_setup()
         for path in coordinator.take_pending_bool_paths():

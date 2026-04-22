@@ -18,7 +18,14 @@ from homeassistant.helpers import aiohttp_client, config_entry_oauth2_flow, conf
 
 from .api import OAuthGeckoApi
 from .oauth_implementation import GeckoPKCEOAuth2Implementation
-from .const import DOMAIN, OAUTH2_AUTHORIZE, OAUTH2_CLIENT_ID, OAUTH2_TOKEN
+from .const import (
+    CONF_ALERTS_POLL_INTERVAL,
+    DEFAULT_ALERTS_POLL_INTERVAL,
+    DOMAIN,
+    OAUTH2_AUTHORIZE,
+    OAUTH2_CLIENT_ID,
+    OAUTH2_TOKEN,
+)
 from .coordinator import GeckoVesselCoordinator
 from .connection_manager import async_get_connection_manager
 from .services import async_remove_services, async_setup_services
@@ -28,6 +35,34 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 _LOGGER = logging.getLogger(__name__)
 
 _TARGET_ENTRY_VERSION = 2
+
+
+def _rest_alerts_entities_enabled(entry: ConfigEntry) -> bool:
+    """REST alert entities are only useful while alerts polling is enabled."""
+    return (
+        int(
+            entry.options.get(
+                CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL
+            )
+        )
+        > 0
+    )
+
+
+def _rest_alerts_toggle_state_key(entry_id: str) -> tuple[str, str, str]:
+    return (DOMAIN, entry_id, "rest_alerts_entities_enabled")
+
+
+async def _async_reload_if_rest_alerts_toggle(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Reload when alerts poll interval crosses zero so alert platforms add/remove."""
+    key = _rest_alerts_toggle_state_key(entry.entry_id)
+    prev = hass.data.get(key)
+    now = _rest_alerts_entities_enabled(entry)
+    hass.data[key] = now
+    if prev is not None and prev != now:
+        await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def _async_resolve_missing_account_id(
@@ -271,6 +306,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Domain services (async_setup runs only once per HA restart; unload may remove them).
     await async_setup_services(hass)
 
+    hass.data[_rest_alerts_toggle_state_key(entry.entry_id)] = (
+        _rest_alerts_entities_enabled(entry)
+    )
+    entry.async_on_unload(
+        entry.async_add_update_listener(_async_reload_if_rest_alerts_toggle)
+    )
+
     _LOGGER.info("Gecko integration setup completed for %d vessels", vessels_count)
 
     return True
@@ -360,6 +402,7 @@ async def _setup_vessel_gecko_client(vessel: dict, api_client: OAuthGeckoApi, co
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    hass.data.pop(_rest_alerts_toggle_state_key(entry.entry_id), None)
     # Clean up all vessel coordinators
     runtime_data: GeckoRuntimeData = entry.runtime_data
     for coordinator in runtime_data.coordinators:

@@ -16,7 +16,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL, DOMAIN
 from .coordinator import GeckoVesselCoordinator
 from .entity import GeckoEntityAvailabilityMixin
 from .shadow_metrics import (
@@ -96,11 +96,17 @@ async def async_setup_entry(
     if initial_entities:
         async_add_entities(initial_entities)
 
-    alert_entities = [
-        GeckoRestActiveAlertsSensor(coordinator, config_entry)
-        for coordinator in coordinators
-    ]
-    async_add_entities(alert_entities)
+    if int(
+        config_entry.options.get(
+            CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL
+        )
+    ) > 0:
+        async_add_entities(
+            [
+                GeckoRestActiveAlertsSensor(coordinator, config_entry)
+                for coordinator in coordinators
+            ]
+        )
 
 
 class GeckoShadowMetricSensor(

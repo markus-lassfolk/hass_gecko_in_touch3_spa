@@ -80,7 +80,12 @@ def _summarize_action(act: dict[str, Any]) -> dict[str, Any]:
 
 def _action_is_active(act: dict[str, Any]) -> bool:
     """Heuristic: treat missing status as active; exclude obvious completed."""
-    st = str(act.get("status") or act.get("state") or "").lower()
+    st = str(
+        act.get("status")
+        or act.get("state")
+        or act.get("completionStatus")
+        or ""
+    ).lower()
     if not st:
         return True
     if any(x in st for x in ("complete", "done", "dismiss", "cancel", "closed")):
