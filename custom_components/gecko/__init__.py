@@ -273,17 +273,19 @@ def _migrate_options_defaults(hass: HomeAssistant, entry: ConfigEntry) -> None:
         )
         changed = True
 
+    if not changed:
+        return
+
     # Mark migration as done
     opts["_options_defaults_migrated"] = True
 
-    if changed:
-        _LOGGER.info(
-            "Migrated cloud REST options to new defaults for entry %s "
-            "(poll_interval=%s, mqtt_only=%s)",
-            entry.entry_id,
-            opts.get(CONF_CLOUD_REST_POLL_INTERVAL),
-            opts.get(CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN),
-        )
+    _LOGGER.info(
+        "Migrated cloud REST options to new defaults for entry %s "
+        "(poll_interval=%s, mqtt_only=%s)",
+        entry.entry_id,
+        opts.get(CONF_CLOUD_REST_POLL_INTERVAL),
+        opts.get(CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN),
+    )
 
     hass.config_entries.async_update_entry(entry, options=opts)
 

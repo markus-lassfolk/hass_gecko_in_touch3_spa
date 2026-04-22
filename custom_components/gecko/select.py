@@ -182,6 +182,8 @@ class GeckoWatercareSelectEntity(
                 operation_mode_controller.mode_name,
                 operation_mode_controller.mode_name.lower().replace(" ", "_"),
             )
+            if new_option not in WATERCARE_MODE_OPTIONS:
+                new_option = None
 
             def _update_and_write() -> None:
                 self._attr_current_option = new_option
@@ -217,10 +219,13 @@ class GeckoWatercareSelectEntity(
 
             if gecko_client and gecko_client.operation_mode_controller:
                 library_name = gecko_client.operation_mode_controller.mode_name
-                self._attr_current_option = _LIBRARY_TO_MODE_KEY.get(
+                new_option = _LIBRARY_TO_MODE_KEY.get(
                     library_name,
                     library_name.lower().replace(" ", "_"),
                 )
+                if new_option not in WATERCARE_MODE_OPTIONS:
+                    new_option = None
+                self._attr_current_option = new_option
                 _LOGGER.debug(
                     "Updated watercare mode for %s: %s",
                     self._vessel_name,
