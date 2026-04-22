@@ -71,10 +71,9 @@ def _allowed_monitor_ids(entry) -> set[str]:
     for v in entry.data.get("vessels") or []:
         if not isinstance(v, dict):
             continue
-        for key in ("monitorId", "vesselId"):
-            val = v.get(key)
-            if val is not None and str(val):
-                out.add(str(val))
+        val = v.get("monitorId")
+        if val is not None and str(val):
+            out.add(str(val))
     return out
 
 

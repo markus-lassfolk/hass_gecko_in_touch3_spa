@@ -65,6 +65,9 @@ def _orp_mv(disc: dict[str, Any], status: dict[str, Any]) -> float | int | None:
                 n = _num(orp.get(leaf))
                 if n is not None:
                     return n
+        n = _num(orp) if not isinstance(orp, dict) else None
+        if n is not None:
+            return n
     return None
 
 
