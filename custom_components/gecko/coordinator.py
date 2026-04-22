@@ -89,6 +89,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Callbacks for zone updates (for dynamic entity creation)
         self._zone_update_callbacks: list = []
         
+        # Callbacks for shadow metric discovery (for dynamic entity creation)
+        self._shadow_metric_callbacks: list = []
+        
         # Simple connection tracking
         self._consecutive_failures = 0
 
@@ -110,6 +113,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Track if initial setup has been completed to avoid redundant refresh during platform setup
         self._initial_setup_done = False
+        self._initial_setup_lock = asyncio.Lock()
 
         # Optional REST tile metrics (merged under ``cloud.rest.*``; shadow wins on overlap)
         self._cloud_tile_metrics: Dict[str, float | int] = {}
@@ -130,6 +134,10 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def register_zone_update_callback(self, callback):
         """Register a callback to be called when zone data updates."""
         self._zone_update_callbacks.append(callback)
+    
+    def register_shadow_metric_callback(self, callback):
+        """Register a callback to be called when new shadow metrics are discovered."""
+        self._shadow_metric_callbacks.append(callback)
 
     async def _async_handle_zone_update(self, data: dict[str, Any]) -> None:
         """Handle zone update in the event loop."""
@@ -346,28 +354,43 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         reserved_numbers = {
             p for p in self._shadow_metric_values if path_reserved_for_number_control(p)
         }
-        self._pending_new_metric_paths |= (
+        new_metric_paths = (
             set(self._shadow_metric_values)
             - reserved_numbers
             - self._registered_shadow_metric_paths
         )
-        self._pending_number_paths |= reserved_numbers - self._registered_number_paths
+        self._pending_new_metric_paths |= new_metric_paths
+        new_number_paths = reserved_numbers - self._registered_number_paths
+        self._pending_number_paths |= new_number_paths
 
         mqtt_bools = extract_extension_booleans(state) if state else {}
         merged_bools: Dict[str, bool] = dict(self._cloud_bool_metrics)
         merged_bools.update(mqtt_bools)
         self._shadow_bool_values = merged_bools
-        self._pending_bool_paths |= (
-            set(self._shadow_bool_values) - self._registered_bool_paths
-        )
+        new_bool_paths = set(self._shadow_bool_values) - self._registered_bool_paths
+        self._pending_bool_paths |= new_bool_paths
 
         mqtt_strings = extract_extension_strings(state) if state else {}
         merged_strings: Dict[str, str] = dict(self._cloud_string_metrics)
         merged_strings.update(mqtt_strings)
         self._shadow_string_values = merged_strings
-        self._pending_string_paths |= (
-            set(self._shadow_string_values) - self._registered_string_paths
-        )
+        new_string_paths = set(self._shadow_string_values) - self._registered_string_paths
+        self._pending_string_paths |= new_string_paths
+        
+        if new_metric_paths or new_number_paths or new_bool_paths or new_string_paths:
+            for callback in self._shadow_metric_callbacks:
+                try:
+                    if callable(callback):
+                        result = callback()
+                        if inspect.iscoroutine(result):
+                            asyncio.run_coroutine_threadsafe(result, self.hass.loop)
+                except Exception as ex:
+                    _LOGGER.error(
+                        "Error in shadow metric callback for vessel %s: %s",
+                        self.vessel_name,
+                        ex,
+                        exc_info=True,
+                    )
 
     def get_shadow_metric_value(self, metric_path: str) -> float | int | None:
         """Return a single numeric leaf from the last shadow refresh."""
@@ -412,13 +435,14 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_ensure_initial_setup(self) -> None:
         """Ensure initial async refresh and shadow metrics refresh happen only once."""
-        if self._initial_setup_done:
-            return
-        self._initial_setup_done = True
-        await self.async_refresh()
-        await self.async_wait_for_initial_zone_data(timeout=15.0)
-        client = await self.get_gecko_client()
-        self.sync_refresh_shadow_metrics(client)
+        async with self._initial_setup_lock:
+            if self._initial_setup_done:
+                return
+            self._initial_setup_done = True
+            await self.async_refresh()
+            await self.async_wait_for_initial_zone_data(timeout=15.0)
+            client = await self.get_gecko_client()
+            self.sync_refresh_shadow_metrics(client)
 
     async def _simple_reconnect(self) -> None:
         """Simple reconnection - let geckoIotClient handle token refresh."""
@@ -607,6 +631,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._zones.clear()
         self._spa_state.clear()
         self._zone_update_callbacks.clear()
+        self._shadow_metric_callbacks.clear()
         self._shadow_metric_values.clear()
         self._registered_shadow_metric_paths.clear()
         self._pending_new_metric_paths.clear()

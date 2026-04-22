@@ -71,7 +71,7 @@ async def async_setup_entry(
             )
 
         @callback
-        def _on_coordinator_listener(
+        def _on_shadow_metric_discovery(
             coord: GeckoVesselCoordinator = coordinator,
         ) -> None:
             added = coord.take_pending_new_metric_paths()
@@ -91,9 +91,7 @@ async def async_setup_entry(
                     ]
                 )
 
-        config_entry.async_on_unload(
-            coordinator.async_add_listener(_on_coordinator_listener)
-        )
+        coordinator.register_shadow_metric_callback(_on_shadow_metric_discovery)
 
     if initial_entities:
         async_add_entities(initial_entities)

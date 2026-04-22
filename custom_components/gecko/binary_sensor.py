@@ -106,7 +106,7 @@ async def async_setup_entry(
             )
 
         @callback
-        def _shadow_bool_listener(coord: GeckoVesselCoordinator = coordinator) -> None:
+        def _on_shadow_metric_discovery(coord: GeckoVesselCoordinator = coordinator) -> None:
             added = coord.take_pending_bool_paths()
             if not added:
                 return
@@ -117,9 +117,7 @@ async def async_setup_entry(
                 ]
             )
 
-        config_entry.async_on_unload(
-            coordinator.async_add_listener(_shadow_bool_listener)
-        )
+        coordinator.register_shadow_metric_callback(_on_shadow_metric_discovery)
 
     if entities:
         _LOGGER.debug("Adding %d binary sensor entities", len(entities))
