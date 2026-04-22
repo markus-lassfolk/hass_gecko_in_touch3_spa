@@ -168,14 +168,16 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return False
 
     if need_version_bump:
-        data = dict(current.data)
         if resolved_account:
+            data = dict(current.data)
             data["account_id"] = resolved_account
-        hass.config_entries.async_update_entry(
-            current,
-            data=data,
-            version=_TARGET_ENTRY_VERSION,
-        )
+            hass.config_entries.async_update_entry(
+                current,
+                data=data,
+                version=_TARGET_ENTRY_VERSION,
+            )
+        else:
+            return False
     elif resolved_account and str(current.data.get("account_id", "")).strip() != resolved_account:
         data = dict(current.data)
         data["account_id"] = resolved_account
@@ -250,6 +252,28 @@ _PLATFORMS: list[Platform] = [
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Gecko from a config entry."""
+    # Fallback: resolve missing account_id for version-2 entries (recovery path)
+    if entry.version == _TARGET_ENTRY_VERSION and not str(entry.data.get("account_id", "")).strip():
+        _LOGGER.info(
+            "Gecko setup: version-2 entry %s missing account_id, attempting resolution",
+            entry.entry_id,
+        )
+        resolved = await _async_resolve_missing_account_id(hass, entry)
+        if resolved:
+            data = dict(entry.data)
+            data["account_id"] = resolved
+            hass.config_entries.async_update_entry(entry, data=data)
+            _LOGGER.info(
+                "Gecko setup: resolved account_id for entry %s",
+                entry.entry_id,
+            )
+        else:
+            _LOGGER.warning(
+                "Gecko setup: could not resolve account_id for entry %s; "
+                "cloud REST features (tiles, alerts) will be limited",
+                entry.entry_id,
+            )
+    
     implementation = (
         await config_entry_oauth2_flow.async_get_config_entry_implementation(
             hass, entry
