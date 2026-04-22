@@ -13,6 +13,19 @@ from .coordinator import GeckoVesselCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 
+def gecko_zone_ids_equal(zone_id: object, other: object) -> bool:
+    """Compare Gecko zone ids from the API (int, str, or mixed).
+
+    The client may stringify ids while entities dedupe with ``int(id)``.
+    """
+    if zone_id is None or other is None:
+        return False
+    try:
+        return int(zone_id) == int(other)
+    except (TypeError, ValueError):
+        return zone_id == other
+
+
 class GeckoEntityAvailabilityMixin:
     """Mixin to provide availability checking for Gecko entities using gecko_iot_client events."""
 

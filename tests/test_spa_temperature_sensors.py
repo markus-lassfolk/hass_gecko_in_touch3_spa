@@ -37,3 +37,18 @@ def test_gecko_spa_temperature_sensor_unknown_zone() -> None:
     entry = SimpleNamespace(entry_id="ent1")
     ent = GeckoSpaTemperatureSensor(coordinator, entry, 99, "target")
     assert ent._attr_native_value is None
+
+
+def test_gecko_spa_temperature_sensor_matches_string_zone_id() -> None:
+    """Gecko may report ``zone.id`` as str while we key entities by ``int(id)``."""
+    zone = SimpleNamespace(id="1", temperature=29.0, target_temperature=30.0)
+    coordinator = SimpleNamespace(
+        entry_id="e1",
+        vessel_id="v1",
+        get_zones_by_type=lambda zt: (
+            [zone] if zt is ZoneType.TEMPERATURE_CONTROL_ZONE else []
+        ),
+    )
+    entry = SimpleNamespace(entry_id="ent1")
+    target_ent = GeckoSpaTemperatureSensor(coordinator, entry, 1, "target")
+    assert target_ent._attr_native_value == 30.0

@@ -21,7 +21,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL, DOMAIN
 from .coordinator import GeckoVesselCoordinator
-from .entity import GeckoEntityAvailabilityMixin
+from .entity import GeckoEntityAvailabilityMixin, gecko_zone_ids_equal
 from .shadow_metrics import (
     apply_numeric_shadow_sensor_hints,
     chemistry_metric_enabled_by_default,
@@ -75,7 +75,7 @@ class GeckoSpaTemperatureSensor(
 
     def _get_zone(self):
         for z in self.coordinator.get_zones_by_type(ZoneType.TEMPERATURE_CONTROL_ZONE):
-            if getattr(z, "id", None) == self._zone_id:
+            if gecko_zone_ids_equal(getattr(z, "id", None), self._zone_id):
                 return z
         return None
 

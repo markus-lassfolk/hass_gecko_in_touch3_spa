@@ -26,7 +26,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import GeckoVesselCoordinator
-from .entity import GeckoEntityAvailabilityMixin
+from .entity import GeckoEntityAvailabilityMixin, gecko_zone_ids_equal
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -137,8 +137,27 @@ class GeckoClimate(
         # Initialize state from zone
         self._update_from_zone()
 
+    def _sync_zone_from_coordinator(self) -> None:
+        """Re-bind ``self._zone`` to the live model after each MQTT snapshot.
+
+        The coordinator replaces ``_zones`` in ``on_zone_update``; keeping the
+        original zone object would read stale temps and send setpoints nowhere.
+        """
+        zones = self.coordinator.get_zones_by_type(ZoneType.TEMPERATURE_CONTROL_ZONE)
+        my_id = getattr(self._zone, "id", None)
+        for z in zones:
+            if gecko_zone_ids_equal(getattr(z, "id", None), my_id):
+                self._zone = z
+                return
+        _LOGGER.debug(
+            "Temperature zone id %r not in coordinator snapshot for %s",
+            my_id,
+            getattr(self, "entity_id", "?"),
+        )
+
     def _update_from_zone(self) -> None:
         """Update state attributes from zone data."""
+        self._sync_zone_from_coordinator()
         status = self._zone.status
         if status is None:
             self._attr_hvac_action = HVACAction.IDLE
@@ -168,6 +187,7 @@ class GeckoClimate(
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Expose detailed spa-pack status and eco mode for automations."""
+        self._sync_zone_from_coordinator()
         attrs: dict[str, Any] = {}
         st = self._zone.status
         if isinstance(st, TemperatureControlZoneStatus):
@@ -189,6 +209,7 @@ class GeckoClimate(
         if (temperature := kwargs.get("temperature")) is None:
             return
 
+        self._sync_zone_from_coordinator()
         try:
             # set_target_temperature is a synchronous method, run in executor
             await self.hass.async_add_executor_job(
