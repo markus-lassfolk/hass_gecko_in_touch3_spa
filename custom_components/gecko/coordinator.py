@@ -365,11 +365,11 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         "Connection lost for %s, attempting reconnect", self.vessel_name
                     )
                     await self._simple_reconnect()
+                    self._consecutive_failures = 0
                     # Re-check connection after reconnect attempt
                     connection = connection_manager.get_connection(self.monitor_id)
                     if connection and connection.is_connected:
                         # Successfully reconnected, proceed to active path
-                        self._consecutive_failures = 0
                         client = await self.get_gecko_client()
                         self.sync_refresh_shadow_metrics(client)
                         return {"status": "active", "vessel_id": self.vessel_id}
