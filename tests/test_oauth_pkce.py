@@ -6,6 +6,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from aiohttp import ClientError
+
 from custom_components.gecko.const import DOMAIN
 from custom_components.gecko.oauth_implementation import (
     _DATA_KEY_PKCE_VERIFIERS,
@@ -83,4 +85,27 @@ async def test_async_resolve_external_data_pops_stored_verifier() -> None:
     tr.assert_awaited_once()
     payload = tr.await_args.args[0]
     assert payload["code_verifier"] == verifier
+    assert payload["client_id"] == "public-client-id"
     assert flow_id not in (impl.hass.data.get(_DATA_KEY_PKCE_VERIFIERS) or {})
+
+
+async def test_async_resolve_external_data_requires_redirect_uri() -> None:
+    impl = _make_impl()
+    with pytest.raises(ClientError):
+        await impl.async_resolve_external_data(
+            {"code": "x", "state": {"flow_id": "f1"}}
+        )
+
+
+async def test_async_resolve_external_data_requires_stored_verifier_when_flow_id() -> None:
+    impl = _make_impl()
+    with pytest.raises(ClientError):
+        await impl.async_resolve_external_data(
+            {
+                "code": "auth-code",
+                "state": {
+                    "flow_id": "missing-from-store",
+                    "redirect_uri": "https://hass/callback",
+                },
+            }
+        )

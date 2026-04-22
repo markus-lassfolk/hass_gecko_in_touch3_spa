@@ -12,12 +12,15 @@ from __future__ import annotations
 
 import base64
 import contextvars
+import functools
 import hashlib
 import secrets
 from typing import Any
 
+from aiohttp import ClientError
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_entry_oauth2_flow
+from homeassistant.helpers.event import async_call_later
 
 from .const import DOMAIN
 
@@ -26,6 +29,15 @@ _DATA_KEY_PKCE_VERIFIERS = f"{DOMAIN}_oauth_pkce_verifiers_by_flow"
 _active_pkce_verifier: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "gecko_pkce_verifier", default=None
 )
+
+# Drop abandoned-flow verifiers (Auth0 / HA flows typically complete in minutes).
+_PKCE_VERIFIER_TTL_SEC = 1800.0
+
+
+def _drop_stale_pkce_verifier(hass: HomeAssistant, flow_id: str) -> None:
+    store = hass.data.get(_DATA_KEY_PKCE_VERIFIERS)
+    if isinstance(store, dict):
+        store.pop(flow_id, None)
 
 
 class GeckoPKCEOAuth2Implementation(config_entry_oauth2_flow.LocalOAuth2Implementation):
@@ -90,6 +102,12 @@ class GeckoPKCEOAuth2Implementation(config_entry_oauth2_flow.LocalOAuth2Implemen
         verifier = self.generate_code_verifier(self._code_verifier_length)
         store = self.hass.data.setdefault(_DATA_KEY_PKCE_VERIFIERS, {})
         store[flow_id] = verifier
+        if hasattr(self.hass, "async_track_point_in_time"):
+            async_call_later(
+                self.hass,
+                _PKCE_VERIFIER_TTL_SEC,
+                functools.partial(_drop_stale_pkce_verifier, self.hass, flow_id),
+            )
         from homeassistant.config_entries import HANDLERS
 
         active_flows = set()
@@ -112,19 +130,28 @@ class GeckoPKCEOAuth2Implementation(config_entry_oauth2_flow.LocalOAuth2Implemen
     async def async_resolve_external_data(self, external_data: Any) -> dict:
         """Exchange the authorization code for tokens (includes PKCE verifier)."""
         state = external_data.get("state") or {}
+        redirect_uri = state.get("redirect_uri")
+        if not redirect_uri:
+            # aiohttp.ClientError is caught by the OAuth config flow (HA versions without
+            # OAuth2TokenRequestError in async_step_creation).
+            raise ClientError("OAuth callback missing redirect_uri in state")
         flow_id = state.get("flow_id")
         verifier: str | None = None
         if flow_id:
             store = self.hass.data.get(_DATA_KEY_PKCE_VERIFIERS)
             if isinstance(store, dict):
                 verifier = store.pop(flow_id, None)
-        if verifier is None:
+            if verifier is None:
+                raise ClientError(
+                    "PKCE verifier missing for this OAuth flow (restart or retry login)"
+                )
+        else:
             verifier = self.code_verifier
         return await self._token_request(
             {
                 "grant_type": "authorization_code",
                 "code": external_data["code"],
-                "redirect_uri": state["redirect_uri"],
+                "redirect_uri": redirect_uri,
                 "code_verifier": verifier,
                 "client_id": self.client_id,
             }
