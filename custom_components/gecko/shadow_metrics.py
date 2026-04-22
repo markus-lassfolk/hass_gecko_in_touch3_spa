@@ -653,9 +653,11 @@ def binary_extension_enabled_by_default(path: str) -> bool:
     """Expose likely user-facing fault/alarm booleans by default."""
     if _is_connectivity_shadow_metric_path(path) or _is_rf_diagnostic_path(path):
         return False
-    lower = path.lower()
+    # ``\b`` does not treat ``_`` as a separator; normalize dotted paths so
+    # snake_case keys like ``leak_alarm`` / ``pump_fault`` match token boundaries.
+    spaced = re.sub(r"[._\-]+", " ", path.lower())
     return bool(
-        re.search(r"\b(alarm|error|fault|leak|warning|trip|problem)\b", lower)
+        re.search(r"\b(alarm|error|fault|leak|warning|trip|problem)\b", spaced)
     )
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import json
@@ -106,10 +107,10 @@ async def _async_client_for_monitor(hass: HomeAssistant, monitor_id: str) -> Any
     return conn.gecko_client
 
 
-async def _async_client_for_monitor_from_call(call: ServiceCall) -> Any:
-    return await _async_client_for_monitor(
-        call.hass, str(call.data[ATTR_MONITOR_ID])
-    )
+async def _async_client_for_monitor_from_call(
+    hass: HomeAssistant, call: ServiceCall
+) -> Any:
+    return await _async_client_for_monitor(hass, str(call.data[ATTR_MONITOR_ID]))
 
 
 def _allowed_monitor_ids(entry) -> set[str]:
@@ -140,8 +141,7 @@ def _vessel_id_for_monitor(entry, monitor_id: str) -> str:
     return str(monitor_id)
 
 
-def _validate_config_entry(call: ServiceCall) -> None:
-    hass = call.hass
+def _validate_config_entry(hass: HomeAssistant, call: ServiceCall) -> None:
     entry_id = str(call.data[ATTR_CONFIG_ENTRY_ID])
     entry = hass.config_entries.async_get_entry(entry_id)
     if not entry or entry.domain != DOMAIN:
@@ -153,32 +153,38 @@ def _validate_config_entry(call: ServiceCall) -> None:
         )
 
 
-async def async_handle_publish_zone_desired(call: ServiceCall) -> None:
+async def async_handle_publish_zone_desired(
+    hass: HomeAssistant, call: ServiceCall
+) -> None:
     """Publish ``{"zones": {type: {id: updates}}}`` like gecko-iot-client zone callbacks."""
-    _validate_config_entry(call)
-    client = await _async_client_for_monitor_from_call(call)
+    _validate_config_entry(hass, call)
+    client = await _async_client_for_monitor_from_call(hass, call)
     zone_type = str(call.data[ATTR_ZONE_TYPE])
     zone_id = str(call.data[ATTR_ZONE_ID])
     updates = call.data[ATTR_UPDATES]
     desired = {"zones": {zone_type: {zone_id: updates}}}
-    await call.hass.async_add_executor_job(client.transporter.publish_desired_state, desired)
+    await hass.async_add_executor_job(client.transporter.publish_desired_state, desired)
 
 
-async def async_handle_publish_feature_desired(call: ServiceCall) -> None:
+async def async_handle_publish_feature_desired(
+    hass: HomeAssistant, call: ServiceCall
+) -> None:
     """Publish ``{"features": updates}`` like the library feature callback."""
-    _validate_config_entry(call)
-    client = await _async_client_for_monitor_from_call(call)
+    _validate_config_entry(hass, call)
+    client = await _async_client_for_monitor_from_call(hass, call)
     updates = call.data[ATTR_UPDATES]
     desired = {"features": updates}
-    await call.hass.async_add_executor_job(client.transporter.publish_desired_state, desired)
+    await hass.async_add_executor_job(client.transporter.publish_desired_state, desired)
 
 
-async def async_handle_publish_desired_state(call: ServiceCall) -> None:
+async def async_handle_publish_desired_state(
+    hass: HomeAssistant, call: ServiceCall
+) -> None:
     """Publish a validated shadow ``desired`` fragment (``zones`` / ``features`` only)."""
-    _validate_config_entry(call)
-    client = await _async_client_for_monitor_from_call(call)
+    _validate_config_entry(hass, call)
+    client = await _async_client_for_monitor_from_call(hass, call)
     fragment = call.data[ATTR_DESIRED_FRAGMENT]
-    await call.hass.async_add_executor_job(client.transporter.publish_desired_state, fragment)
+    await hass.async_add_executor_job(client.transporter.publish_desired_state, fragment)
 
 
 DUMP_SHADOW_SCHEMA = vol.Schema(
@@ -193,16 +199,18 @@ DUMP_SHADOW_SCHEMA = vol.Schema(
 )
 
 
-async def async_handle_dump_shadow_snapshot(call: ServiceCall) -> None:
+async def async_handle_dump_shadow_snapshot(
+    hass: HomeAssistant, call: ServiceCall
+) -> None:
     """Write device shadow + configuration JSON under ``<config>/gecko_shadow_dumps/``."""
-    _validate_config_entry(call)
+    _validate_config_entry(hass, call)
     entry_id = str(call.data[ATTR_CONFIG_ENTRY_ID])
     monitor_id = str(call.data[ATTR_MONITOR_ID])
-    entry = call.hass.config_entries.async_get_entry(entry_id)
+    entry = hass.config_entries.async_get_entry(entry_id)
     if not entry:
         raise HomeAssistantError("Config entry not found")
 
-    mgr = await async_get_connection_manager(call.hass)
+    mgr = await async_get_connection_manager(hass)
     conn = mgr._connections.get(monitor_id)
     if not conn or not conn.gecko_client:
         raise HomeAssistantError(
@@ -217,7 +225,7 @@ async def async_handle_dump_shadow_snapshot(call: ServiceCall) -> None:
         monitor_id,
         anonymous=sanitize and not call.data.get(ATTR_FILENAME),
     )
-    dump_dir = Path(call.hass.config.config_dir) / "gecko_shadow_dumps"
+    dump_dir = Path(hass.config.config_dir) / "gecko_shadow_dumps"
     out_path = (dump_dir / fname).resolve()
     if not str(out_path).startswith(str(dump_dir.resolve())):
         raise HomeAssistantError("Invalid export path")
@@ -232,7 +240,7 @@ async def async_handle_dump_shadow_snapshot(call: ServiceCall) -> None:
         sanitize_for_public_share=sanitize,
     )
 
-    await call.hass.async_add_executor_job(write_json_file, out_path, payload)
+    await hass.async_add_executor_job(write_json_file, out_path, payload)
 
     if sanitize:
         msg = (
@@ -252,7 +260,7 @@ async def async_handle_dump_shadow_snapshot(call: ServiceCall) -> None:
             "Copy it from your Home Assistant configuration directory (Samba / SSH / backup)."
         )
     persistent_notification.async_create(
-        call.hass,
+        hass,
         msg,
         title="Gecko shadow export ready",
         notification_id=f"gecko_shadow_dump_{monitor_id}",
@@ -272,9 +280,27 @@ async def async_remove_services(hass: HomeAssistant) -> None:
             hass.services.async_remove(DOMAIN, name)
 
 
+def _bind_service_handler(
+    hass: HomeAssistant,
+    handler: Callable[[HomeAssistant, ServiceCall], Awaitable[None]],
+) -> Callable[[ServiceCall], Awaitable[None]]:
+    """Wrap ``(hass, call)`` handlers so HA only passes ``ServiceCall`` (no ``call.hass``)."""
+
+    async def _wrapped(call: ServiceCall) -> None:
+        await handler(hass, call)
+
+    return _wrapped
+
+
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Register Gecko services (idempotent across component reload)."""
-    registrations: list[tuple[str, Any, vol.Schema]] = [
+    registrations: list[
+        tuple[
+            str,
+            Callable[[HomeAssistant, ServiceCall], Awaitable[None]],
+            vol.Schema,
+        ]
+    ] = [
         (SERVICE_PUBLISH_ZONE_DESIRED, async_handle_publish_zone_desired, PUBLISH_ZONE_SCHEMA),
         (
             SERVICE_PUBLISH_FEATURE_DESIRED,
@@ -294,5 +320,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     ]
     for name, handler, schema in registrations:
         if not hass.services.has_service(DOMAIN, name):
-            hass.services.async_register(DOMAIN, name, handler, schema=schema)
+            hass.services.async_register(
+                DOMAIN, name, _bind_service_handler(hass, handler), schema=schema
+            )
     _LOGGER.debug("Registered %s services", DOMAIN)
