@@ -365,11 +365,11 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         "Connection lost for %s, attempting reconnect", self.vessel_name
                     )
                     await self._simple_reconnect()
-                    self._consecutive_failures = 0
                     # Re-check connection after reconnect attempt
                     connection = connection_manager.get_connection(self.monitor_id)
                     if connection and connection.is_connected:
                         # Successfully reconnected, proceed to active path
+                        self._consecutive_failures = 0
                         client = await self.get_gecko_client()
                         self.sync_refresh_shadow_metrics(client)
                         return {"status": "active", "vessel_id": self.vessel_id}
@@ -496,22 +496,23 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_ensure_initial_setup(self) -> None:
         """Ensure initial async refresh and shadow metrics refresh happen only once."""
-        if not self._initial_setup_done:
-            async with self._initial_setup_lock:
-                if self._initial_setup_done:
-                    return
-                await self.async_refresh()
-                client = await self.get_gecko_client()
-                if client:
-                    await self.async_wait_for_initial_zone_data(timeout=15.0)
-                else:
-                    _LOGGER.debug(
-                        "Skipping initial zone wait for %s (no MQTT yet); "
-                        "REST/shadow entities still initialize from refresh",
-                        self.vessel_name,
-                    )
-                self.sync_refresh_shadow_metrics(client)
-                self._initial_setup_done = True
+        if self._initial_setup_done:
+            return
+        async with self._initial_setup_lock:
+            if self._initial_setup_done:
+                return
+            await self.async_refresh()
+            client = await self.get_gecko_client()
+            if client:
+                await self.async_wait_for_initial_zone_data(timeout=15.0)
+            else:
+                _LOGGER.debug(
+                    "Skipping initial zone wait for %s (no MQTT yet); "
+                    "REST/shadow entities still initialize from refresh",
+                    self.vessel_name,
+                )
+            self.sync_refresh_shadow_metrics(client)
+            self._initial_setup_done = True
 
     async def _simple_reconnect(self) -> None:
         """Simple reconnection - let geckoIotClient handle token refresh."""
