@@ -326,6 +326,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # v6 vessel detail has a richer ``readings`` object with pH, ORP,
         # alkalinity, chlorine, etc. — data not available in the v4 list.
         vid = str(self.vessel_id)
+        detail: dict | None = None
         try:
             async with rd.rest_vessel_detail_lock:
                 cached_mono = rd.rest_vessel_detail_mono.get(vid)
@@ -335,10 +336,11 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     and vid in rd.rest_vessel_detail_cache
                 ):
                     detail = rd.rest_vessel_detail_cache[vid]
-                else:
-                    detail = await api.async_get_vessel_detail(
-                        str(account_id), vid
-                    )
+            if detail is None:
+                detail = await api.async_get_vessel_detail(
+                    str(account_id), vid
+                )
+                async with rd.rest_vessel_detail_lock:
                     rd.rest_vessel_detail_cache[vid] = detail
                     rd.rest_vessel_detail_mono[vid] = now
             if isinstance(detail, dict):
@@ -824,33 +826,29 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return refresh_token_callback
 
-    async def async_setup_monitor_connection(self, websocket_url: str) -> bool:
-        """Set up a connection to this vessel's monitor using the singleton connection manager."""
+    async def async_setup_monitor_connection(self, websocket_url: str) -> None:
+        """Set up a connection to this vessel's monitor using the singleton connection manager.
+
+        Raises on failure (callers should catch and handle accordingly).
+        """
         try:
-            # Get the singleton connection manager
             connection_manager = await async_get_connection_manager(self.hass)
 
-            # Create update callback for this vessel's coordinator
             def on_zone_update(updated_zones):
-                # Store the updated zones from GeckoIotClient (these have state managers!)
                 self._zones = updated_zones
 
-                # Mark this vessel as having received zones
                 if not self._has_initial_zones:
                     self._has_initial_zones = True
                     if not self._initial_zones_loaded_event.is_set():
                         self._initial_zones_loaded_event.set()
 
-                # Schedule the async call to run on the event loop from background thread
                 asyncio.run_coroutine_threadsafe(
                     self._async_handle_zone_update({"last_update": "zone_update"}),
                     self.hass.loop,
                 )
 
-            # Create refresh token callback
             refresh_token_callback = self._create_refresh_token_callback(websocket_url)
 
-            # Get or create connection with refresh token callback
             await connection_manager.async_get_or_create_connection(
                 monitor_id=self.monitor_id,
                 websocket_url=websocket_url,
@@ -858,8 +856,6 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 update_callback=on_zone_update,
                 refresh_token_callback=refresh_token_callback,
             )
-
-            return True
 
         except Exception as e:
             _LOGGER.debug(

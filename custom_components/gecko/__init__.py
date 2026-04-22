@@ -250,14 +250,23 @@ _PLATFORMS: list[Platform] = [
 ]
 
 
+_OPTIONS_MIGRATED_KEY = "_rest_options_migrated"
+
+
 def _migrate_options_defaults(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """One-time migration: update saved options that still carry old disabled-by-default values.
 
     Before v2.2.0 the defaults were poll_interval=0 and mqtt_only=True which
     got persisted when the user opened the options flow.  Update them to the
     new defaults so chemistry polling starts automatically.
+
+    A ``_rest_options_migrated`` flag is stamped into the options dict so
+    that this migration only runs once — users who later deliberately set
+    interval=0 or mqtt_only=True will not have their choices overwritten.
     """
     opts = dict(entry.options)
+    if opts.get(_OPTIONS_MIGRATED_KEY):
+        return
     changed = False
     if opts.get(CONF_CLOUD_REST_POLL_INTERVAL) == 0:
         opts[CONF_CLOUD_REST_POLL_INTERVAL] = DEFAULT_CLOUD_REST_POLL_INTERVAL
@@ -265,8 +274,9 @@ def _migrate_options_defaults(hass: HomeAssistant, entry: ConfigEntry) -> None:
     if opts.get(CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN) is True:
         opts[CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN] = DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN
         changed = True
+    opts[_OPTIONS_MIGRATED_KEY] = True
+    hass.config_entries.async_update_entry(entry, options=opts)
     if changed:
-        hass.config_entries.async_update_entry(entry, options=opts)
         _LOGGER.info(
             "Migrated cloud REST options to new defaults for entry %s "
             "(poll_interval=%s, mqtt_only=%s)",

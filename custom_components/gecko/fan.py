@@ -84,7 +84,7 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
         self._zone = zone
         self._attr_name = zone.name
         self._attr_unique_id = (
-            f"{config_entry.entry_id}_{coordinator.vessel_name}_pump_{zone.id}"
+            f"{config_entry.entry_id}_{coordinator.vessel_id}_pump_{zone.id}"
         )
 
         self._attr_device_info = dr.DeviceInfo(

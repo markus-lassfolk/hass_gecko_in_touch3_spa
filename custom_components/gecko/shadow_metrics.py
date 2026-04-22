@@ -473,7 +473,7 @@ def humanize_shadow_path(path: str) -> str:
         features.waterlab.sensor.ph.slopeMvPerPh   -> Waterlab pH Slope mV/pH
         connectivity.strength                      -> Conn. Signal Strength
         features.operationMode                     -> Operation Mode
-        cloud.rest.temperature                     -> Cloud Temperature
+        cloud.rest.temperature                     -> Temperature
     """
     segments = path.split(".")
     leaf = segments[-1] if segments else path

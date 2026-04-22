@@ -290,6 +290,8 @@ def extract_vessel_action_strings(
             ]
             joined = " | ".join(t for t in texts if t)
             if joined:
+                if len(joined) > 255:
+                    joined = joined[:252] + "..."
                 out[f"cloud.rest.actions.{atype}.instructions"] = joined
     return out
 
@@ -326,11 +328,6 @@ def extract_vessel_disc_strings(
         if s:
             out[f"cloud.rest.disc.{key}"] = s
     return out
-
-
-def is_wifi_diagnostic_reading(reading_key: str) -> bool:
-    """True for readings that are WiFi/RF diagnostics, not chemistry."""
-    return reading_key in _WIFI_DIAGNOSTIC_READINGS
 
 
 def find_vessel_record(

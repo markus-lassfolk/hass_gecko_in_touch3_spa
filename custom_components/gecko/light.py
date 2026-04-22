@@ -98,7 +98,7 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
 
         self._attr_name = f"Light zone {zone.id}"
         self._attr_unique_id = (
-            f"{config_entry.entry_id}_{coordinator.vessel_name}_light_{zone.id}"
+            f"{config_entry.entry_id}_{coordinator.vessel_id}_light_{zone.id}"
         )
 
         # Device info for grouping entities - reference the actual device created in __init__.py

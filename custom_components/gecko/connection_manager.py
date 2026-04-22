@@ -436,7 +436,8 @@ class GeckoConnectionManager:
                     _LOGGER.error("Failed to get new websocket URL for monitor %s", mid)
                     return False
 
-                if new_url != connection.websocket_url:
+                url_changed = new_url != connection.websocket_url
+                if url_changed:
                     connection.websocket_url = new_url
 
                 # Re-instantiate transporter and gecko client with new token
@@ -468,7 +469,7 @@ class GeckoConnectionManager:
                     "Refreshed and reconnected monitor %s in %.1fs (url_changed=%s)",
                     mid,
                     time.monotonic() - _t0,
-                    new_url != connection.websocket_url,
+                    url_changed,
                 )
                 return True
 

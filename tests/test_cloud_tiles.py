@@ -275,6 +275,6 @@ def test_extract_vessel_disc_strings_empty() -> None:
     assert cloud_tiles.extract_vessel_disc_strings({}) == {}
 
 
-def test_is_wifi_diagnostic_reading() -> None:
-    assert cloud_tiles.is_wifi_diagnostic_reading("wifiRssi") is True
-    assert cloud_tiles.is_wifi_diagnostic_reading("ph") is False
+def test_wifi_diagnostic_readings_frozenset() -> None:
+    assert "wifiRssi" in cloud_tiles._WIFI_DIAGNOSTIC_READINGS
+    assert "ph" not in cloud_tiles._WIFI_DIAGNOSTIC_READINGS
