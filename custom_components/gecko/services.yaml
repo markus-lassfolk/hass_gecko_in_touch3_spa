@@ -63,3 +63,72 @@ publish_feature_desired:
       required: true
       selector:
         object:
+
+publish_desired_state:
+  name: Publish desired state fragment
+  description: Publishes a JSON object as the AWS IoT shadow ``state.desired`` payload. Only top-level keys ``zones`` and/or ``features`` are allowed (same shapes as the Gecko app / gecko_iot_client).
+  fields:
+    config_entry_id:
+      name: Config entry
+      description: Gecko integration config entry id.
+      required: true
+      selector:
+        config_entry:
+          integration: gecko
+    monitor_id:
+      name: Monitor ID
+      description: Monitor id for this spa (must match a vessel on the same config entry).
+      required: true
+      example: "12345"
+      selector:
+        text:
+    desired_fragment:
+      name: Desired fragment
+      description: Object with only ``zones`` and/or ``features`` keys (values are nested JSON as in the device shadow).
+      required: true
+      selector:
+        object:
+
+dump_shadow_snapshot:
+  name: Export device shadow to JSON file
+  description: Writes the current Gecko MQTT device shadow (plus optional configuration and derived path summaries) to ``<config>/gecko_shadow_dumps/*.json``. By default the file is **sanitized** for public sharing (fingerprints instead of raw ids; credential-like keys and common secret patterns redacted). Disable sanitization only for private debugging.
+  fields:
+    config_entry_id:
+      name: Config entry
+      description: Gecko integration config entry id.
+      required: true
+      selector:
+        config_entry:
+          integration: gecko
+    monitor_id:
+      name: Monitor ID
+      description: Monitor id for this spa (must match a vessel on the same config entry).
+      required: true
+      example: "12345"
+      selector:
+        text:
+    include_configuration:
+      name: Include device configuration
+      description: Include the loaded Gecko device configuration JSON (zone layout, etc.).
+      default: true
+      selector:
+        boolean:
+    include_derived:
+      name: Include derived summaries
+      description: Include shadow topology summary and extension path lists (helps mapping without re-parsing the full state).
+      default: true
+      selector:
+        boolean:
+    sanitize_for_public_share:
+      name: Sanitize for public share
+      description: When enabled (default), redacts monitor/vessel ids to stable fingerprints, scrubs sensitive key names and common secret patterns in strings, and omits the real monitor id from the auto-generated file name. Turn off only for a full private dump.
+      default: true
+      selector:
+        boolean:
+    filename:
+      name: File name
+      description: Optional file name (letters, numbers, dash, underscore, dot). Must end in .json. Default is auto-generated with a timestamp.
+      required: false
+      example: "my_spa_shadow.json"
+      selector:
+        text:

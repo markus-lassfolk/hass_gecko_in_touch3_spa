@@ -11,6 +11,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers import device_registry as dr
@@ -19,6 +20,13 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import GeckoVesselCoordinator
 from .connection_manager import GECKO_CONNECTION_MANAGER_KEY
+from .entity import GeckoEntityAvailabilityMixin
+from .shadow_metrics import (
+    binary_extension_enabled_by_default,
+    classify_gecko_shadow_metric,
+    infer_binary_sensor_device_class,
+    metric_path_to_entity_slug,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,8 +80,7 @@ async def async_setup_entry(
         _LOGGER.warning("No vessel coordinators found")
         return
     
-    # Create binary sensor entities for each vessel
-    entities = []
+    entities: list[BinarySensorEntity] = []
     for coordinator in coordinators:
         for description in BINARY_SENSOR_DESCRIPTIONS:
             entity = GeckoBinarySensorEntity(
@@ -82,8 +89,41 @@ async def async_setup_entry(
                 description=description,
             )
             entities.append(entity)
-            _LOGGER.debug("Created binary sensor entity %s for %s", description.key, coordinator.vessel_name)
-    
+            _LOGGER.debug(
+                "Created binary sensor entity %s for %s",
+                description.key,
+                coordinator.vessel_name,
+            )
+
+        entities.append(
+            GeckoRestActiveAlertsBinarySensor(coordinator, config_entry)
+        )
+
+        await coordinator.async_refresh()
+        await coordinator.async_wait_for_initial_zone_data(timeout=15.0)
+        client = await coordinator.get_gecko_client()
+        coordinator.sync_refresh_shadow_metrics(client)
+        for path in coordinator.take_pending_bool_paths():
+            entities.append(
+                GeckoShadowBoolBinarySensor(coordinator, config_entry, path)
+            )
+
+        @callback
+        def _shadow_bool_listener(coord: GeckoVesselCoordinator = coordinator) -> None:
+            added = coord.take_pending_bool_paths()
+            if not added:
+                return
+            async_add_entities(
+                [
+                    GeckoShadowBoolBinarySensor(coord, config_entry, p)
+                    for p in added
+                ]
+            )
+
+        config_entry.async_on_unload(
+            coordinator.async_add_listener(_shadow_bool_listener)
+        )
+
     if entities:
         _LOGGER.debug("Adding %d binary sensor entities", len(entities))
         async_add_entities(entities)
@@ -193,3 +233,111 @@ class GeckoBinarySensorEntity(CoordinatorEntity[GeckoVesselCoordinator], BinaryS
         except Exception as e:
             _LOGGER.warning("Error updating connectivity binary sensor %s: %s", self._attr_name, e)
             self._attr_is_on = False
+
+
+class GeckoShadowBoolBinarySensor(
+    GeckoEntityAvailabilityMixin, CoordinatorEntity, BinarySensorEntity
+):
+    """Boolean leaves from shadow (alarms, flags, etc.)."""
+
+    _attr_should_poll = False
+    _attr_has_entity_name = False
+
+    def __init__(
+        self,
+        coordinator: GeckoVesselCoordinator,
+        config_entry: ConfigEntry,
+        path: str,
+    ) -> None:
+        BinarySensorEntity.__init__(self)
+        CoordinatorEntity.__init__(self, coordinator)
+        self._path = path
+        vessel_slug = coordinator.vessel_name.lower().replace(" ", "_").replace(
+            "-", "_"
+        )
+        slug = metric_path_to_entity_slug(path)
+        self._attr_name = f"{coordinator.vessel_name} {path.split('.')[-1].replace('_', ' ')}"
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{coordinator.monitor_id}_bool_{slug}"
+        )
+        self.entity_id = f"binary_sensor.{vessel_slug}_bool_{slug}"
+        self._attr_extra_state_attributes = {
+            "shadow_path": path,
+            "gecko_diagnostic_group": classify_gecko_shadow_metric(path),
+        }
+        dc = infer_binary_sensor_device_class(path)
+        if dc is not None:
+            self._attr_device_class = dc
+        if binary_extension_enabled_by_default(path):
+            self._attr_entity_registry_enabled_default = True
+            self._attr_entity_category = None
+        else:
+            self._attr_entity_registry_enabled_default = False
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_device_info = dr.DeviceInfo(
+            identifiers={(DOMAIN, str(coordinator.vessel_id))},
+        )
+        raw = coordinator.get_shadow_bool_value(path)
+        self._attr_is_on = bool(raw) if raw is not None else False
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        val = self.coordinator.get_shadow_bool_value(self._path)
+        self._attr_is_on = bool(val) if val is not None else False
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        val = self.coordinator.get_shadow_bool_value(self._path)
+        self._attr_is_on = bool(val) if val is not None else False
+
+
+class GeckoRestActiveAlertsBinarySensor(
+    CoordinatorEntity[GeckoVesselCoordinator], BinarySensorEntity
+):
+    """True when REST reports active vessel actions or scoped unread messages."""
+
+    _attr_should_poll = False
+    _attr_has_entity_name = False
+
+    def __init__(
+        self,
+        coordinator: GeckoVesselCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        vessel_slug = coordinator.vessel_name.lower().replace(" ", "_").replace(
+            "-", "_"
+        )
+        self._attr_name = f"{coordinator.vessel_name} Active alerts"
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{coordinator.monitor_id}_rest_active_alerts_bin"
+        )
+        self.entity_id = f"binary_sensor.{vessel_slug}_rest_active_alerts"
+        self._attr_device_class = BinarySensorDeviceClass.PROBLEM
+        self._attr_device_info = dr.DeviceInfo(
+            identifiers={(DOMAIN, str(coordinator.vessel_id))},
+        )
+        self._attr_icon = "mdi:bell-alert"
+        self._refresh_from_snapshot()
+
+    def _refresh_from_snapshot(self) -> None:
+        snap = self.coordinator.get_rest_alerts_snapshot()
+        total = int(snap.get("total") or 0)
+        self._attr_is_on = total > 0
+        self._attr_extra_state_attributes = {
+            "messages": snap.get("messages") or [],
+            "actions": snap.get("actions") or [],
+            "updated_at": snap.get("updated_at"),
+            "error": snap.get("error"),
+        }
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._refresh_from_snapshot()
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._refresh_from_snapshot()

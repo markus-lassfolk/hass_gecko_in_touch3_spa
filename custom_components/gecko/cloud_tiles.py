@@ -82,6 +82,53 @@ def _temp_c(disc: dict[str, Any], status: dict[str, Any]) -> float | int | None:
     return None
 
 
+def _string_leaf(v: Any) -> str | None:
+    if isinstance(v, str) and v.strip():
+        s = v.strip()
+        if len(s) > 256:
+            return None
+        if s.startswith("eyJ"):
+            return None
+        return s
+    return None
+
+
+def extract_cloud_tile_strings(vessel: dict[str, Any]) -> dict[str, str]:
+    """Human-readable REST fields for text sensors (``cloud.rest.*``)."""
+    out: dict[str, str] = {}
+    if not isinstance(vessel, dict):
+        return out
+    status = _status_dict(vessel)
+    disc = _disc_elements(status)
+
+    for label, root in (("disc", disc), ("status", status)):
+        if not isinstance(root, dict):
+            continue
+        for key in (
+            "waterStatus",
+            "water_status",
+            "flowStatus",
+            "flow_status",
+            "statusText",
+            "status_text",
+            "message",
+            "text",
+        ):
+            raw = root.get(key)
+            if isinstance(raw, dict):
+                for leaf in ("text", "message", "value", "name", "label", "description"):
+                    s = _string_leaf(raw.get(leaf))
+                    if s:
+                        out[f"cloud.rest.{label}.{key}.{leaf}"] = s
+                        break
+            else:
+                s = _string_leaf(raw)
+                if s:
+                    out[f"cloud.rest.{label}.{key}"] = s
+
+    return out
+
+
 def extract_cloud_tile_metrics(vessel: dict[str, Any]) -> dict[str, float | int]:
     """Return dotted metric paths for REST-derived tile values."""
     out: dict[str, float | int] = {}

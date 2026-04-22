@@ -135,8 +135,9 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
             else:
                 self._attr_rgb_color = None
                 self._attr_brightness = None
-                # Supported modes are RGB-only when set_color exists; do not use ONOFF then.
-                if callable(getattr(zone, "set_color", None)):
+                # color_mode must stay within supported_color_modes (set in __init__).
+                supported = self._attr_supported_color_modes
+                if supported and ColorMode.RGB in supported:
                     self._attr_color_mode = ColorMode.RGB
                 else:
                     self._attr_color_mode = ColorMode.ONOFF

@@ -1316,9 +1316,10 @@ async def async_main(env_path: Path, args: argparse.Namespace) -> int:
     for path in sorted(metrics):
         dc, unit = shadow_metrics.infer_sensor_metadata(path)
         enabled = shadow_metrics.chemistry_metric_enabled_by_default(path)
+        dc_s = getattr(dc, "value", dc) if dc is not None else None
         print(
             f"{path} = {metrics[path]!r}  "
-            f"[device_class={dc!r} unit={unit!r} default_enabled={enabled}]"
+            f"[device_class={dc_s!r} unit={unit!r} default_enabled={enabled}]"
         )
     return 0
 

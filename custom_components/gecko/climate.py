@@ -155,8 +155,9 @@ class GeckoClimate(GeckoEntityAvailabilityMixin, CoordinatorEntity[GeckoVesselCo
         attrs: dict[str, Any] = {}
         if self._zone.status is not None:
             attrs["detailed_status"] = self._zone.status.name
-        if self._zone.mode is not None:
-            attrs["eco_mode"] = self._zone.mode.eco
+        mode = self._zone.mode
+        if mode is not None and hasattr(mode, "eco"):
+            attrs["eco_mode"] = mode.eco
         return attrs
 
     @callback

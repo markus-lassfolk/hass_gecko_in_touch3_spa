@@ -15,15 +15,27 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 # Import from geckoIotClient
 from gecko_iot_client.models.zone_types import ZoneType, AbstractZone
 
-from .cloud_tiles import extract_cloud_tile_metrics, find_vessel_record
+from .cloud_tiles import (
+    extract_cloud_tile_metrics,
+    extract_cloud_tile_strings,
+    find_vessel_record,
+)
 from .const import (
+    CONF_ALERTS_POLL_INTERVAL,
     CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     CONF_CLOUD_REST_POLL_INTERVAL,
+    DEFAULT_ALERTS_POLL_INTERVAL,
     DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
     DOMAIN,
 )
-from .shadow_metrics import extract_extension_metrics
+from .rest_alerts import build_alerts_snapshot
+from .shadow_metrics import (
+    extract_extension_booleans,
+    extract_extension_metrics,
+    extract_extension_strings,
+    path_reserved_for_number_control,
+)
 from .connection_manager import (
     async_get_connection_manager,
     GeckoMonitorConnection,
@@ -86,9 +98,31 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._registered_shadow_metric_paths: Set[str] = set()
         self._pending_new_metric_paths: Set[str] = set()
 
+        self._shadow_bool_values: Dict[str, bool] = {}
+        self._registered_bool_paths: Set[str] = set()
+        self._pending_bool_paths: Set[str] = set()
+
+        self._shadow_string_values: Dict[str, str] = {}
+        self._registered_string_paths: Set[str] = set()
+        self._pending_string_paths: Set[str] = set()
+
+        self._registered_number_paths: Set[str] = set()
+        self._pending_number_paths: Set[str] = set()
+
         # Optional REST tile metrics (merged under ``cloud.rest.*``; shadow wins on overlap)
         self._cloud_tile_metrics: Dict[str, float | int] = {}
+        self._cloud_string_metrics: Dict[str, str] = {}
         self._last_cloud_poll_monotonic: float | None = None
+
+        # REST: unread messages (scoped) + vessel actions — not history.
+        self._rest_alerts_snapshot: Dict[str, Any] = {
+            "total": 0,
+            "messages": [],
+            "actions": [],
+            "updated_at": None,
+            "error": None,
+        }
+        self._last_alerts_poll_monotonic: float | None = None
 
     def register_zone_update_callback(self, callback):
         """Register a callback to be called when zone data updates."""
@@ -173,6 +207,69 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
 
         self._cloud_tile_metrics = extract_cloud_tile_metrics(vessel_rec)
+        self._cloud_string_metrics = extract_cloud_tile_strings(vessel_rec)
+
+    async def _async_poll_alerts_if_due(self) -> None:
+        """Poll Gecko REST for new/active alerts (messages + vessel actions)."""
+        opts = self._entry_options()
+        interval = int(
+            opts.get(CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL)
+        )
+        if interval <= 0 or not self.account_id:
+            return
+
+        now = time.monotonic()
+        if (
+            self._last_alerts_poll_monotonic is not None
+            and (now - self._last_alerts_poll_monotonic) < interval
+        ):
+            return
+
+        self._last_alerts_poll_monotonic = now
+        entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if not entry or not getattr(entry, "runtime_data", None):
+            return
+        api = entry.runtime_data.api_client
+        messages_payload: Any | None = None
+        actions_payload: Any | None = None
+        err: str | None = None
+        try:
+            messages_payload = await api.async_get_messages_unread(
+                str(self.account_id)
+            )
+        except Exception as exc:
+            err = f"messages_unread:{type(exc).__name__}"
+            _LOGGER.debug(
+                "Alerts poll: messages/unread failed for %s: %s",
+                self.vessel_name,
+                exc,
+            )
+        try:
+            actions_payload = await api.async_get_vessel_actions_v2(
+                str(self.account_id), str(self.vessel_id)
+            )
+        except Exception as exc:
+            aerr = f"actions:{type(exc).__name__}"
+            err = f"{err};{aerr}" if err else aerr
+            _LOGGER.debug(
+                "Alerts poll: vessel actions failed for %s: %s",
+                self.vessel_name,
+                exc,
+            )
+
+        snap = build_alerts_snapshot(
+            messages_payload=messages_payload,
+            actions_payload=actions_payload,
+            vessel_id=str(self.vessel_id),
+            monitor_id=str(self.monitor_id),
+        )
+        if err:
+            snap = {**snap, "error": err}
+        self._rest_alerts_snapshot = snap
+
+    def get_rest_alerts_snapshot(self) -> dict[str, Any]:
+        """Latest merged REST alerts (counts + short previews)."""
+        return dict(self._rest_alerts_snapshot)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Gecko API."""
@@ -193,6 +290,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._consecutive_failures = 0
 
             await self._async_poll_cloud_tiles_if_due(connection)
+            await self._async_poll_alerts_if_due()
 
             client = await self.get_gecko_client()
             self.sync_refresh_shadow_metrics(client)
@@ -217,8 +315,29 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         merged: Dict[str, float | int] = dict(self._cloud_tile_metrics)
         merged.update(mqtt_metrics)
         self._shadow_metric_values = merged
+
+        reserved_numbers = {
+            p for p in self._shadow_metric_values if path_reserved_for_number_control(p)
+        }
         self._pending_new_metric_paths |= (
-            set(self._shadow_metric_values) - self._registered_shadow_metric_paths
+            set(self._shadow_metric_values)
+            - reserved_numbers
+            - self._registered_shadow_metric_paths
+        )
+        self._pending_number_paths |= reserved_numbers - self._registered_number_paths
+
+        mqtt_bools = extract_extension_booleans(state) if state else {}
+        self._shadow_bool_values = mqtt_bools
+        self._pending_bool_paths |= (
+            set(self._shadow_bool_values) - self._registered_bool_paths
+        )
+
+        mqtt_strings = extract_extension_strings(state) if state else {}
+        merged_strings: Dict[str, str] = dict(self._cloud_string_metrics)
+        merged_strings.update(mqtt_strings)
+        self._shadow_string_values = merged_strings
+        self._pending_string_paths |= (
+            set(self._shadow_string_values) - self._registered_string_paths
         )
 
     def get_shadow_metric_value(self, metric_path: str) -> float | int | None:
@@ -232,6 +351,35 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._registered_shadow_metric_paths.update(out)
         self._pending_new_metric_paths.clear()
         return out
+
+    def take_pending_number_paths(self) -> list[str]:
+        """Unknown-zone setpoint paths for Number entities."""
+        out = sorted(self._pending_number_paths)
+        self._registered_number_paths.update(out)
+        self._pending_number_paths.clear()
+        return out
+
+    def take_pending_bool_paths(self) -> list[str]:
+        out = sorted(self._pending_bool_paths)
+        self._registered_bool_paths.update(out)
+        self._pending_bool_paths.clear()
+        return out
+
+    def take_pending_string_paths(self) -> list[str]:
+        out = sorted(self._pending_string_paths)
+        self._registered_string_paths.update(out)
+        self._pending_string_paths.clear()
+        return out
+
+    def get_shadow_bool_value(self, path: str) -> bool | None:
+        if path not in self._shadow_bool_values:
+            return None
+        return self._shadow_bool_values[path]
+
+    def get_shadow_string_value(self, path: str) -> str | None:
+        if path not in self._shadow_string_values:
+            return None
+        return self._shadow_string_values[path]
 
     async def _simple_reconnect(self) -> None:
         """Simple reconnection - let geckoIotClient handle token refresh."""
@@ -423,5 +571,22 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._shadow_metric_values.clear()
         self._registered_shadow_metric_paths.clear()
         self._pending_new_metric_paths.clear()
+        self._shadow_bool_values.clear()
+        self._registered_bool_paths.clear()
+        self._pending_bool_paths.clear()
+        self._shadow_string_values.clear()
+        self._registered_string_paths.clear()
+        self._pending_string_paths.clear()
+        self._registered_number_paths.clear()
+        self._pending_number_paths.clear()
         self._cloud_tile_metrics.clear()
+        self._cloud_string_metrics.clear()
         self._last_cloud_poll_monotonic = None
+        self._rest_alerts_snapshot = {
+            "total": 0,
+            "messages": [],
+            "actions": [],
+            "updated_at": None,
+            "error": None,
+        }
+        self._last_alerts_poll_monotonic = None

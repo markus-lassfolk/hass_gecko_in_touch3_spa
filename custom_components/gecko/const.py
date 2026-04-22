@@ -1,4 +1,4 @@
-"""Constants for the Gecko integration.
+"""Constants for the Gecko integration (Gecko Full Community fork; HA domain ``gecko``).
 
 Privacy & portability (for maintainers)
 --------------------------------------
@@ -27,6 +27,10 @@ CONF_CLOUD_REST_POLL_INTERVAL = "cloud_rest_poll_interval"
 CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN = "cloud_rest_only_when_mqtt_down"
 DEFAULT_CLOUD_REST_POLL_INTERVAL = 0
 DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN = True
+
+# Optional REST poll for account unread messages + per-vessel actions (not history).
+CONF_ALERTS_POLL_INTERVAL = "alerts_poll_interval"
+DEFAULT_ALERTS_POLL_INTERVAL = 0
 
 OAUTH2_CLIENT_ID = "L81oh6hgUsvMg40TgTGoz4lxNy8eViM0"
 OAUTH2_AUTHORIZE = "https://gecko-prod.us.auth0.com/authorize"

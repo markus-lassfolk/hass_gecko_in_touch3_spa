@@ -1,68 +1,87 @@
 <div align="center">
 
-# 🦎 Gecko Integration for Home Assistant
+# Gecko Full Community Integration for Home Assistant
 
-**Control your spa, hot tub, or pool equipment directly from Home Assistant**
+**Community fork:** in.touch 3 / Gecko IoT in Home Assistant — MQTT-first spa control, optional Gecko Cloud REST enrichment, dynamic shadow entities, and contributor-friendly exports.
 
-[![GitHub Release](https://img.shields.io/github/release/geckoal/ha-gecko-integration.svg?style=for-the-badge)](https://github.com/geckoal/ha-gecko-integration/releases)
-[![HACS](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/release/markus-lassfolk/hass_gecko_in_touch3_spa.svg?style=for-the-badge)](https://github.com/markus-lassfolk/hass_gecko_in_touch3_spa/releases)
+[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg?style=for-the-badge)](LICENSE)
 
 </div>
 
 ---
 
-## ✨ Features
+## About this fork
+
+This repository ([**markus-lassfolk/hass_gecko_in_touch3_spa**](https://github.com/markus-lassfolk/hass_gecko_in_touch3_spa)) extends the upstream [**geckoal/ha-gecko-integration**](https://github.com/geckoal/ha-gecko-integration) line and the [**gecko-iot-client**](https://github.com/geckoal/gecko-iot-client) library. It keeps the Home Assistant integration **`domain`: `gecko`** (folder `custom_components/gecko/`) so OAuth, devices, and services stay compatible with existing installs — the manifest **display name** is **Gecko Full Community Integration for Home Assistant**.
+
+---
+
+## Highlights
+
+| Area | What you get |
+|------|----------------|
+| **Live control (MQTT)** | Climate, lights, fans/pumps, watercare **select**, connectivity and energy-saving **binary sensors** (gateway, transport, spa running, overall link, energy saving). |
+| **Shadow extensions** | **Sensors** for numeric leaves, **string** sensors, and **binary sensors** for boolean leaves discovered under unmodeled `zones.*` and relevant `features.*` (for example Waterlab-style chemistry when the device shadow publishes it). Likely chemistry-style paths are **enabled by default**; other numeric paths are often added as **disabled diagnostics** you can enable in the entity registry. |
+| **Unknown-zone setpoints** | **Number** entities for supported setpoint paths in unknown zone types so you can write **desired** shadow fragments consistent with the Gecko app / library. |
+| **Optional Gecko Cloud REST** | Integration **options** (see below) can poll account/vessel REST data for **summary tile** metrics and strings, merged under paths prefixed with `cloud.rest.*` where **MQTT shadow values take precedence** when both exist. A separate optional poll surfaces **account unread messages** and **per-vessel actions** as **sensor + binary sensor** (counts/previews, not full message history). |
+| **Actions (services)** | Publish validated **`state.desired`** JSON for **`zones`** and/or **`features`**, and export a **JSON shadow snapshot** (sanitized by default) for sharing with maintainers. |
+| **Diagnostics** | **Download diagnostics** on the config entry includes **shadow topology** summaries (structure-oriented) to inspect what the spa exposes without embedding full live values. |
+
+---
+
+## Feature overview
 
 <table>
 <tr>
 <td width="33%" valign="top">
 
-### 🌡️ Climate Control
-- Set target temperature
-- Monitor current temperature
-- Track heating status
+### Climate
+
+- Target and current temperature
+- Heat-pump-aware `hvac_action` and extra status where available
 
 </td>
 <td width="33%" valign="top">
 
-### 💡 Lighting
-- Multi-zone LED control
-- On/off control
+### Lighting & pumps
+
+- Multi-zone LED (including RGB/brightness when supported)
+- Pump and blower **fan** entities with speed control
 
 </td>
 <td width="33%" valign="top">
 
-### 💨 Pumps & Fans
-- Blower control
-- Multiple pump zones
+### Watercare & connectivity
+
+- **Select** for watercare mode (tracks live mode changes)
+- **Binary sensors** for gateway, transport, spa running, overall connection, energy saving
 
 </td>
 </tr>
 <tr>
 <td width="33%" valign="top">
 
-### 🔄 Watercare Modes
-- Away mode
-- Standard mode
-- Energy savings mode
-- Weekender mode
+### Shadow-derived entities
+
+- Dynamic **sensors**, **strings**, **booleans**, and **numbers** from the device shadow outside the stock zone models
 
 </td>
 <td width="33%" valign="top">
 
-### 📊 Monitoring
-- Gateway status
-- Connection health
+### Cloud gap-filling (optional)
+
+- REST **tile** metrics/strings when MQTT is quiet or disconnected (configurable)
+- REST **alerts** preview (unread scope + vessel actions) when enabled
 
 </td>
 <td width="33%" valign="top">
 
-### ☁️ Cloud Integration
-- Secure OAuth2 login
-- AWS IoT backend
-- Automatic discovery
-- Push notifications
+### Developer & support tooling
+
+- **Diagnostics** download with topology hints
+- **`gecko.dump_shadow_snapshot`** with default **PII-oriented sanitization**
 
 </td>
 </tr>
@@ -70,165 +89,158 @@
 
 ---
 
-## 📦 Installation
+## Installation
 
-### Method 1: HACS (Recommended)
+### Method 1: HACS (recommended)
 
-1. Open **HACS** in Home Assistant
-2. Navigate to **Integrations**
-3. Click the **⋮** menu (top right) → **Custom repositories**
-4. Add repository URL: `https://github.com/geckoal/ha-gecko-integration`
-5. Select category: **Integration**
-6. Click **Download** on the Gecko integration
-7. **Restart Home Assistant**
+1. Open **HACS** in Home Assistant → **Integrations**
+2. **⋮** (top right) → **Custom repositories**
+3. Repository: `https://github.com/markus-lassfolk/hass_gecko_in_touch3_spa` — category **Integration**
+4. Open the new entry → **Download** (pick a release or branch as you prefer)
+5. **Restart Home Assistant**
 
-### Method 2: Manual Installation
+### Method 2: Manual
 
-1. Download the [latest release](https://github.com/geckoal/ha-gecko-integration/releases)
-2. Extract and copy the `custom_components/gecko` folder to your Home Assistant `custom_components` directory
-3. Your directory structure should look like:
-   ```
-   config/
-   └── custom_components/
-       └── gecko/
-           ├── __init__.py
-           ├── manifest.json
-           └── ...
-   ```
-4. **Restart Home Assistant**
+1. Download a [release](https://github.com/markus-lassfolk/hass_gecko_in_touch3_spa/releases)
+2. Copy the `custom_components/gecko` folder into your HA `config/custom_components/` directory
+3. **Restart Home Assistant**
 
----
+Expected layout:
 
-## ⚙️ Setup & Configuration
-
-### Initial Setup
-
-1. Go to **Settings** → **Devices & Services**
-2. Click **+ Add Integration**
-3. Search for **"Gecko"**
-4. Click on the Gecko integration
-
-### Authentication
-
-The integration will guide you through OAuth2 authentication:
-
-1. Click **Continue** to begin the OAuth flow
-2. You'll be redirected to the Gecko login page
-3. Enter your **Gecko spa account credentials**
-4. Grant permission to Home Assistant
-5. You'll be redirected back automatically
-
-### Automatic Discovery
-
-Once authenticated:
-- Your spa(s) will be **automatically discovered**
-- All available entities will be created
-- Devices appear under **Settings** → **Devices & Services** → **Gecko**
+```
+config/
+└── custom_components/
+    └── gecko/
+        ├── __init__.py
+        ├── manifest.json
+        └── …
+```
 
 ---
 
-## 🎛️ Available Entities
+## Setup
 
-The integration creates multiple entity types for comprehensive spa control:
+1. **Settings** → **Devices & services** → **Add integration**
+2. Search for **Gecko** (manifest name: **Gecko Full Community Integration for Home Assistant**)
+3. Complete **OAuth2** in the browser (Gecko / Auth0 account)
+4. Vessels are discovered from your account; each spa gets a device and entities once MQTT connects
 
-| Entity Type | Description | Example |
-|------------|-------------|---------|
-| **Climate** | Temperature control and monitoring (heat pump aware `hvac_action`, extra status) | Set spa to 104°F (40°C) |
-| **Light** | LED on/off plus RGB and brightness when the zone supports it | Adjust ambient lighting |
-| **Fan** | Pump and blower speed control; optional initiator hints in attributes | Set pump to High speed |
-| **Binary Sensor** | Gateway/spa/connection status plus energy-saving mode flag | Gateway connected status |
-| **Select** | Watercare mode (updates when the spa changes mode, not only on poll) | Switch to Energy Savings mode |
-| **Sensor** | Numeric values from the cloud device shadow outside modeled zones (e.g. Waterlab / chemistry paths) | pH, ORP, or other metrics when the spa publishes them |
+### Integration options
 
-### Entity Examples
+On the Gecko card → **Configure**:
 
-**Climate Entity:**
-- `climate.spa_name` - Main temperature control
-
-**Light Entities:**
-- `light.spa_name_zone_1` - Primary lighting zone
-- `light.spa_name_zone_2` - Secondary lighting zone
-
-**Fan Entities:**
-- `fan.spa_name_pump_1` - Main circulation pump
-- `fan.spa_name_pump_2` - Jet pump
-
-**Sensors (shadow extensions):**
-- Entities are created dynamically from the Gecko IoT **device shadow** for numeric fields under unknown `zones.*` branches (such as Waterlab) and for `features.*` other than watercare operation mode.
-- Likely water-chemistry paths (names containing `ph`, `orp`, `chlorine`, etc.) are **enabled by default**; other numeric leaves are added as **disabled** diagnostic sensors you can enable in the entity registry.
-- Download diagnostics (**Settings → Devices & Services → Gecko → Download diagnostics**) to inspect redacted shadow topology (`shadow_topology`) without raw values.
+| Option | Meaning |
+|--------|---------|
+| **Cloud REST poll interval** | Seconds between optional polls of the account **vessels** list for summary **tile** numbers/strings (`0` = disabled). Default is off. |
+| **Only poll when MQTT is disconnected** | When enabled, REST tile polling runs only if the live MQTT link for that monitor is down — useful to avoid duplicating data while MQTT is healthy. |
+| **Alerts poll interval** | Seconds between optional REST calls for **unread-messages** (account-scoped) and **vessel actions** (`0` = disabled). Feeds the **REST active alerts** sensor/binary pair. |
 
 ---
 
-## 🆘 Troubleshooting
+## Entities (summary)
 
-### Common Issues
+| Platform | Role |
+|----------|------|
+| **Climate** | Main spa temperature control |
+| **Light** | Per lighting zone |
+| **Fan** | Pumps / blowers |
+| **Select** | Watercare operation mode |
+| **Binary sensor** | Connection stack, energy saving, dynamic shadow booleans, **REST active alerts** (on when there is something to review, per snapshot rules) |
+| **Sensor** | RF strength/channel, gateway/spa status text where modeled, **dynamic shadow numerics**, **dynamic shadow strings**, **REST active alerts** (counts / short previews) |
+| **Number** | Writable unknown-zone **setpoints** (shadow **desired**), where paths match supported setpoint shapes |
 
-**Integration not appearing:**
-- Ensure you've restarted Home Assistant after installation
-- Check that the `custom_components/gecko` folder exists
-- Review Home Assistant logs for errors
+**Shadow extension sensors:** values under `cloud.rest.*` can remain available from REST when MQTT is offline; pure MQTT paths follow normal entity availability.
 
-**OAuth authentication fails:**
-- Verify your Gecko account credentials
-- Check internet connectivity
-- Try clearing browser cache and retry
-
-**No devices discovered:**
-- Confirm your spa is online in the Gecko mobile app
-- Wait 1-2 minutes for discovery to complete
-- Check that your spa uses Gecko in.touch 3 / in.touch 3+ or compatible system
-
-**Entities not updating:**
-- Check RF signal strength sensor (low signal affects updates)
-- Verify gateway connectivity in the Gecko app
-- Restart the integration: **Settings** → **Devices & Services** → **Gecko** → **⋮** → **Reload**
+**Diagnostics:** **Download diagnostics** on the integration entry includes `shadow_topology` (and related client summaries) for mapping work.
 
 ---
 
-## Roadmap: parity with the Gecko app
+## Actions (Services)
 
-Today this integration focuses on **what the gateway exposes over AWS IoT** (zones: climate, lights, pumps/fans, watercare **select**, connectivity **binary_sensor**, plus **shadow-derived sensors** for paths the stock client does not model). That matches most **control and live state** users expect from a spa controller.
+All actions live under the **`gecko`** domain (Developer tools → **Actions**).
 
-The Gecko **mobile app** also calls **Gecko Cloud REST** for account/vessel summaries, messages, billing, routines, some monitor tools, and similar screens. Your local API maps (from `scripts/verify_shadow_live.py`) show many of those routes return **HTTP 403** for a normal consumer OAuth token: the route exists, but the **token is not allowed** to use it. Full parity for those screens may require **Gecko to extend third-party API access**, not only more Home Assistant code.
-
-**MQTT first, REST as backup**
-
-Prefer **live AWS IoT (MQTT) shadow** for control and most sensors: it is the lowest-latency path and matches what the gateway actually runs. Use **Gecko Cloud REST** only to **fill gaps**—for example vessel list **summary** tiles when MQTT is not connected yet, or fields that appear in the app’s REST payload but are not (yet) mapped on the shadow. REST calls still use the same **OAuth-linked session**; they do not replace MQTT for steering the spa.
-
-**Can it work with no Auth0 / login at all?** **Not** with the official Gecko cloud stack this integration uses. The MQTT broker URL and embedded credentials come from **`GET …/iot/thirdPartySession`**, which requires a **valid Gecko API bearer token** (from OAuth). Those credentials are **short-lived**; refreshing them calls the API again. There is **no supported anonymous or purely local-LAN MQTT** mode here unless Gecko ships a different protocol or exposes an official local API.
-
-**Practical phases**
-
-1. **Align “summary” data** — Optionally poll `GET /v4/accounts/{account_id}/vessels` (and newer detail routes such as `GET /v6/.../vessels/{vessel_id}?customActionsVersion=0` when needed) so HA can mirror **app-style summary tiles** (e.g. pH/ORP/temp/warnings) when MQTT is sparse; keep MQTT + `gecko_iot_client` as the source of truth for **commands** and **high-frequency** state.
-2. **Close control gaps** — Audit each app control path against zones and services already exposed; add **number**/ **button**/ **services** only where the client library and shadow support writes.
-3. **Add REST-only features where allowed** — For routes that return **200** with the same OAuth token (discovered via your snapshots), add entities or `notify`/`todo`/`button` flows; skip or document anything stuck at **403** until Gecko changes policy.
-4. **Diagnostics** — Surface capability flags (topology, REST reachability summaries) **without** embedding real IDs in git-tracked source; users redact their own downloaded diagnostics before sharing.
-
-### Privacy & portable source code
-
-Do **not** commit real **account**, **vessel**, or **monitor** IDs, **Auth0 `sub`**, **email**, **addresses**, **tokens**, or files under **`.secrets/`** into this repository. Use placeholders in examples and tests so anyone can use the integration with their own data. See `custom_components/gecko/const.py` for the same rule in code comments.
+| Action | Purpose |
+|--------|---------|
+| **`gecko.publish_zone_desired`** | Publish `{"zones": { zone_type: { zone_id: updates } } }` over the active MQTT connection. |
+| **`gecko.publish_feature_desired`** | Publish `{"features": … }` over MQTT. |
+| **`gecko.publish_desired_state`** | Publish a **validated** object as shadow **desired** — only top-level keys **`zones`** and/or **`features`** (size-limited). |
+| **`gecko.dump_shadow_snapshot`** | Write JSON under **`config/gecko_shadow_dumps/`**. By default **sanitizes** for public share (fingerprints, key-based redaction, string scrub for emails/JWT-like/MAC/private IP/UUID/long hex). Disable **Sanitize for public share** only for private debugging. Requires an active Gecko MQTT client for that monitor (connect the integration once). |
 
 ---
 
-## 💬 Support & Community
+## Share data for new hardware support
 
-- 🐛 **Report Issues:** [GitHub Issues](https://github.com/geckoal/ha-gecko-integration/issues)
-- 💡 **Feature Requests:** [GitHub Discussions](https://github.com/geckoal/ha-gecko-integration/discussions)
-- 📖 **Documentation:** [Full Docs](https://github.com/geckoal/ha-gecko-integration)
+Call **`gecko.dump_shadow_snapshot`** with defaults for a **community-safe** export, then attach the file to a GitHub issue (after a quick manual skim). See **Actions** above for options (`include_configuration`, `include_derived`, `filename`, `sanitize_for_public_share`).
 
 ---
 
-## 🙏 Credits
+## Troubleshooting
 
-This integration is built with the [gecko-iot-client](https://github.com/geckoal/gecko-iot-client) library.
+### Integration not appearing
+
+- Restart Home Assistant after copying `custom_components/gecko`
+- Check logs for import errors
+
+### OAuth fails
+
+- Confirm Gecko account credentials in the browser
+- Retry after clearing site data for Auth0 / Gecko if needed
+
+### No devices or entities
+
+- Confirm the spa is online in the **Gecko mobile app**
+- Allow time for MQTT session and zone configuration from **`gecko_iot_client`**
+
+### Entities not updating
+
+- Inspect RF / connectivity **binary sensors**
+- Reload the integration entry, or restart HA if MQTT is stuck
+
+### REST options seem to do nothing
+
+- Ensure poll intervals are **greater than zero**
+- For tiles, confirm **Only poll when MQTT is disconnected** is not blocking polls while MQTT is up
+- Many Gecko Cloud routes return **403** for consumer tokens; unsupported routes fail quietly in logs
 
 ---
 
-## 📄 License
+## Architecture notes
+
+**MQTT first, REST as backup:** live **AWS IoT device shadow** over MQTT is the source of truth for control and high-frequency state. Optional REST polling reuses the same OAuth session to fill gaps (summary tiles, alerts) when permitted by the API.
+
+**Auth:** Broker URL and short-lived MQTT credentials come from Gecko’s **`thirdPartySession`** style APIs; there is **no** supported path that avoids Gecko cloud login for this stack.
+
+---
+
+## Roadmap & limits
+
+**Already in this fork:** shadow-derived **sensor / binary_sensor / string / number** entities, REST **tile** merge, REST **alerts** snapshot entities, MQTT **desired** services, **sanitized shadow export**, richer **diagnostics**, and configurable REST intervals.
+
+**Still constrained by Gecko’s API:** many app-only REST surfaces return **HTTP 403** for normal third-party OAuth tokens. Full parity with every Gecko app screen may require **policy changes from Gecko Alliance**, not only more Home Assistant code.
+
+**Privacy:** do not commit real account, vessel, monitor, token, or **`.secrets/`** data to git. Use placeholders in issues and PRs.
+
+---
+
+## Support
+
+- **Issues:** [github.com/markus-lassfolk/hass_gecko_in_touch3_spa/issues](https://github.com/markus-lassfolk/hass_gecko_in_touch3_spa/issues)
+- **Discussions:** [github.com/markus-lassfolk/hass_gecko_in_touch3_spa/discussions](https://github.com/markus-lassfolk/hass_gecko_in_touch3_spa/discussions)
+
+---
+
+## Credits
+
+- **[gecko-iot-client](https://github.com/geckoal/gecko-iot-client)** — MQTT / shadow client
+- **Upstream integration:** [geckoal/ha-gecko-integration](https://github.com/geckoal/ha-gecko-integration)
+- **Trademarks:** Gecko and related marks belong to **Gecko Alliance**; see [NOTICE](NOTICE)
+
+---
+
+## License
 
 Copyright © 2025-2026 Gecko Alliance
 
-Licensed under the Apache License 2.0 - see [LICENSE](LICENSE) for details.
+Licensed under the Apache License 2.0 — see [LICENSE](LICENSE).
 
-> **⚠️ Important:** This software is intended for personal use with Gecko Alliance equipment through Home Assistant. Commercial use or use outside the intended scope may require authorization from Gecko Alliance. See [NOTICE](NOTICE) for trademark information and usage restrictions.
+> **Important:** Intended for personal use with Gecko Alliance equipment through Home Assistant. Commercial use may require separate authorization from Gecko Alliance. See [NOTICE](NOTICE) for trademark and usage details.

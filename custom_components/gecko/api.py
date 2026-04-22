@@ -24,6 +24,22 @@ class GeckoSpaApiMixin:
             f"/v4/accounts/{account_id}/monitors/{monitor_id}/spa/configuration",
         )
 
+    async def async_get_messages_unread(self, account_id: str) -> Any:
+        """Unread account messages (may be 403 for some consumer tokens)."""
+        return await self.async_request(
+            "GET",
+            f"/v1/accounts/{account_id}/messages/unread",
+        )
+
+    async def async_get_vessel_actions_v2(
+        self, account_id: str, vessel_id: str
+    ) -> Any:
+        """Vessel-scoped actions (often used for prompts / alerts in the app)."""
+        return await self.async_request(
+            "GET",
+            f"/v2/accounts/{account_id}/vessels/{vessel_id}/actions",
+        )
+
 
 class OAuthGeckoApi(GeckoSpaApiMixin, GeckoApiClient):
     """Provide gecko authentication tied to an OAuth2 based config entry."""

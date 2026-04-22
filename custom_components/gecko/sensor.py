@@ -19,9 +19,13 @@ from .const import DOMAIN
 from .coordinator import GeckoVesselCoordinator
 from .entity import GeckoEntityAvailabilityMixin
 from .shadow_metrics import (
+    apply_numeric_shadow_sensor_hints,
     chemistry_metric_enabled_by_default,
-    infer_sensor_metadata,
+    classify_gecko_shadow_metric,
     metric_path_to_entity_slug,
+    shadow_extension_diagnostic_disables_registry_default,
+    shadow_metric_icon,
+    string_extension_enabled_by_default,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -61,20 +65,33 @@ async def async_setup_entry(
                 GeckoShadowMetricSensor(coordinator, config_entry, p)
                 for p in pending
             )
+        pending_str = coordinator.take_pending_string_paths()
+        if pending_str:
+            initial_entities.extend(
+                GeckoShadowStringSensor(coordinator, config_entry, p)
+                for p in pending_str
+            )
 
         @callback
         def _on_coordinator_listener(
             coord: GeckoVesselCoordinator = coordinator,
         ) -> None:
             added = coord.take_pending_new_metric_paths()
-            if not added:
-                return
-            async_add_entities(
-                [
-                    GeckoShadowMetricSensor(coord, config_entry, path)
-                    for path in added
-                ]
-            )
+            if added:
+                async_add_entities(
+                    [
+                        GeckoShadowMetricSensor(coord, config_entry, path)
+                        for path in added
+                    ]
+                )
+            added_s = coord.take_pending_string_paths()
+            if added_s:
+                async_add_entities(
+                    [
+                        GeckoShadowStringSensor(coord, config_entry, path)
+                        for path in added_s
+                    ]
+                )
 
         config_entry.async_on_unload(
             coordinator.async_add_listener(_on_coordinator_listener)
@@ -82,6 +99,12 @@ async def async_setup_entry(
 
     if initial_entities:
         async_add_entities(initial_entities)
+
+    alert_entities = [
+        GeckoRestActiveAlertsSensor(coordinator, config_entry)
+        for coordinator in coordinators
+    ]
+    async_add_entities(alert_entities)
 
 
 class GeckoShadowMetricSensor(
@@ -117,35 +140,30 @@ class GeckoShadowMetricSensor(
         self._attr_name = (
             f"{coordinator.vessel_name} {_humanize_metric_name(metric_path)}"
         )
-        self._attr_extra_state_attributes = {"shadow_path": metric_path}
+        self._attr_extra_state_attributes = {
+            "shadow_path": metric_path,
+            "gecko_diagnostic_group": classify_gecko_shadow_metric(metric_path),
+        }
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_"
             f"{metric_path.replace('.', '_')}"
         )
         self.entity_id = f"sensor.{vessel_slug}_{path_slug}"
 
-        dc, unit = infer_sensor_metadata(metric_path)
-        if dc == "ph":
-            self._attr_device_class = SensorDeviceClass.PH
-            self._attr_state_class = SensorStateClass.MEASUREMENT
+        apply_numeric_shadow_sensor_hints(self, metric_path)
+        if self._attr_device_class == SensorDeviceClass.PH:
             self._attr_suggested_display_precision = 2
-        elif dc == "temperature":
-            self._attr_device_class = SensorDeviceClass.TEMPERATURE
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-        else:
-            self._attr_state_class = SensorStateClass.MEASUREMENT
 
-        if unit:
-            self._attr_native_unit_of_measurement = unit
-
-        if chemistry_metric_enabled_by_default(metric_path):
+        chem_on = chemistry_metric_enabled_by_default(metric_path)
+        diag_off = shadow_extension_diagnostic_disables_registry_default(metric_path)
+        if chem_on and not diag_off:
             self._attr_entity_registry_enabled_default = True
             self._attr_entity_category = None
         else:
             self._attr_entity_registry_enabled_default = False
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
-        self._attr_icon = "mdi:gauge"
+        self._attr_icon = shadow_metric_icon(metric_path)
         self._attr_native_value = coordinator.get_shadow_metric_value(metric_path)
 
         self._attr_device_info = dr.DeviceInfo(
@@ -167,3 +185,112 @@ class GeckoShadowMetricSensor(
         self._attr_native_value = self.coordinator.get_shadow_metric_value(
             self._metric_path
         )
+
+
+class GeckoShadowStringSensor(
+    GeckoEntityAvailabilityMixin, CoordinatorEntity, SensorEntity
+):
+    """String leaves from shadow / REST (status text, messages)."""
+
+    _attr_should_poll = False
+    _attr_has_entity_name = False
+
+    @property
+    def available(self) -> bool:
+        if self._path.startswith("cloud.rest."):
+            return self.coordinator.get_shadow_string_value(self._path) is not None
+        return GeckoEntityAvailabilityMixin.available.fget(self)
+
+    def __init__(
+        self,
+        coordinator: GeckoVesselCoordinator,
+        config_entry: ConfigEntry,
+        path: str,
+    ) -> None:
+        SensorEntity.__init__(self)
+        CoordinatorEntity.__init__(self, coordinator)
+        self._path = path
+        self._config_entry = config_entry
+        vessel_slug = coordinator.vessel_name.lower().replace(" ", "_").replace(
+            "-", "_"
+        )
+        path_slug = metric_path_to_entity_slug(path)
+        self._attr_name = f"{coordinator.vessel_name} {_humanize_metric_name(path)}"
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{coordinator.monitor_id}_str_{path_slug}"
+        )
+        self.entity_id = f"sensor.{vessel_slug}_str_{path_slug}"
+        self._attr_extra_state_attributes = {
+            "shadow_path": path,
+            "gecko_diagnostic_group": classify_gecko_shadow_metric(path),
+        }
+        self._attr_native_value = coordinator.get_shadow_string_value(path)
+        self._attr_icon = shadow_metric_icon(path)
+        self._attr_device_info = dr.DeviceInfo(
+            identifiers={(DOMAIN, str(coordinator.vessel_id))},
+        )
+        if string_extension_enabled_by_default(path):
+            self._attr_entity_registry_enabled_default = True
+            self._attr_entity_category = None
+        else:
+            self._attr_entity_registry_enabled_default = False
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_available = False
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._attr_native_value = self.coordinator.get_shadow_string_value(self._path)
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._attr_native_value = self.coordinator.get_shadow_string_value(self._path)
+
+
+class GeckoRestActiveAlertsSensor(CoordinatorEntity, SensorEntity):
+    """Count of active REST alerts (unread messages scoped to vessel + open actions)."""
+
+    _attr_should_poll = False
+    _attr_has_entity_name = False
+    _attr_native_unit_of_measurement = None
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: GeckoVesselCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        vessel_slug = coordinator.vessel_name.lower().replace(" ", "_").replace(
+            "-", "_"
+        )
+        self._attr_name = f"{coordinator.vessel_name} Active alerts (REST)"
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{coordinator.monitor_id}_rest_active_alerts"
+        )
+        self.entity_id = f"sensor.{vessel_slug}_rest_active_alerts"
+        self._attr_icon = "mdi:bell-badge"
+        self._attr_device_info = dr.DeviceInfo(
+            identifiers={(DOMAIN, str(coordinator.vessel_id))},
+        )
+        self._refresh_from_snapshot()
+
+    def _refresh_from_snapshot(self) -> None:
+        snap = self.coordinator.get_rest_alerts_snapshot()
+        self._attr_native_value = int(snap.get("total") or 0)
+        self._attr_extra_state_attributes = {
+            "messages": snap.get("messages") or [],
+            "actions": snap.get("actions") or [],
+            "updated_at": snap.get("updated_at"),
+            "error": snap.get("error"),
+        }
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._refresh_from_snapshot()
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._refresh_from_snapshot()

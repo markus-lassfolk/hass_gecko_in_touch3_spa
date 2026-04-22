@@ -13,8 +13,10 @@ from homeassistant.helpers import (
 )
 
 from .const import (
+    CONF_ALERTS_POLL_INTERVAL,
     CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     CONF_CLOUD_REST_POLL_INTERVAL,
+    DEFAULT_ALERTS_POLL_INTERVAL,
     DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
     DOMAIN,
@@ -212,6 +214,13 @@ class GeckoOptionsFlow(config_entries.OptionsFlowWithConfigEntry):
                         DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
                     ),
                 ): cv.boolean,
+                vol.Optional(
+                    CONF_ALERTS_POLL_INTERVAL,
+                    default=opts.get(
+                        CONF_ALERTS_POLL_INTERVAL,
+                        DEFAULT_ALERTS_POLL_INTERVAL,
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=0, max=86400)),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)
