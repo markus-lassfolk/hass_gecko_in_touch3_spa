@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -104,6 +105,7 @@ class GeckoWatercareSelectEntity(GeckoEntityAvailabilityMixin, CoordinatorEntity
         self._attr_available = False
         self._operation_mode_callback_registered = False
         self._op_mode_bound_client: Any | None = None
+        self._update_lock = asyncio.Lock()
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
@@ -170,10 +172,15 @@ class GeckoWatercareSelectEntity(GeckoEntityAvailabilityMixin, CoordinatorEntity
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         try:
-            # Schedule async state update
-            self.hass.async_create_task(self._async_update_state())
+            # Schedule async state update with lock to prevent concurrent updates
+            self.hass.async_create_task(self._async_update_state_locked())
         except Exception as e:
             _LOGGER.debug("Error scheduling state update for %s: %s", self._attr_name, e)
+
+    async def _async_update_state_locked(self) -> None:
+        """Update the select state asynchronously with lock to serialize concurrent updates."""
+        async with self._update_lock:
+            await self._async_update_state()
 
     async def _async_update_state(self) -> None:
         """Update the select state asynchronously."""

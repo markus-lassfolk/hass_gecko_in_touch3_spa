@@ -293,10 +293,11 @@ def safe_export_filename(
     if not base.lower().endswith(".json"):
         base = f"{base}.json"
     if ".." in base or "/" in base or "\\" in base:
+        sanitized_monitor_id = re.sub(r"[^a-zA-Z0-9_.-]+", "_", monitor_id).strip("._-")[:40]
         base = (
             "gecko_shadow_export.json"
             if anonymous
-            else f"gecko_shadow_{monitor_id}.json"
+            else f"gecko_shadow_{sanitized_monitor_id}.json"
         )
     return base
 
