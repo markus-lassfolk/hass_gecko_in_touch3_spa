@@ -1,9 +1,9 @@
 """Parse app-style vessel summary fields from Gecko REST (no PII in this module).
 
-Vessel list/detail payloads vary by API version; this module only reads common
-numeric shapes used for dashboard tiles (temperature, pH, ORP). Keys are written
-under ``cloud.rest.*`` so they merge cleanly with MQTT shadow metrics (shadow
-wins on path collision).
+Vessel list/detail payloads vary by API version; this module reads common
+numeric, string, and shallow boolean shapes used for dashboard tiles. Keys are
+written under ``cloud.rest.*`` so they merge cleanly with MQTT shadow metrics
+(shadow wins on path collision).
 """
 
 from __future__ import annotations
@@ -126,6 +126,32 @@ def extract_cloud_tile_strings(vessel: dict[str, Any]) -> dict[str, str]:
                 if s:
                     out[f"cloud.rest.{label}.{key}"] = s
 
+    return out
+
+
+def extract_cloud_tile_booleans(vessel: dict[str, Any]) -> dict[str, bool]:
+    """Boolean leaves from REST status / disc tiles (``cloud.rest.*``; MQTT shadow wins on overlap)."""
+    out: dict[str, bool] = {}
+    if not isinstance(vessel, dict):
+        return out
+
+    def add_bools(base: str, root: dict[str, Any]) -> None:
+        if not isinstance(root, dict):
+            return
+        for key, val in root.items():
+            if not isinstance(key, str):
+                continue
+            if isinstance(val, bool):
+                out[f"{base}.{key}"] = val
+            elif isinstance(val, dict):
+                for k2, v2 in val.items():
+                    if isinstance(k2, str) and isinstance(v2, bool):
+                        out[f"{base}.{key}.{k2}"] = v2
+
+    status = _status_dict(vessel)
+    disc = _disc_elements(status)
+    add_bools("cloud.rest.status", status)
+    add_bools("cloud.rest.disc_elements", disc)
     return out
 
 

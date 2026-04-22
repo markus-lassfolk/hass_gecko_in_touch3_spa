@@ -16,6 +16,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from gecko_iot_client.models.zone_types import ZoneType, AbstractZone
 
 from .cloud_tiles import (
+    extract_cloud_tile_booleans,
     extract_cloud_tile_metrics,
     extract_cloud_tile_strings,
     find_vessel_record,
@@ -112,6 +113,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Optional REST tile metrics (merged under ``cloud.rest.*``; shadow wins on overlap)
         self._cloud_tile_metrics: Dict[str, float | int] = {}
         self._cloud_string_metrics: Dict[str, str] = {}
+        self._cloud_bool_metrics: Dict[str, bool] = {}
         self._last_cloud_poll_monotonic: float | None = None
 
         # REST: unread messages (scoped) + vessel actions — not history.
@@ -219,6 +221,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self._cloud_tile_metrics = extract_cloud_tile_metrics(vessel_rec)
         self._cloud_string_metrics = extract_cloud_tile_strings(vessel_rec)
+        self._cloud_bool_metrics = extract_cloud_tile_booleans(vessel_rec)
 
     async def _async_poll_alerts_if_due(self) -> None:
         """Poll Gecko REST for new/active alerts (messages + vessel actions)."""
@@ -338,7 +341,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._pending_number_paths |= reserved_numbers - self._registered_number_paths
 
         mqtt_bools = extract_extension_booleans(state) if state else {}
-        self._shadow_bool_values = mqtt_bools
+        merged_bools: Dict[str, bool] = dict(self._cloud_bool_metrics)
+        merged_bools.update(mqtt_bools)
+        self._shadow_bool_values = merged_bools
         self._pending_bool_paths |= (
             set(self._shadow_bool_values) - self._registered_bool_paths
         )
@@ -592,6 +597,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._pending_number_paths.clear()
         self._cloud_tile_metrics.clear()
         self._cloud_string_metrics.clear()
+        self._cloud_bool_metrics.clear()
         self._last_cloud_poll_monotonic = None
         self._rest_alerts_snapshot = {
             "total": 0,
