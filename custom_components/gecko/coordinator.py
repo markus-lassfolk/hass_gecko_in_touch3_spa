@@ -26,6 +26,9 @@ from .cloud_tiles import (
     extract_cloud_tile_booleans,
     extract_cloud_tile_metrics,
     extract_cloud_tile_strings,
+    extract_vessel_action_metrics,
+    extract_vessel_action_strings,
+    extract_vessel_disc_strings,
     extract_vessel_readings_metrics,
     extract_vessel_readings_strings,
     find_vessel_record,
@@ -341,8 +344,14 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if isinstance(detail, dict):
                 readings_metrics = extract_vessel_readings_metrics(detail)
                 readings_strings = extract_vessel_readings_strings(detail)
+                action_metrics = extract_vessel_action_metrics(detail)
+                action_strings = extract_vessel_action_strings(detail)
+                disc_strings = extract_vessel_disc_strings(detail)
                 tile_metrics.update(readings_metrics)
+                tile_metrics.update(action_metrics)
                 tile_strings.update(readings_strings)
+                tile_strings.update(action_strings)
+                tile_strings.update(disc_strings)
         except (ClientError, TimeoutError, OSError) as err:
             _LOGGER.debug(
                 "v6 vessel detail poll skipped for %s: %s", self.vessel_name, err

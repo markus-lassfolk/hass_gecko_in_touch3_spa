@@ -361,6 +361,13 @@ def test_metric_path_to_entity_slug_empty_path() -> None:
         ("cloud.rest.readings.totalAlkalinity", "Total Alkalinity"),
         ("cloud.rest.readings.lsi", "LSI"),
         ("cloud.rest.readings.wifiRssi", "WiFi RSSI"),
+        ("cloud.rest.actions.count", "Action Count"),
+        ("cloud.rest.actions.lower_ph", "Action Lower pH"),
+        ("cloud.rest.actions.lower_ph.instructions", "Action Lower pH Instructions"),
+        ("cloud.rest.actions.raise_orp_chlorine", "Action Raise ORP Chlorine"),
+        ("cloud.rest.disc.text", "Status Text"),
+        ("cloud.rest.disc.waterStatusColor", "Status Water Status Color"),
+        ("cloud.rest.disc.lastUpdatedText", "Status Last Updated Text"),
     ],
 )
 def test_humanize_shadow_path(path: str, expected: str) -> None:
@@ -379,10 +386,26 @@ def test_humanize_shadow_path(path: str, expected: str) -> None:
         ("cloud.rest.readings.wifiRssi", False),
         ("cloud.rest.summary.ph", True),
         ("cloud.rest.summary.orp_mv", True),
+        ("cloud.rest.actions.count", True),
     ],
 )
 def test_chemistry_metric_enabled_readings(path: str, expected: bool) -> None:
     assert shadow_metrics.chemistry_metric_enabled_by_default(path) is expected
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("cloud.rest.actions.lower_ph", True),
+        ("cloud.rest.actions.raise_orp_chlorine", True),
+        ("cloud.rest.actions.lower_ph.instructions", True),
+        ("cloud.rest.disc.text", True),
+        ("cloud.rest.disc.waterStatusColor", True),
+        ("cloud.rest.disc.lastUpdatedText", True),
+    ],
+)
+def test_string_enabled_by_default_actions(path: str, expected: bool) -> None:
+    assert shadow_metrics.string_extension_enabled_by_default(path) is expected
 
 
 @pytest.mark.parametrize(

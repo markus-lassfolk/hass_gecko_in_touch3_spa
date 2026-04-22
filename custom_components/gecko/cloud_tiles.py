@@ -257,6 +257,77 @@ def extract_vessel_readings_strings(
     return out
 
 
+def extract_vessel_action_strings(
+    vessel: dict[str, Any],
+) -> dict[str, str]:
+    """Action titles and instructions from v6 ``status.actions``.
+
+    Produces paths like ``cloud.rest.actions.lower_ph`` = "Lower Your pH"
+    and ``cloud.rest.actions.lower_ph.instructions`` = joined instruction text.
+    """
+    out: dict[str, str] = {}
+    if not isinstance(vessel, dict):
+        return out
+    status = _status_dict(vessel)
+    actions = status.get("actions")
+    if not isinstance(actions, list):
+        return out
+    for action in actions:
+        if not isinstance(action, dict):
+            continue
+        atype = action.get("type")
+        if not isinstance(atype, str) or not atype.strip():
+            continue
+        title = _string_leaf(action.get("title"))
+        if title:
+            out[f"cloud.rest.actions.{atype}"] = title
+        instructions = action.get("instructions")
+        if isinstance(instructions, list):
+            texts = [
+                _string_leaf(i.get("text"))
+                for i in instructions
+                if isinstance(i, dict)
+            ]
+            joined = " | ".join(t for t in texts if t)
+            if joined:
+                out[f"cloud.rest.actions.{atype}.instructions"] = joined
+    return out
+
+
+def extract_vessel_action_metrics(
+    vessel: dict[str, Any],
+) -> dict[str, float | int]:
+    """Numeric action metrics from v6 ``status`` (currently: pending action count)."""
+    out: dict[str, float | int] = {}
+    if not isinstance(vessel, dict):
+        return out
+    status = _status_dict(vessel)
+    actions = status.get("actions")
+    if isinstance(actions, list):
+        out["cloud.rest.actions.count"] = len(actions)
+    return out
+
+
+def extract_vessel_disc_strings(
+    vessel: dict[str, Any],
+) -> dict[str, str]:
+    """Extra disc element strings from v6 ``status.discElements``.
+
+    Picks up ``waterStatusColor``, ``lastUpdatedText``, etc. that the
+    generic ``extract_cloud_tile_strings`` does not cover.
+    """
+    out: dict[str, str] = {}
+    if not isinstance(vessel, dict):
+        return out
+    status = _status_dict(vessel)
+    disc = _disc_elements(status)
+    for key in ("waterStatusColor", "lastUpdatedText"):
+        s = _string_leaf(disc.get(key))
+        if s:
+            out[f"cloud.rest.disc.{key}"] = s
+    return out
+
+
 def is_wifi_diagnostic_reading(reading_key: str) -> bool:
     """True for readings that are WiFi/RF diagnostics, not chemistry."""
     return reading_key in _WIFI_DIAGNOSTIC_READINGS

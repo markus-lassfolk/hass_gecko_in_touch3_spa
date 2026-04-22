@@ -397,7 +397,7 @@ _KNOWN_ABBREVIATIONS: dict[str, str] = {
 _AMBIGUOUS_LEAVES = frozenset({
     "id", "channel", "strength", "offset", "beta", "status",
     "value", "state", "mode", "type", "name", "level", "count",
-    "r0", "t0", "reading", "n",
+    "r0", "t0", "reading", "n", "instructions",
 })
 
 _CONTEXT_ALIASES: dict[str, str] = {
@@ -410,10 +410,12 @@ _CONTEXT_ALIASES: dict[str, str] = {
     "cloud": "",
     "rest": "",
     "readings": "",
+    "actions": "Action",
+    "disc": "Status",
 }
 
 _CONTEXT_PROMOTING_PARENTS = frozenset({
-    "waterlab", "therm", "ph", "orp", "cloud", "rest",
+    "waterlab", "therm", "ph", "orp", "cloud", "rest", "actions",
 })
 
 
@@ -749,7 +751,11 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
     ):
         return True
     if lower.startswith("cloud.rest.") and any(
-        tail in lower for tail in (".ph", ".orp", "orp_mv", "temp_c", "disc_elements.")
+        tail in lower
+        for tail in (
+            ".ph", ".orp", "orp_mv", "temp_c", "disc_elements.",
+            "actions.count",
+        )
     ):
         return True
     if lower.startswith("cloud.rest.readings."):
@@ -838,6 +844,9 @@ def string_extension_enabled_by_default(path: str) -> bool:
     if lower.startswith("cloud.rest."):
         return any(
             tok in lower
-            for tok in ("water", "status", "message", "text", "mode", "tile", "summary")
+            for tok in (
+                "water", "status", "message", "text", "mode",
+                "tile", "summary", "actions.",
+            )
         )
     return bool(re.search(r"\b(alarm|message|status|text|reason|fault)\b", spaced))

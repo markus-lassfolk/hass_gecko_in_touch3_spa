@@ -108,6 +108,34 @@ def test_extract_strings_status_not_dict() -> None:
 _V6_VESSEL_DETAIL = {
     "vesselId": 25657,
     "status": {
+        "discElements": {
+            "name": "Villa Polly",
+            "waterStatusColor": "red",
+            "tempC": 29,
+            "text": "2 actions needed",
+            "lastUpdatedText": "34 minutes ago",
+        },
+        "actions": [
+            {
+                "type": "lower_ph",
+                "triggerType": "onDemand",
+                "title": "Lower Your pH",
+                "isChemicalAction": True,
+                "instructions": [
+                    {"text": "Be sure your pump is running."},
+                    {"text": "Follow all safety guidelines."},
+                ],
+            },
+            {
+                "type": "raise_orp_chlorine",
+                "triggerType": "onDemand",
+                "title": "Raise Your ORP",
+                "isChemicalAction": True,
+                "instructions": [
+                    {"text": "Target a free chlorine of 3 ppm."},
+                ],
+            },
+        ],
         "readings": {
             "ph": {
                 "readingType": "ph",
@@ -212,6 +240,39 @@ def test_extract_vessel_readings_strings() -> None:
 
 def test_extract_vessel_readings_strings_empty() -> None:
     assert cloud_tiles.extract_vessel_readings_strings({}) == {}
+
+
+def test_extract_vessel_action_strings() -> None:
+    s = cloud_tiles.extract_vessel_action_strings(_V6_VESSEL_DETAIL)
+    assert s["cloud.rest.actions.lower_ph"] == "Lower Your pH"
+    assert s["cloud.rest.actions.raise_orp_chlorine"] == "Raise Your ORP"
+    assert "Be sure your pump is running." in s["cloud.rest.actions.lower_ph.instructions"]
+    assert "Follow all safety guidelines." in s["cloud.rest.actions.lower_ph.instructions"]
+    assert s["cloud.rest.actions.raise_orp_chlorine.instructions"] == "Target a free chlorine of 3 ppm."
+
+
+def test_extract_vessel_action_strings_empty() -> None:
+    assert cloud_tiles.extract_vessel_action_strings({}) == {}
+    assert cloud_tiles.extract_vessel_action_strings({"status": {}}) == {}
+
+
+def test_extract_vessel_action_metrics() -> None:
+    m = cloud_tiles.extract_vessel_action_metrics(_V6_VESSEL_DETAIL)
+    assert m["cloud.rest.actions.count"] == 2
+
+
+def test_extract_vessel_action_metrics_empty() -> None:
+    assert cloud_tiles.extract_vessel_action_metrics({}) == {}
+
+
+def test_extract_vessel_disc_strings() -> None:
+    s = cloud_tiles.extract_vessel_disc_strings(_V6_VESSEL_DETAIL)
+    assert s["cloud.rest.disc.waterStatusColor"] == "red"
+    assert s["cloud.rest.disc.lastUpdatedText"] == "34 minutes ago"
+
+
+def test_extract_vessel_disc_strings_empty() -> None:
+    assert cloud_tiles.extract_vessel_disc_strings({}) == {}
 
 
 def test_is_wifi_diagnostic_reading() -> None:
