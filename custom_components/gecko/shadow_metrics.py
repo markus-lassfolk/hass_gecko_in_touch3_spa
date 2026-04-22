@@ -29,7 +29,7 @@ def _path_segments(path: str) -> list[str]:
 
 def _segment_is_ph(seg: str) -> bool:
     """True if segment denotes pH (not ``phase``, ``graph``, or ``alpha`` substrings)."""
-    return seg == "ph" or seg.startswith("ph_")
+    return seg == "ph"
 
 
 def _skip_extension_reported_root_key(key: str) -> bool:
@@ -175,9 +175,10 @@ def infer_sensor_metadata(path: str) -> tuple[str | None, str | None]:
     device_class: str | None = None
     unit: str | None = None
 
-    if any(_segment_is_ph(s) for s in _path_segments(path)):
+    segs = _path_segments(path)
+    if any(_segment_is_ph(s) for s in segs):
         device_class = "ph"
-    elif any(s == "orp" or s.startswith("orp_") for s in _path_segments(path)) or re.search(
+    elif any(s == "orp" for s in segs) or re.search(
         r"\boxidation\b", lower
     ):
         # Millivolts are not HA ``SensorDeviceClass.VOLTAGE`` (SI volts).
@@ -204,7 +205,7 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
     segs = _path_segments(path)
     if any(_segment_is_ph(s) for s in segs):
         return True
-    if any(s == "orp" or s.startswith("orp_") for s in segs) or re.search(
+    if any(s == "orp" for s in segs) or re.search(
         r"\boxidation\b", lower
     ):
         return True
