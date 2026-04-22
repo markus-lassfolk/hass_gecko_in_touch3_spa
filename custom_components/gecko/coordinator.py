@@ -114,8 +114,6 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Track if initial setup has been completed to avoid redundant refresh during platform setup
         self._initial_setup_done = False
         self._initial_setup_lock = asyncio.Lock()
-        self._initial_paths_consumed = {"metric": False, "string": False, "bool": False, "number": False}
-
         # Optional REST tile metrics (merged under ``cloud.rest.*``; shadow wins on overlap)
         self._cloud_tile_metrics: Dict[str, float | int] = {}
         self._cloud_string_metrics: Dict[str, str] = {}
@@ -265,13 +263,26 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
         self._last_alerts_poll_monotonic = now
         api = entry.runtime_data.api_client
+        rd = entry.runtime_data
         messages_payload: Any | None = None
         actions_payload: Any | None = None
         err: str | None = None
         try:
-            messages_payload = await api.async_get_messages_unread(
-                str(account_id)
-            )
+            async with rd.rest_alerts_messages_lock:
+                if (
+                    rd.rest_alerts_messages_payload is not None
+                    and rd.rest_alerts_messages_mono is not None
+                    and rd.rest_alerts_messages_account_id == account_id
+                    and (now - rd.rest_alerts_messages_mono) < interval
+                ):
+                    messages_payload = rd.rest_alerts_messages_payload
+                else:
+                    messages_payload = await api.async_get_messages_unread(
+                        str(account_id)
+                    )
+                    rd.rest_alerts_messages_payload = messages_payload
+                    rd.rest_alerts_messages_mono = now
+                    rd.rest_alerts_messages_account_id = account_id
         except Exception as exc:
             err = f"messages_unread:{type(exc).__name__}"
             _LOGGER.debug(
@@ -403,34 +414,26 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Paths not yet bound to sensor entities; marks them registered."""
         out = sorted(self._pending_new_metric_paths)
         self._registered_shadow_metric_paths.update(out)
-        if self._initial_setup_done or self._initial_paths_consumed["metric"]:
-            self._pending_new_metric_paths.clear()
-        self._initial_paths_consumed["metric"] = True
+        self._pending_new_metric_paths.clear()
         return out
 
     def take_pending_number_paths(self) -> list[str]:
         """Unknown-zone setpoint paths for Number entities."""
         out = sorted(self._pending_number_paths)
         self._registered_number_paths.update(out)
-        if self._initial_setup_done or self._initial_paths_consumed["number"]:
-            self._pending_number_paths.clear()
-        self._initial_paths_consumed["number"] = True
+        self._pending_number_paths.clear()
         return out
 
     def take_pending_bool_paths(self) -> list[str]:
         out = sorted(self._pending_bool_paths)
         self._registered_bool_paths.update(out)
-        if self._initial_setup_done or self._initial_paths_consumed["bool"]:
-            self._pending_bool_paths.clear()
-        self._initial_paths_consumed["bool"] = True
+        self._pending_bool_paths.clear()
         return out
 
     def take_pending_string_paths(self) -> list[str]:
         out = sorted(self._pending_string_paths)
         self._registered_string_paths.update(out)
-        if self._initial_setup_done or self._initial_paths_consumed["string"]:
-            self._pending_string_paths.clear()
-        self._initial_paths_consumed["string"] = True
+        self._pending_string_paths.clear()
         return out
 
     def get_shadow_bool_value(self, path: str) -> bool | None:

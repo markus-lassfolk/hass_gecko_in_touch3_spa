@@ -181,6 +181,18 @@ class GeckoRuntimeData:
     rest_vessels_cache_account_id: str | None = field(
         default=None, repr=False, compare=False
     )
+    rest_alerts_messages_lock: asyncio.Lock = field(
+        default_factory=asyncio.Lock, repr=False, compare=False
+    )
+    rest_alerts_messages_payload: Any | None = field(
+        default=None, repr=False, compare=False
+    )
+    rest_alerts_messages_mono: float | None = field(
+        default=None, repr=False, compare=False
+    )
+    rest_alerts_messages_account_id: str | None = field(
+        default=None, repr=False, compare=False
+    )
 
 
 # List the platforms that this integration supports.
