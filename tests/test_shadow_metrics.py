@@ -201,7 +201,9 @@ def test_chemistry_metric_enabled_by_default() -> None:
     assert not shadow_metrics.chemistry_metric_enabled_by_default(
         "features.waterlab.sensor.ph.offsetMv"
     )
-    assert not shadow_metrics.chemistry_metric_enabled_by_default("cloud.rest.summary.ph")
+    assert not shadow_metrics.chemistry_metric_enabled_by_default(
+        "cloud.rest.summary.ph"
+    )
 
 
 def test_parse_unknown_zone_setpoint_path() -> None:

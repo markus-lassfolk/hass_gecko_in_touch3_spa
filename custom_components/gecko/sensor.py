@@ -157,7 +157,6 @@ async def async_setup_entry(
 
         coordinator.register_shadow_metric_callback(_on_shadow_metric_discovery)
 
-        @callback
         def _discover_spa_temperature_sensors(
             coord: GeckoVesselCoordinator = coordinator,
         ) -> None:
@@ -188,9 +187,13 @@ async def async_setup_entry(
                 async_add_entities(new_entities)
 
         _discover_spa_temperature_sensors()
-        coordinator.register_zone_update_callback(
-            lambda coord=coordinator: _discover_spa_temperature_sensors(coord)
-        )
+
+        def _on_zone_update_discover_spa_temps(
+            coord: GeckoVesselCoordinator = coordinator,
+        ) -> None:
+            _discover_spa_temperature_sensors(coord)
+
+        coordinator.register_zone_update_callback(_on_zone_update_discover_spa_temps)
 
     if initial_entities:
         async_add_entities(initial_entities)
