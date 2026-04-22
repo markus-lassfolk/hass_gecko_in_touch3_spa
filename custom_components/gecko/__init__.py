@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 import logging
 from typing import Any
@@ -103,14 +104,21 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     resolved_account = existing_account
     if not resolved_account:
-        _LOGGER.info(
-            "Gecko migration: resolving account_id for entry %s (stored version %s)",
-            entry.entry_id,
-            entry.version,
-        )
-        resolved_account = (
-            await _async_resolve_missing_account_id(hass, entry) or ""
-        ).strip()
+        for attempt in range(3):
+            _LOGGER.info(
+                "Gecko migration: resolving account_id for entry %s "
+                "(stored version %s, attempt %s/3)",
+                entry.entry_id,
+                entry.version,
+                attempt + 1,
+            )
+            resolved_account = (
+                await _async_resolve_missing_account_id(hass, entry) or ""
+            ).strip()
+            if resolved_account:
+                break
+            if attempt < 2:
+                await asyncio.sleep(0.75)
 
     if not resolved_account and not existing_account:
         _LOGGER.error(

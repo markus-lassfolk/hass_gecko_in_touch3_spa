@@ -323,6 +323,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.warning("Connection lost for %s, attempting reconnect", self.vessel_name)
                     await self._simple_reconnect()
                     self._consecutive_failures = 0
+                # MQTT shadow is unavailable; still merge REST tile metrics into shadow
+                # caches so cloud.rest.* entities update while disconnected.
+                self.sync_refresh_shadow_metrics(None)
                 return {"status": "disconnected", "vessel_id": self.vessel_id}
             
             self._consecutive_failures = 0
@@ -397,6 +400,10 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         val = self._shadow_metric_values.get(metric_path)
         return val if val is not None else None
 
+    def has_pending_shadow_sensor_discovery(self) -> bool:
+        """True when dynamic shadow metric/string sensors may need to be added."""
+        return bool(self._pending_new_metric_paths or self._pending_string_paths)
+
     def take_pending_new_metric_paths(self) -> list[str]:
         """Paths not yet bound to sensor entities; marks them registered."""
         out = sorted(self._pending_new_metric_paths)
@@ -438,11 +445,11 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         async with self._initial_setup_lock:
             if self._initial_setup_done:
                 return
-            self._initial_setup_done = True
             await self.async_refresh()
             await self.async_wait_for_initial_zone_data(timeout=15.0)
             client = await self.get_gecko_client()
             self.sync_refresh_shadow_metrics(client)
+            self._initial_setup_done = True
 
     async def _simple_reconnect(self) -> None:
         """Simple reconnection - let geckoIotClient handle token refresh."""

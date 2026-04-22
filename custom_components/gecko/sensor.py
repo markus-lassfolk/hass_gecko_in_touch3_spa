@@ -74,6 +74,8 @@ async def async_setup_entry(
         def _on_shadow_metric_discovery(
             coord: GeckoVesselCoordinator = coordinator,
         ) -> None:
+            if not coord.has_pending_shadow_sensor_discovery():
+                return
             added = coord.take_pending_new_metric_paths()
             if added:
                 async_add_entities(
