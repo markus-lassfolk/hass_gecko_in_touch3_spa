@@ -89,7 +89,6 @@ class GeckoPKCEOAuth2Implementation(config_entry_oauth2_flow.LocalOAuth2Implemen
         """Generate authorize URL with a fresh verifier for this OAuth flow."""
         verifier = self.generate_code_verifier(self._code_verifier_length)
         self.hass.data.setdefault(_DATA_KEY_PKCE_VERIFIERS, {})[flow_id] = verifier
-        self.code_verifier = verifier
         token = _active_pkce_verifier.set(verifier)
         try:
             return await super().async_generate_authorize_url(flow_id)
@@ -111,7 +110,7 @@ class GeckoPKCEOAuth2Implementation(config_entry_oauth2_flow.LocalOAuth2Implemen
             {
                 "grant_type": "authorization_code",
                 "code": external_data["code"],
-                "redirect_uri": external_data["state"]["redirect_uri"],
+                "redirect_uri": state["redirect_uri"],
                 "code_verifier": verifier,
                 "client_id": self.client_id,
             }
