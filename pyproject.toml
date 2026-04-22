@@ -16,7 +16,7 @@ filterwarnings = [
 
 [tool.ruff]
 target-version = "py313"
-src = ["custom_components/gecko", "tests"]
+src = ["custom_components/gecko", "tests", "scripts"]
 
 [tool.ruff.lint]
 select = [

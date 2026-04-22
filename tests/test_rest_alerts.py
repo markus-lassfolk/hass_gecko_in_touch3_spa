@@ -76,3 +76,27 @@ def test_build_alerts_snapshot_merges() -> None:
     assert len(snap["messages"]) == 1
     assert len(snap["actions"]) == 1
     datetime.fromisoformat(snap["updated_at"].replace("Z", "+00:00"))
+
+
+def test_as_list_messages_key() -> None:
+    wrapped = {"messages": [{"vesselId": "v", "title": "x"}]}
+    assert len(rest_alerts._as_list(wrapped)) == 1
+
+
+def test_message_targets_vessel_spa_id() -> None:
+    msg = {"spa_id": "s42"}
+    assert rest_alerts._message_targets_vessel(msg, "v", "s42")
+
+
+def test_build_alerts_snapshot_caps_lists() -> None:
+    msgs = [{"vesselId": "v", "title": str(i)} for i in range(30)]
+    acts = [{"status": "open", "name": str(i)} for i in range(30)]
+    snap = rest_alerts.build_alerts_snapshot(
+        messages_payload=msgs,
+        actions_payload=acts,
+        vessel_id="v",
+        monitor_id="m",
+    )
+    assert snap["total"] == 60
+    assert len(snap["messages"]) == 16
+    assert len(snap["actions"]) == 16

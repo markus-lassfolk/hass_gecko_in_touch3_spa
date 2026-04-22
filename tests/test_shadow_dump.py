@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from custom_components.gecko import shadow_dump
@@ -112,8 +112,6 @@ def test_safe_export_filename_sanitizes_malicious_base() -> None:
 
 
 def test_build_shadow_export_payload_structure() -> None:
-    from unittest.mock import MagicMock
-
     fixed_dt = MagicMock()
     fixed_dt.isoformat.return_value = "2020-01-01T00:00:00+00:00"
     fixed_dt.strftime.return_value = "20200101_000000"
@@ -150,3 +148,49 @@ def test_write_json_file_roundtrip(tmp_path) -> None:
     data = {"a": 1, "b": [2, 3]}
     shadow_dump.write_json_file(p, data)
     assert json.loads(p.read_text(encoding="utf-8")) == data
+
+
+def test_segment_key_sensitive_api_key_pair() -> None:
+    assert shadow_dump._segment_key_is_sensitive("nested.api.key.path")
+
+
+def test_safe_export_filename_with_user_part() -> None:
+    name = shadow_dump.safe_export_filename("My_Spa_export", "m1", anonymous=False)
+    assert name.startswith("My_Spa_export")
+    assert name.endswith(".json")
+
+
+def test_safe_export_filename_anonymous_prefix() -> None:
+    name = shadow_dump.safe_export_filename(None, "m1", anonymous=True)
+    assert name.startswith("gecko_shadow_export_")
+    assert name.endswith(".json")
+
+
+def test_sanitize_export_empty_ids_use_redacted_or_anon() -> None:
+    out = shadow_dump.sanitize_export_payload(
+        {"monitor_id": "", "vessel_id": "", "device_shadow_state": None}
+    )
+    assert out["monitor_id"] == shadow_dump._REDACTED
+    assert out["vessel_id"] == shadow_dump._REDACTED
+
+
+def test_build_shadow_export_list_zones_exception_returns_empty() -> None:
+    client = SimpleNamespace(_state=None, transporter=None)
+
+    def boom():
+        raise RuntimeError("no zones")
+
+    client.list_zones = boom  # type: ignore[attr-defined]
+    fixed = MagicMock()
+    fixed.isoformat.return_value = "2020-01-01T00:00:00+00:00"
+    with patch.object(shadow_dump, "_utc_now", return_value=fixed):
+        payload = shadow_dump.build_shadow_export_payload(
+            monitor_id="m",
+            vessel_id="v",
+            gecko_client=client,
+            include_configuration=False,
+            include_derived=False,
+            mqtt_connected=False,
+            sanitize_for_public_share=False,
+        )
+    assert payload["zones_list"] == []

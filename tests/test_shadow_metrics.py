@@ -255,3 +255,84 @@ def test_flatten_respects_max_depth() -> None:
     out: dict[str, float | int] = {}
     shadow_metrics._flatten_numeric({"a": {"b": {"c": 1}}}, "r", out, 0)
     assert "r.a.b.c" not in out
+
+
+def test_infer_sensor_metadata_humidity_pressure_energy_power_flow() -> None:
+    assert shadow_metrics.infer_sensor_metadata("zones.spa.humidity.value") == (
+        SensorDeviceClass.HUMIDITY,
+        "%",
+    )
+    assert shadow_metrics.infer_sensor_metadata("zones.line.pressure.psi") == (
+        SensorDeviceClass.PRESSURE,
+        "psi",
+    )
+    assert shadow_metrics.infer_sensor_metadata("zones.meter.kwh") == (
+        SensorDeviceClass.ENERGY,
+        "kWh",
+    )
+    assert shadow_metrics.infer_sensor_metadata("zones.pump.power.reading") == (
+        SensorDeviceClass.POWER,
+        "W",
+    )
+    dc, unit = shadow_metrics.infer_sensor_metadata("zones.flow.reading")
+    vfr = getattr(SensorDeviceClass, "VOLUME_FLOW_RATE", None)
+    assert dc == vfr
+    assert unit == "L/min"
+
+
+def test_is_connectivity_shadow_metric_nested() -> None:
+    assert shadow_metrics._is_connectivity_shadow_metric_path(
+        "features.connectivity.rssi"
+    )
+
+
+def test_is_rf_diagnostic_waterlab_rf() -> None:
+    assert shadow_metrics._is_rf_diagnostic_path("features.waterlab.rf.link")
+
+
+def test_extract_extension_booleans_skips_sensitive_feature_base() -> None:
+    state = {
+        "state": {
+            "reported": {
+                "features": {
+                    "password_vault": {"leak": True},
+                    "okfeat": {"flag": False},
+                }
+            }
+        }
+    }
+    b = shadow_metrics.extract_extension_booleans(state)
+    assert b == {"features.okfeat.flag": False}
+
+
+def test_iter_extension_bases_order() -> None:
+    state = {"state": {"reported": {"zones": {"x": {"z": {}}}, "features": {"f": {}}}}}
+    bases = shadow_metrics._iter_extension_bases(state)
+    prefixes = {p for p, _ in bases}
+    assert any(p.startswith("zones.") for p in prefixes)
+    assert any(p.startswith("features.") for p in prefixes)
+
+
+def test_infer_binary_sensor_heat_cold_lock() -> None:
+    assert (
+        shadow_metrics.infer_binary_sensor_device_class("zones.heat.mode_on")
+        == BinarySensorDeviceClass.HEAT
+    )
+    assert (
+        shadow_metrics.infer_binary_sensor_device_class("cooling_valve_open")
+        == BinarySensorDeviceClass.COLD
+    )
+    assert (
+        shadow_metrics.infer_binary_sensor_device_class("door.lock_state")
+        == BinarySensorDeviceClass.LOCK
+    )
+
+
+def test_string_extension_cloud_rest_mode_token() -> None:
+    assert shadow_metrics.string_extension_enabled_by_default(
+        "cloud.rest.status.mode_tile"
+    )
+
+
+def test_metric_path_to_entity_slug_empty_path() -> None:
+    assert shadow_metrics.metric_path_to_entity_slug("...") == "metric"

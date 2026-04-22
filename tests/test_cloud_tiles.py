@@ -86,3 +86,20 @@ def test_find_vessel_record() -> None:
     assert cloud_tiles.find_vessel_record(vessels, "a")["name"] == "A"
     assert cloud_tiles.find_vessel_record(vessels, "b")["id"] == "b"
     assert cloud_tiles.find_vessel_record(vessels, 99) is None
+
+
+def test_disc_elements_snake_case_under_status() -> None:
+    vessel = {
+        "status": {
+            "disc_elements": {
+                "phStatus": {"value": 7.1},
+            }
+        }
+    }
+    m = cloud_tiles.extract_cloud_tile_metrics(vessel)
+    assert m["cloud.rest.summary.ph"] == 7.1
+
+
+def test_extract_strings_status_not_dict() -> None:
+    vessel = {"status": "ok"}
+    assert cloud_tiles.extract_cloud_tile_strings(vessel) == {}

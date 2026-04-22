@@ -96,3 +96,14 @@ def test_get_vessel_coordinators_diagnostics_with_coordinator() -> None:
     assert len(rows) == 1
     assert rows[0]["monitor_id"] == "m1"
     assert "zones.waterlab.z1.ph" in rows[0]["shadow_extension_metric_paths"]
+
+
+def test_get_gecko_client_info_handles_exception() -> None:
+    class _BadClient:
+        @property
+        def id(self):
+            raise RuntimeError("boom")
+
+    info = gecko_diag._get_gecko_client_info(_BadClient())
+    assert "error" in info
+    assert info["error"] == "RuntimeError"
