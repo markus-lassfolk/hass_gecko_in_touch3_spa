@@ -586,8 +586,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self.monitor_id,
                 )
             else:
-                _LOGGER.warning(
-                    "No connection registered for vessel %s (monitor %s)",
+                _LOGGER.debug(
+                    "No connection registered yet for vessel %s (monitor %s); "
+                    "setup may still be in progress or retrying after timeout",
                     self.vessel_name,
                     self.monitor_id,
                 )
