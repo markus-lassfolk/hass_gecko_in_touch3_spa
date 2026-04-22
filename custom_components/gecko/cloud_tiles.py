@@ -41,7 +41,9 @@ def _disc_elements(status: dict[str, Any]) -> dict[str, Any]:
 
 def _ph_value(disc: dict[str, Any], status: dict[str, Any]) -> float | int | None:
     for root in (disc, status):
-        ph = root.get("phStatus") or root.get("ph_status")
+        ph = root.get("phStatus")
+        if ph is None:
+            ph = root.get("ph_status")
         if isinstance(ph, dict):
             for leaf in ("value", "ph", "reading", "current"):
                 n = _num(ph.get(leaf))
@@ -55,7 +57,9 @@ def _ph_value(disc: dict[str, Any], status: dict[str, Any]) -> float | int | Non
 
 def _orp_mv(disc: dict[str, Any], status: dict[str, Any]) -> float | int | None:
     for root in (disc, status):
-        orp = root.get("orpStatus") or root.get("orp_status")
+        orp = root.get("orpStatus")
+        if orp is None:
+            orp = root.get("orp_status")
         if isinstance(orp, dict):
             for leaf in ("value", "orp", "reading", "current", "mv"):
                 n = _num(orp.get(leaf))

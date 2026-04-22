@@ -265,11 +265,6 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
     )
     if chem_tokens.intersection(segs):
         return True
-    if re.search(
-        r"\b(chlorine|bromine|salinity|tds|sanitizer|alkalinity|hardness|calcium|cyanuric|bromide|turbidity|conductivity)\b",
-        lower,
-    ):
-        return True
     # Do not enable every numeric under waterlab (calibration, RF, etc.): segment match only.
     if "waterlab" in segs:
         return True
