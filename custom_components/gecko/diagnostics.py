@@ -140,9 +140,9 @@ def _get_vessel_coordinators_diagnostics(
         entry["cloud_string_metric_count"] = len(coord._cloud_string_metrics)
         entry["cloud_bool_metric_count"] = len(coord._cloud_bool_metrics)
         if coord._cloud_tile_metrics:
-            entry["cloud_tile_metric_paths"] = sorted(
-                coord._cloud_tile_metrics.keys()
-            )[:48]
+            entry["cloud_tile_metric_paths"] = sorted(coord._cloud_tile_metrics.keys())[
+                :48
+            ]
         entry["last_cloud_poll_monotonic"] = coord._last_cloud_poll_monotonic
         out.append(entry)
     return out

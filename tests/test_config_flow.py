@@ -28,6 +28,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _mock_config_entry(*, options: dict | None = None) -> MockConfigEntry:
     """Create a MockConfigEntry pre-loaded with typical Gecko data."""
     return MockConfigEntry(
@@ -54,7 +55,9 @@ def _default_user_input(**overrides) -> dict:
     return base
 
 
-def _create_options_flow(hass: HomeAssistant, entry: MockConfigEntry) -> GeckoOptionsFlow:
+def _create_options_flow(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> GeckoOptionsFlow:
     """Instantiate and wire up a ``GeckoOptionsFlow`` for testing."""
     entry.add_to_hass(hass)
     flow = GeckoOptionsFlow()

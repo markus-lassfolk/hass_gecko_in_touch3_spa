@@ -337,9 +337,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 ):
                     detail = rd.rest_vessel_detail_cache[vid]
             if detail is None:
-                detail = await api.async_get_vessel_detail(
-                    str(account_id), vid
-                )
+                detail = await api.async_get_vessel_detail(str(account_id), vid)
                 async with rd.rest_vessel_detail_lock:
                     rd.rest_vessel_detail_cache[vid] = detail
                     rd.rest_vessel_detail_mono[vid] = now

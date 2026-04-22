@@ -218,9 +218,7 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                     self.config_entry,
                     options=user_input,
                 )
-                await self.hass.config_entries.async_reload(
-                    self.config_entry.entry_id
-                )
+                await self.hass.config_entries.async_reload(self.config_entry.entry_id)
                 return self.async_abort(reason="reconfigure_successful")
             return self.async_create_entry(title="", data=user_input)
 

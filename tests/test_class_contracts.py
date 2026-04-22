@@ -216,9 +216,7 @@ def test_entity_classes_have_required_ha_attributes() -> None:
             if (
                 issubclass(obj, Entity)
                 and obj is not Entity
-                and getattr(obj, "__module__", "").startswith(
-                    "custom_components.gecko"
-                )
+                and getattr(obj, "__module__", "").startswith("custom_components.gecko")
             ):
                 entity_classes.append(obj)
 
@@ -245,9 +243,7 @@ def test_no_entity_sets_entity_id_directly() -> None:
             if not (
                 issubclass(obj, Entity)
                 and obj is not Entity
-                and getattr(obj, "__module__", "").startswith(
-                    "custom_components.gecko"
-                )
+                and getattr(obj, "__module__", "").startswith("custom_components.gecko")
             ):
                 continue
 

@@ -365,10 +365,10 @@ def shadow_topology_summary(state_data: dict[str, Any] | None) -> dict[str, Any]
 
 
 _CAMEL_SPLIT_RE = re.compile(
-    r"(?<=[a-z])(?=[A-Z])"         # aB -> a B
-    r"|(?<=[A-Z])(?=[A-Z][a-z])"   # ABc -> A Bc
-    r"|(?<=[a-zA-Z])(?=[0-9])"     # Ph7 -> Ph 7
-    r"|(?<=[0-9])(?=[A-Z])"        # 7P -> 7 P
+    r"(?<=[a-z])(?=[A-Z])"  # aB -> a B
+    r"|(?<=[A-Z])(?=[A-Z][a-z])"  # ABc -> A Bc
+    r"|(?<=[a-zA-Z])(?=[0-9])"  # Ph7 -> Ph 7
+    r"|(?<=[0-9])(?=[A-Z])"  # 7P -> 7 P
 )
 
 _KNOWN_ABBREVIATIONS: dict[str, str] = {
@@ -394,11 +394,28 @@ _KNOWN_ABBREVIATIONS: dict[str, str] = {
     "wifi": "WiFi",
 }
 
-_AMBIGUOUS_LEAVES = frozenset({
-    "id", "channel", "strength", "offset", "beta", "status",
-    "value", "state", "mode", "type", "name", "level", "count",
-    "r0", "t0", "reading", "n", "instructions",
-})
+_AMBIGUOUS_LEAVES = frozenset(
+    {
+        "id",
+        "channel",
+        "strength",
+        "offset",
+        "beta",
+        "status",
+        "value",
+        "state",
+        "mode",
+        "type",
+        "name",
+        "level",
+        "count",
+        "r0",
+        "t0",
+        "reading",
+        "n",
+        "instructions",
+    }
+)
 
 _CONTEXT_ALIASES: dict[str, str] = {
     "connectivity": "Conn.",
@@ -414,9 +431,17 @@ _CONTEXT_ALIASES: dict[str, str] = {
     "disc": "Status",
 }
 
-_CONTEXT_PROMOTING_PARENTS = frozenset({
-    "waterlab", "therm", "ph", "orp", "cloud", "rest", "actions",
-})
+_CONTEXT_PROMOTING_PARENTS = frozenset(
+    {
+        "waterlab",
+        "therm",
+        "ph",
+        "orp",
+        "cloud",
+        "rest",
+        "actions",
+    }
+)
 
 
 def _split_camel(name: str) -> str:
@@ -610,11 +635,17 @@ def infer_sensor_metadata(
 
     if device_class is None and lower.startswith("cloud.rest.readings."):
         reading_key = path.split(".")[-1].lower()
-        _READINGS_PPM = frozenset({
-            "totalalkalinity", "totalhardness", "freechlorine",
-            "totalchlorine", "cyanuricacid", "calciumhardness",
-            "adjustedtotalalkalinity",
-        })
+        _READINGS_PPM = frozenset(
+            {
+                "totalalkalinity",
+                "totalhardness",
+                "freechlorine",
+                "totalchlorine",
+                "cyanuricacid",
+                "calciumhardness",
+                "adjustedtotalalkalinity",
+            }
+        )
         if reading_key in _READINGS_PPM:
             unit = "ppm"
 
@@ -753,7 +784,11 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
     if lower.startswith("cloud.rest.") and any(
         tail in lower
         for tail in (
-            ".ph", ".orp", "orp_mv", "temp_c", "disc_elements.",
+            ".ph",
+            ".orp",
+            "orp_mv",
+            "temp_c",
+            "disc_elements.",
             "actions.count",
         )
     ):
@@ -761,10 +796,15 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
     if lower.startswith("cloud.rest.readings."):
         reading_key = path.split(".")[-1].lower()
         if reading_key in (
-            "watertemp", "lsi", "phstc20",
-            "freechlorine", "totalchlorine",
-            "totalalkalinity", "totalhardness",
-            "cyanuricacid", "calciumhardness",
+            "watertemp",
+            "lsi",
+            "phstc20",
+            "freechlorine",
+            "totalchlorine",
+            "totalalkalinity",
+            "totalhardness",
+            "cyanuricacid",
+            "calciumhardness",
             "adjustedtotalalkalinity",
         ):
             return True
@@ -845,8 +885,14 @@ def string_extension_enabled_by_default(path: str) -> bool:
         return any(
             tok in lower
             for tok in (
-                "water", "status", "message", "text", "mode",
-                "tile", "summary", "actions.",
+                "water",
+                "status",
+                "message",
+                "text",
+                "mode",
+                "tile",
+                "summary",
+                "actions.",
             )
         )
     return bool(re.search(r"\b(alarm|message|status|text|reason|fault)\b", spaced))
