@@ -125,7 +125,7 @@ class GeckoShadowMetricSensor(
             return (
                 self.coordinator.get_shadow_metric_value(self._metric_path) is not None
             )
-        return GeckoEntityAvailabilityMixin.available.fget(self)
+        return super().available
 
     def __init__(
         self,
@@ -200,7 +200,7 @@ class GeckoShadowStringSensor(
     def available(self) -> bool:
         if self._path.startswith("cloud.rest."):
             return self.coordinator.get_shadow_string_value(self._path) is not None
-        return GeckoEntityAvailabilityMixin.available.fget(self)
+        return super().available
 
     def __init__(
         self,

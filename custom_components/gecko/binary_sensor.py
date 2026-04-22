@@ -267,7 +267,7 @@ class GeckoShadowBoolBinarySensor(
         """REST-derived bools stay available with a value when MQTT is down."""
         if self._path.startswith("cloud.rest."):
             return self.coordinator.get_shadow_bool_value(self._path) is not None
-        return GeckoEntityAvailabilityMixin.available.fget(self)
+        return super().available
 
     def __init__(
         self,
