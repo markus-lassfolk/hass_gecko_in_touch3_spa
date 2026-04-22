@@ -71,8 +71,13 @@ def _string_value_ok(s: str) -> bool:
 
 
 def _path_segments(path: str) -> list[str]:
-    """Lowercased path segments (split on ``.``, ``_``, ``-``)."""
-    return [s for s in re.split(r"[._-]+", path.lower()) if s]
+    """Lowercased path segments (``.`` / ``_`` / ``-`` and camelCase boundaries).
+
+    Matches ``shadow_dump._key_segments`` style so tokens like ``phosphateLevel``
+    become ``phosphate`` + ``level``, letting ``_PH_FALSE_POSITIVE_SEGMENTS`` apply.
+    """
+    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", path)
+    return [s for s in re.split(r"[._-]+", spaced.lower()) if s]
 
 
 _PH_FALSE_POSITIVE_SEGMENTS = frozenset(
