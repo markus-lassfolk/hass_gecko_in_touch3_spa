@@ -473,7 +473,7 @@ class GeckoConnectionManager:
             return {"exists": True, "connected": False, "error": str(e)}
 
 
-@singleton(GECKO_CONNECTION_MANAGER_KEY)
+@singleton(GECKO_CONNECTION_MANAGER_KEY, async_=True)
 async def async_get_connection_manager(hass: HomeAssistant) -> GeckoConnectionManager:
     """Get or create the singleton Gecko connection manager."""
     return GeckoConnectionManager(hass)
