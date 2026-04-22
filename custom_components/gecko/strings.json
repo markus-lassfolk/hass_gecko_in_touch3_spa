@@ -21,6 +21,18 @@
       "default": "[%key:common::config_flow::create_entry::authenticated%]"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Gecko cloud REST",
+        "description": "Optional polling of the account vessels list so Home Assistant can show app-style tile values (temperature, pH, ORP) when MQTT is quiet. Uses only the account and vessel IDs from this config entry.",
+        "data": {
+          "cloud_rest_poll_interval": "Poll interval (seconds, 0 = disabled)",
+          "cloud_rest_only_when_mqtt_down": "Only poll when MQTT is disconnected"
+        }
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "rf_strength": {

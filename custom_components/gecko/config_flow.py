@@ -3,9 +3,25 @@
 import logging
 from typing import Any
 
-from homeassistant.helpers import config_entry_oauth2_flow, aiohttp_client
+import voluptuous as vol
+from homeassistant import config_entries
+from homeassistant.core import callback
+from homeassistant.helpers import (
+    config_entry_oauth2_flow,
+    aiohttp_client,
+    config_validation as cv,
+)
 
-from .const import DOMAIN, OAUTH2_AUTHORIZE, OAUTH2_CLIENT_ID, OAUTH2_TOKEN
+from .const import (
+    CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+    CONF_CLOUD_REST_POLL_INTERVAL,
+    DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+    DEFAULT_CLOUD_REST_POLL_INTERVAL,
+    DOMAIN,
+    OAUTH2_AUTHORIZE,
+    OAUTH2_CLIENT_ID,
+    OAUTH2_TOKEN,
+)
 from .oauth_implementation import GeckoPKCEOAuth2Implementation
 
 _LOGGER = logging.getLogger(__name__)
@@ -162,5 +178,43 @@ class ConfigFlow(
         """Return logger."""
         return logging.getLogger(__name__)
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Options for optional REST enrichment."""
+        return GeckoOptionsFlow(config_entry)
 
-ConfigFlow.version = 1
+
+class GeckoOptionsFlow(config_entries.OptionsFlowWithConfigEntry):
+    """Integration options (REST poll for app-style tiles when MQTT is quiet)."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None):
+        """Configure optional cloud REST polling."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        opts = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_CLOUD_REST_POLL_INTERVAL,
+                    default=opts.get(
+                        CONF_CLOUD_REST_POLL_INTERVAL,
+                        DEFAULT_CLOUD_REST_POLL_INTERVAL,
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=0, max=86400)),
+                vol.Optional(
+                    CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+                    default=opts.get(
+                        CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+                        DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+                    ),
+                ): cv.boolean,
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema)
+
+
+ConfigFlow.version = 2

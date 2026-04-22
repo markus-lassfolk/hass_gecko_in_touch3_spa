@@ -51,10 +51,10 @@ async def async_setup_entry(
     initial_entities: list[SensorEntity] = []
 
     for coordinator in coordinators:
-        await coordinator.async_wait_for_initial_zone_data(timeout=30.0)
+        await coordinator.async_refresh()
+        await coordinator.async_wait_for_initial_zone_data(timeout=15.0)
         client = await coordinator.get_gecko_client()
-        if client:
-            coordinator.sync_refresh_shadow_metrics(client)
+        coordinator.sync_refresh_shadow_metrics(client)
         pending = coordinator.take_pending_new_metric_paths()
         if pending:
             initial_entities.extend(
@@ -91,6 +91,13 @@ class GeckoShadowMetricSensor(
 
     _attr_should_poll = False
     _attr_has_entity_name = False
+
+    @property
+    def available(self) -> bool:
+        """REST tile metrics stay available with a value even when MQTT is down."""
+        if self._metric_path.startswith("cloud.rest."):
+            return self.coordinator.get_shadow_metric_value(self._metric_path) is not None
+        return GeckoEntityAvailabilityMixin.available.fget(self)
 
     def __init__(
         self,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import time
 from datetime import timedelta
 from typing import Any, Dict, List, Set
 
@@ -14,9 +15,19 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 # Import from geckoIotClient
 from gecko_iot_client.models.zone_types import ZoneType, AbstractZone
 
-from .const import DOMAIN
+from .cloud_tiles import extract_cloud_tile_metrics, find_vessel_record
+from .const import (
+    CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+    CONF_CLOUD_REST_POLL_INTERVAL,
+    DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+    DEFAULT_CLOUD_REST_POLL_INTERVAL,
+    DOMAIN,
+)
 from .shadow_metrics import extract_extension_metrics
-from .connection_manager import async_get_connection_manager, GeckoMonitorConnection
+from .connection_manager import (
+    async_get_connection_manager,
+    GeckoMonitorConnection,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +45,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self,
         hass: HomeAssistant,
         entry_id: str,
+        account_id: str,
         vessel_id: str,
         monitor_id: str,
         vessel_name: str,
@@ -46,6 +58,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=UPDATE_INTERVAL_SECONDS),
         )
         self.entry_id = entry_id
+        self.account_id = account_id
         self.vessel_id = vessel_id
         self.monitor_id = monitor_id
         self.vessel_name = vessel_name
@@ -73,6 +86,10 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._registered_shadow_metric_paths: Set[str] = set()
         self._pending_new_metric_paths: Set[str] = set()
 
+        # Optional REST tile metrics (merged under ``cloud.rest.*``; shadow wins on overlap)
+        self._cloud_tile_metrics: Dict[str, float | int] = {}
+        self._last_cloud_poll_monotonic: float | None = None
+
     def register_zone_update_callback(self, callback):
         """Register a callback to be called when zone data updates."""
         self._zone_update_callbacks.append(callback)
@@ -80,8 +97,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_handle_zone_update(self, data: dict[str, Any]) -> None:
         """Handle zone update in the event loop."""
         gecko_client = await self.get_gecko_client()
-        if gecko_client:
-            self.sync_refresh_shadow_metrics(gecko_client)
+        self.sync_refresh_shadow_metrics(gecko_client)
 
         # Trigger entity discovery when zones are updated
         self.async_set_updated_data(data)
@@ -98,6 +114,65 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         await result
             except Exception as ex:
                 _LOGGER.error("Error in zone update callback for vessel %s: %s", self.vessel_name, ex, exc_info=True)
+
+    def _entry_options(self) -> dict[str, Any]:
+        entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if not entry:
+            return {}
+        return dict(entry.options)
+
+    async def _async_poll_cloud_tiles_if_due(
+        self,
+        connection: GeckoMonitorConnection | None,
+    ) -> None:
+        """Optionally refresh app-style tile metrics from Gecko REST (account/vessel IDs from config)."""
+        opts = self._entry_options()
+        interval = int(
+            opts.get(
+                CONF_CLOUD_REST_POLL_INTERVAL, DEFAULT_CLOUD_REST_POLL_INTERVAL
+            )
+        )
+        if interval <= 0 or not self.account_id:
+            return
+
+        only_when_mqtt_down = bool(
+            opts.get(
+                CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+                DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+            )
+        )
+        mqtt_up = bool(connection and connection.is_connected)
+        if only_when_mqtt_down and mqtt_up:
+            return
+
+        now = time.monotonic()
+        if (
+            self._last_cloud_poll_monotonic is not None
+            and (now - self._last_cloud_poll_monotonic) < interval
+        ):
+            return
+
+        self._last_cloud_poll_monotonic = now
+        entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if not entry or not getattr(entry, "runtime_data", None):
+            return
+        api = entry.runtime_data.api_client
+        try:
+            vessels = await api.async_get_vessels(str(self.account_id))
+        except Exception as err:
+            _LOGGER.debug(
+                "Cloud tile REST poll skipped for %s: %s", self.vessel_name, err
+            )
+            return
+
+        vessel_rec = find_vessel_record(vessels, self.vessel_id)
+        if not vessel_rec:
+            _LOGGER.debug(
+                "Cloud tile REST: no vessel row for vessel_id=%s", self.vessel_id
+            )
+            return
+
+        self._cloud_tile_metrics = extract_cloud_tile_metrics(vessel_rec)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Gecko API."""
@@ -117,9 +192,10 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else:
                 self._consecutive_failures = 0
 
+            await self._async_poll_cloud_tiles_if_due(connection)
+
             client = await self.get_gecko_client()
-            if client:
-                self.sync_refresh_shadow_metrics(client)
+            self.sync_refresh_shadow_metrics(client)
 
             # Data will be updated by geckoIotClient callbacks
             return {"status": "active", "vessel_id": self.vessel_id}
@@ -134,12 +210,13 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Get all zones for this vessel."""
         return self._zones
 
-    def sync_refresh_shadow_metrics(self, gecko_client: Any) -> None:
-        """Parse extension metrics from the client's last shadow snapshot (sync)."""
-        state = getattr(gecko_client, "_state", None)
-        self._shadow_metric_values = (
-            extract_extension_metrics(state) if state else {}
-        )
+    def sync_refresh_shadow_metrics(self, gecko_client: Any | None) -> None:
+        """Parse extension metrics from shadow; merge optional REST tile metrics (MQTT wins)."""
+        state = getattr(gecko_client, "_state", None) if gecko_client else None
+        mqtt_metrics = extract_extension_metrics(state) if state else {}
+        merged: Dict[str, float | int] = dict(self._cloud_tile_metrics)
+        merged.update(mqtt_metrics)
+        self._shadow_metric_values = merged
         self._pending_new_metric_paths |= (
             set(self._shadow_metric_values) - self._registered_shadow_metric_paths
         )
@@ -346,3 +423,5 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._shadow_metric_values.clear()
         self._registered_shadow_metric_paths.clear()
         self._pending_new_metric_paths.clear()
+        self._cloud_tile_metrics.clear()
+        self._last_cloud_poll_monotonic = None

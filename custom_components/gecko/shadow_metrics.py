@@ -4,6 +4,15 @@ The official gecko-iot-client only models flow, lighting, and temperatureControl
 zones. Waterlab and similar data typically appear under other ``zones.*`` keys or
 nested under ``features``. This module walks those branches and collects numeric
 leaves for Home Assistant sensors, without hard-coding unpublished field names.
+
+**Observed live shadow (Waterlab):** chemistry hardware often exposes calibration and
+model parameters under ``reported.features.waterlab.sensor`` — e.g. ``ph`` and
+``orp`` subtrees with ``offsetMv*``, ``slopeMvPerPh``, and ``therm`` with ``R0`` /
+``T0`` / ``beta`` (thermistor constants). Those are **not** live pH/ORP/temperature
+readings; heuristics below treat them as diagnostics so we do not assign PH/ORP device
+classes or enable them as default water-chemistry sensors. Actual readings, when
+present, tend to use different path shapes (e.g. measured values outside ``sensor``
+calibration leaves).
 """
 
 from __future__ import annotations
@@ -18,8 +27,8 @@ from homeassistant.const import UnitOfTemperature
 # Zone families handled by gecko-iot-client (avoid duplicating climate/pumps/lights).
 KNOWN_ZONE_TYPES = frozenset({"flow", "lighting", "temperatureControl"})
 
-_MAX_DEPTH = 12
-_MAX_SENSORS = 64
+_MAX_DEPTH = 16
+_MAX_SENSORS = 160
 
 
 def _path_segments(path: str) -> list[str]:
@@ -30,6 +39,22 @@ def _path_segments(path: str) -> list[str]:
 def _segment_is_ph(seg: str) -> bool:
     """True if segment denotes pH (not ``phase``, ``graph``, or ``alpha`` substrings)."""
     return seg == "ph"
+
+
+def _is_calibration_or_model_param_path(path: str) -> bool:
+    """True when the path is sensor calibration / thermistor model data, not a live reading.
+
+    Derived from production shadow samples under ``features.waterlab.sensor.*`` where
+    ``ph`` / ``orp`` leaves are offset/slope in mV, and ``therm`` holds R0/T0/beta.
+    """
+    lower = path.lower()
+    # Millivolt offsets and slopes (Waterlab pH/ORP sensor calibration).
+    if "offsetmv" in lower or "slopemv" in lower or "mvperph" in lower or "mvatph" in lower:
+        return True
+    # Thermistor / NTC model parameters (not spa water temperature).
+    if re.search(r"\.therm\.(r0|t0|beta)(\.|$)", lower):
+        return True
+    return False
 
 
 def _skip_extension_reported_root_key(key: str) -> bool:
@@ -175,11 +200,14 @@ def infer_sensor_metadata(path: str) -> tuple[str | None, str | None]:
     device_class: str | None = None
     unit: str | None = None
 
+    if _is_calibration_or_model_param_path(path):
+        return None, None
+
     segs = _path_segments(path)
     if any(_segment_is_ph(s) for s in segs):
         device_class = "ph"
-    elif any(s == "orp" for s in segs) or re.search(
-        r"\boxidation\b", lower
+    elif any(s == "orp" or s.startswith("orp_") for s in segs) or re.search(
+        r"\b(oxidation|redox|eh)\b", lower
     ):
         # Millivolts are not HA ``SensorDeviceClass.VOLTAGE`` (SI volts).
         unit = "mV"
@@ -195,6 +223,13 @@ def infer_sensor_metadata(path: str) -> tuple[str | None, str | None]:
         unit = "ppm"
     elif re.search(r"\b(tds|salinity)\b", lower):
         unit = "ppm"
+    elif re.search(
+        r"\b(alkalinity|hardness|calcium|cyanuric|bromide|turbidity|conductivity)\b",
+        lower,
+    ):
+        unit = "ppm"
+    elif "uv" in lower and re.search(r"\b(intensity|dose|power)\b", lower):
+        unit = "%"
 
     return device_class, unit
 
@@ -202,20 +237,45 @@ def infer_sensor_metadata(path: str) -> tuple[str | None, str | None]:
 def chemistry_metric_enabled_by_default(path: str) -> bool:
     """Whether a shadow path is likely water chemistry and safe to enable by default."""
     lower = path.lower()
+    if _is_calibration_or_model_param_path(path):
+        return False
+
     segs = _path_segments(path)
     if any(_segment_is_ph(s) for s in segs):
         return True
-    if any(s == "orp" for s in segs) or re.search(
-        r"\boxidation\b", lower
+    if any(s == "orp" or s.startswith("orp_") for s in segs) or re.search(
+        r"\b(oxidation|redox|eh)\b", lower
     ):
         return True
     chem_tokens = frozenset(
-        {"chlorine", "bromine", "salinity", "tds", "sanitizer", "waterlab"}
+        {
+            "chlorine",
+            "bromine",
+            "salinity",
+            "tds",
+            "sanitizer",
+            "waterlab",
+            "alkalinity",
+            "hardness",
+            "calcium",
+            "cyanuric",
+            "bromide",
+            "turbidity",
+            "conductivity",
+        }
     )
     if chem_tokens.intersection(segs):
         return True
-    if re.search(r"\b(chlorine|bromine|salinity|tds|sanitizer)\b", lower):
+    if re.search(
+        r"\b(chlorine|bromine|salinity|tds|sanitizer|alkalinity|hardness|calcium|cyanuric|bromide|turbidity|conductivity)\b",
+        lower,
+    ):
         return True
-    if "waterlab" in lower:
+    # Do not enable every numeric under waterlab (calibration, RF, etc.): segment match only.
+    if "waterlab" in segs:
+        return True
+    if lower.startswith("cloud.rest.") and any(
+        tail in lower for tail in (".ph", ".orp", "orp_mv", "temp_c", "disc_elements.")
+    ):
         return True
     return False

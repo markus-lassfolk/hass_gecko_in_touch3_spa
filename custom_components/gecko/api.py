@@ -11,7 +11,21 @@ from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
-class OAuthGeckoApi(GeckoApiClient):
+
+class GeckoSpaApiMixin:
+    """REST helpers not yet on the published ``gecko_iot_client`` wheel."""
+
+    async def async_get_spa_configuration(
+        self, account_id: str, monitor_id: str
+    ) -> dict[str, Any]:
+        """Return spa metadata for a monitor (Gecko cloud REST)."""
+        return await self.async_request(
+            "GET",
+            f"/v4/accounts/{account_id}/monitors/{monitor_id}/spa/configuration",
+        )
+
+
+class OAuthGeckoApi(GeckoSpaApiMixin, GeckoApiClient):
     """Provide gecko authentication tied to an OAuth2 based config entry."""
 
     def __init__(
@@ -31,7 +45,7 @@ class OAuthGeckoApi(GeckoApiClient):
         await self._oauth_session.async_ensure_token_valid()
         return self._oauth_session.token["access_token"]
     
-class ConfigFlowGeckoApi(GeckoApiClient):
+class ConfigFlowGeckoApi(GeckoSpaApiMixin, GeckoApiClient):
     """Profile gecko authentication before a ConfigEntry exists.
 
     This implementation directly provides the token without supporting refresh.

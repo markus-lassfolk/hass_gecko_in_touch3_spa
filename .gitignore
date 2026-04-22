@@ -1,2 +1,7 @@
 *.pyc
+tmp/
 .venv/
+.venv-*
+
+# Local credentials for scripts/verify_shadow_live.py (copy scripts/gecko_live_test.env.example)
+.secrets/

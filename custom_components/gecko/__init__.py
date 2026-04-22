@@ -18,12 +18,14 @@ from .oauth_implementation import GeckoPKCEOAuth2Implementation
 from .const import DOMAIN, OAUTH2_AUTHORIZE, OAUTH2_CLIENT_ID, OAUTH2_TOKEN
 from .coordinator import GeckoVesselCoordinator
 from .connection_manager import async_get_connection_manager
+from .services import async_setup_services
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     """Set up the Gecko component."""
+    await async_setup_services(hass)
     # Register hardcoded OAuth implementation with PKCE (no user credentials needed)
     config_entry_oauth2_flow.async_register_implementation(
         hass,
@@ -78,6 +80,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.warning("No vessels found in config entry")
     
     coordinators = []
+    account_id = str(entry.data.get("account_id", ""))
     for vessel in vessels:
         vessel_id = vessel.get("vesselId")
         monitor_id = vessel.get("monitorId")
@@ -86,6 +89,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator = GeckoVesselCoordinator(
             hass=hass,
             entry_id=entry.entry_id,
+            account_id=account_id,
             vessel_id=vessel_id,
             monitor_id=monitor_id,
             vessel_name=vessel_name,

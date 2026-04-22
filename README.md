@@ -186,6 +186,31 @@ The integration creates multiple entity types for comprehensive spa control:
 
 ---
 
+## Roadmap: parity with the Gecko app
+
+Today this integration focuses on **what the gateway exposes over AWS IoT** (zones: climate, lights, pumps/fans, watercare **select**, connectivity **binary_sensor**, plus **shadow-derived sensors** for paths the stock client does not model). That matches most **control and live state** users expect from a spa controller.
+
+The Gecko **mobile app** also calls **Gecko Cloud REST** for account/vessel summaries, messages, billing, routines, some monitor tools, and similar screens. Your local API maps (from `scripts/verify_shadow_live.py`) show many of those routes return **HTTP 403** for a normal consumer OAuth token: the route exists, but the **token is not allowed** to use it. Full parity for those screens may require **Gecko to extend third-party API access**, not only more Home Assistant code.
+
+**MQTT first, REST as backup**
+
+Prefer **live AWS IoT (MQTT) shadow** for control and most sensors: it is the lowest-latency path and matches what the gateway actually runs. Use **Gecko Cloud REST** only to **fill gaps**—for example vessel list **summary** tiles when MQTT is not connected yet, or fields that appear in the app’s REST payload but are not (yet) mapped on the shadow. REST calls still use the same **OAuth-linked session**; they do not replace MQTT for steering the spa.
+
+**Can it work with no Auth0 / login at all?** **Not** with the official Gecko cloud stack this integration uses. The MQTT broker URL and embedded credentials come from **`GET …/iot/thirdPartySession`**, which requires a **valid Gecko API bearer token** (from OAuth). Those credentials are **short-lived**; refreshing them calls the API again. There is **no supported anonymous or purely local-LAN MQTT** mode here unless Gecko ships a different protocol or exposes an official local API.
+
+**Practical phases**
+
+1. **Align “summary” data** — Optionally poll `GET /v4/accounts/{account_id}/vessels` (and newer detail routes such as `GET /v6/.../vessels/{vessel_id}?customActionsVersion=0` when needed) so HA can mirror **app-style summary tiles** (e.g. pH/ORP/temp/warnings) when MQTT is sparse; keep MQTT + `gecko_iot_client` as the source of truth for **commands** and **high-frequency** state.
+2. **Close control gaps** — Audit each app control path against zones and services already exposed; add **number**/ **button**/ **services** only where the client library and shadow support writes.
+3. **Add REST-only features where allowed** — For routes that return **200** with the same OAuth token (discovered via your snapshots), add entities or `notify`/`todo`/`button` flows; skip or document anything stuck at **403** until Gecko changes policy.
+4. **Diagnostics** — Surface capability flags (topology, REST reachability summaries) **without** embedding real IDs in git-tracked source; users redact their own downloaded diagnostics before sharing.
+
+### Privacy & portable source code
+
+Do **not** commit real **account**, **vessel**, or **monitor** IDs, **Auth0 `sub`**, **email**, **addresses**, **tokens**, or files under **`.secrets/`** into this repository. Use placeholders in examples and tests so anyone can use the integration with their own data. See `custom_components/gecko/const.py` for the same rule in code comments.
+
+---
+
 ## 💬 Support & Community
 
 - 🐛 **Report Issues:** [GitHub Issues](https://github.com/geckoal/ha-gecko-integration/issues)

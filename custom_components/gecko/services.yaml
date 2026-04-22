@@ -1,0 +1,65 @@
+# Services mirror gecko_iot_client MQTT desired-state shapes (zones / features).
+
+publish_zone_desired:
+  name: Publish zone desired state
+  description: Publishes {"zones": {zone_type: {zone_id: updates}}} over the active MQTT connection, matching the library zone callback.
+  fields:
+    config_entry_id:
+      name: Config entry
+      description: Gecko integration config entry id (from UI or .storage).
+      required: true
+      selector:
+        config_entry:
+          integration: gecko
+    monitor_id:
+      name: Monitor ID
+      description: Monitor id for this spa (must match a vessel on the same config entry).
+      required: true
+      example: "12345"
+      selector:
+        text:
+    zone_type:
+      name: Zone type
+      description: Shadow zone type string (e.g. flow, lighting, temperatureControl).
+      required: true
+      example: "temperatureControl"
+      selector:
+        text:
+    zone_id:
+      name: Zone ID
+      description: Zone instance id from device configuration.
+      required: true
+      example: "0"
+      selector:
+        text:
+    updates:
+      name: Updates
+      description: Desired state fragment for that zone (JSON object).
+      required: true
+      selector:
+        object:
+
+publish_feature_desired:
+  name: Publish feature desired state
+  description: Publishes {"features": updates} over MQTT, matching the library feature callback.
+  fields:
+    config_entry_id:
+      name: Config entry
+      description: Gecko integration config entry id.
+      required: true
+      selector:
+        config_entry:
+          integration: gecko
+    monitor_id:
+      name: Monitor ID
+      description: Monitor id for this spa (must match a vessel on the same config entry).
+      required: true
+      example: "12345"
+      selector:
+        text:
+    updates:
+      name: Updates
+      description: Desired features subtree (JSON object).
+      required: true
+      selector:
+        object:
