@@ -217,7 +217,7 @@ class GeckoOptionsFlow(config_entries.OptionsFlowWithConfigEntry):
                 return self.async_update_reload_and_abort(
                     self.config_entry,
                     reason="reconfigure_successful",
-                    data_updates=user_input,
+                    options=user_input,
                 )
             
             return self.async_create_entry(title="", data=user_input)
