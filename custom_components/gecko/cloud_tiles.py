@@ -187,9 +187,6 @@ def extract_cloud_tile_metrics(vessel: dict[str, Any]) -> dict[str, float | int]
     return out
 
 
-_WIFI_DIAGNOSTIC_READINGS = frozenset({"wifiRssi", "wifi_rssi"})
-
-
 def _iter_readings_dicts(vessel: dict[str, Any]):
     """Yield (key, readings_dict) from both top-level and status-nested locations."""
     _KEYS = ("readings", "monitorReadings", "reportReadings", "computedReadings")
@@ -284,9 +281,7 @@ def extract_vessel_action_strings(
         instructions = action.get("instructions")
         if isinstance(instructions, list):
             texts = [
-                _string_leaf(i.get("text"))
-                for i in instructions
-                if isinstance(i, dict)
+                _string_leaf(i.get("text")) for i in instructions if isinstance(i, dict)
             ]
             joined = " | ".join(t for t in texts if t)
             if joined:

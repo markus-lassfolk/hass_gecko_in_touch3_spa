@@ -250,32 +250,32 @@ _PLATFORMS: list[Platform] = [
 ]
 
 
-_OPTIONS_MIGRATED_KEY = "_rest_options_migrated"
-
-
 def _migrate_options_defaults(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """One-time migration: update saved options that still carry old disabled-by-default values.
 
     Before v2.2.0 the defaults were poll_interval=0 and mqtt_only=True which
     got persisted when the user opened the options flow.  Update them to the
     new defaults so chemistry polling starts automatically.
-
-    A ``_rest_options_migrated`` flag is stamped into the options dict so
-    that this migration only runs once — users who later deliberately set
-    interval=0 or mqtt_only=True will not have their choices overwritten.
     """
     opts = dict(entry.options)
-    if opts.get(_OPTIONS_MIGRATED_KEY):
+
+    # Skip if already migrated
+    if opts.get("_options_defaults_migrated"):
         return
+
     changed = False
     if opts.get(CONF_CLOUD_REST_POLL_INTERVAL) == 0:
         opts[CONF_CLOUD_REST_POLL_INTERVAL] = DEFAULT_CLOUD_REST_POLL_INTERVAL
         changed = True
     if opts.get(CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN) is True:
-        opts[CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN] = DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN
+        opts[CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN] = (
+            DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN
+        )
         changed = True
-    opts[_OPTIONS_MIGRATED_KEY] = True
-    hass.config_entries.async_update_entry(entry, options=opts)
+
+    # Mark migration as done
+    opts["_options_defaults_migrated"] = True
+
     if changed:
         _LOGGER.info(
             "Migrated cloud REST options to new defaults for entry %s "
@@ -284,6 +284,8 @@ def _migrate_options_defaults(hass: HomeAssistant, entry: ConfigEntry) -> None:
             opts.get(CONF_CLOUD_REST_POLL_INTERVAL),
             opts.get(CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN),
         )
+
+    hass.config_entries.async_update_entry(entry, options=opts)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -367,14 +369,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "Gecko vessel connections established in %.1fs", time.monotonic() - _t1
         )
     except (ConnectionError, TimeoutError, OSError, GeckoConfigurationError) as ex:
-        _LOGGER.debug(
-            "Gecko setup triggering retry (ConfigEntryNotReady): %s", ex
-        )
+        _LOGGER.debug("Gecko setup triggering retry (ConfigEntryNotReady): %s", ex)
         raise ConfigEntryNotReady(f"Failed to connect to Gecko device: {ex}") from ex
     except KeyError as ex:
-        _LOGGER.debug(
-            "Gecko setup triggering retry (missing key): %s", ex
-        )
+        _LOGGER.debug("Gecko setup triggering retry (missing key): %s", ex)
         raise ConfigEntryNotReady(f"Failed to connect to Gecko device: {ex}") from ex
 
     for coordinator in entry.runtime_data.coordinators:
@@ -491,9 +489,7 @@ async def _setup_vessel_gecko_client(
             return
 
         _t1 = time.monotonic()
-        await coordinator.async_setup_monitor_connection(
-            websocket_url=websocket_url
-        )
+        await coordinator.async_setup_monitor_connection(websocket_url=websocket_url)
         _LOGGER.debug(
             "MQTT connection for vessel %s (monitor %s) established in %.1fs",
             vessel_name,
@@ -535,5 +531,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if e.entry_id != entry.entry_id
     ):
         await async_remove_services(hass)
-    _LOGGER.debug("Gecko unload complete for entry %s (ok=%s)", entry.entry_id, unload_ok)
+    _LOGGER.debug(
+        "Gecko unload complete for entry %s (ok=%s)", entry.entry_id, unload_ok
+    )
     return unload_ok

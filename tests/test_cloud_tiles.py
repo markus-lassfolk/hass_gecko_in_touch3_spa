@@ -246,9 +246,16 @@ def test_extract_vessel_action_strings() -> None:
     s = cloud_tiles.extract_vessel_action_strings(_V6_VESSEL_DETAIL)
     assert s["cloud.rest.actions.lower_ph"] == "Lower Your pH"
     assert s["cloud.rest.actions.raise_orp_chlorine"] == "Raise Your ORP"
-    assert "Be sure your pump is running." in s["cloud.rest.actions.lower_ph.instructions"]
-    assert "Follow all safety guidelines." in s["cloud.rest.actions.lower_ph.instructions"]
-    assert s["cloud.rest.actions.raise_orp_chlorine.instructions"] == "Target a free chlorine of 3 ppm."
+    assert (
+        "Be sure your pump is running." in s["cloud.rest.actions.lower_ph.instructions"]
+    )
+    assert (
+        "Follow all safety guidelines." in s["cloud.rest.actions.lower_ph.instructions"]
+    )
+    assert (
+        s["cloud.rest.actions.raise_orp_chlorine.instructions"]
+        == "Target a free chlorine of 3 ppm."
+    )
 
 
 def test_extract_vessel_action_strings_empty() -> None:
@@ -273,8 +280,3 @@ def test_extract_vessel_disc_strings() -> None:
 
 def test_extract_vessel_disc_strings_empty() -> None:
     assert cloud_tiles.extract_vessel_disc_strings({}) == {}
-
-
-def test_wifi_diagnostic_readings_frozenset() -> None:
-    assert "wifiRssi" in cloud_tiles._WIFI_DIAGNOSTIC_READINGS
-    assert "ph" not in cloud_tiles._WIFI_DIAGNOSTIC_READINGS

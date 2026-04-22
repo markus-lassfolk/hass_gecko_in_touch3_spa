@@ -273,9 +273,7 @@ class GeckoConnectionManager:
 
                 del self._connections[key]
             else:
-                _LOGGER.debug(
-                    "No connection to disconnect for monitor %s", monitor_id
-                )
+                _LOGGER.debug("No connection to disconnect for monitor %s", monitor_id)
 
     async def async_reconnect_monitor(self, monitor_id: str) -> bool:
         """Reconnect a specific monitor connection.
