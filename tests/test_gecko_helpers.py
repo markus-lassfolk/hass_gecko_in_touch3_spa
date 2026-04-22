@@ -1,0 +1,70 @@
+"""Tests for small helpers across Gecko modules (PR additions)."""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import custom_components.gecko as gecko_pkg
+import pytest
+import voluptuous as vol
+from custom_components.gecko import sensor as gecko_sensor
+from custom_components.gecko import services as gecko_services
+from custom_components.gecko.const import (
+    CONF_ALERTS_POLL_INTERVAL,
+    DEFAULT_ALERTS_POLL_INTERVAL,
+    DOMAIN,
+)
+
+
+def test_humanize_metric_name() -> None:
+    assert gecko_sensor._humanize_metric_name("zones.water.z1.ph_value") == "Ph Value"
+    assert gecko_sensor._humanize_metric_name("") == ""
+
+
+def test_rest_alerts_entities_enabled_and_toggle_key() -> None:
+    entry = SimpleNamespace(
+        entry_id="abc",
+        options={CONF_ALERTS_POLL_INTERVAL: DEFAULT_ALERTS_POLL_INTERVAL},
+    )
+    assert gecko_pkg._rest_alerts_entities_enabled(entry) is False
+    entry.options = {CONF_ALERTS_POLL_INTERVAL: 120}
+    assert gecko_pkg._rest_alerts_entities_enabled(entry) is True
+    key = gecko_pkg._rest_alerts_toggle_state_key("abc")
+    assert DOMAIN in key
+    assert "abc" in key
+
+
+def test_services_as_dict_raises() -> None:
+    with pytest.raises(vol.Invalid):
+        gecko_services._as_dict("updates", [])
+
+
+def test_services_as_desired_fragment_valid() -> None:
+    frag = gecko_services._as_desired_fragment({"zones": {"pump": {"on": True}}})
+    assert frag == {"zones": {"pump": {"on": True}}}
+
+
+def test_services_as_desired_fragment_rejects_keys() -> None:
+    with pytest.raises(vol.Invalid):
+        gecko_services._as_desired_fragment({"zones": {}, "extra": 1})
+
+
+def test_services_as_desired_fragment_size_limit() -> None:
+    big = {"x": "y" * gecko_services._MAX_DESIRED_JSON_BYTES}
+    with pytest.raises(vol.Invalid):
+        gecko_services._as_desired_fragment({"zones": big})
+
+
+def test_allowed_monitor_ids_and_vessel_id_for_monitor() -> None:
+    entry = SimpleNamespace(
+        data={
+            "vessels": [
+                {"monitorId": "m1", "vesselId": "v1"},
+                {"monitorId": None},
+                "bad",
+            ]
+        }
+    )
+    assert gecko_services._allowed_monitor_ids(entry) == {"m1"}
+    assert gecko_services._vessel_id_for_monitor(entry, "m1") == "v1"
+    assert gecko_services._vessel_id_for_monitor(entry, "unknown") == "unknown"

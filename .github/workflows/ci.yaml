@@ -37,8 +37,12 @@ jobs:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: requirements_test.txt
-      - name: Install test + integration runtime deps
+      - name: Install test harness (Home Assistant pins aiohttp; no gecko wheels here)
         run: pip install -r requirements_test.txt
+      - name: Install awsiotsdk (includes awscrt native wheel)
+        run: pip install awsiotsdk==1.26.0
+      - name: Install gecko-iot-client without dependency resolution
+        run: pip install --no-deps gecko-iot-client==0.2.5
       - name: Pytest
         run: pytest tests/ -v --tb=short
 

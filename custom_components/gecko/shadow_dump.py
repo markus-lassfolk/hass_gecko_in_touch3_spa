@@ -19,6 +19,11 @@ from .shadow_metrics import (
 )
 
 
+def _utc_now() -> datetime:
+    """Wall clock for exports (patched in unit tests)."""
+    return datetime.now(UTC)
+
+
 def integration_version() -> str:
     """Read ``version`` from this integration's ``manifest.json``."""
     try:
@@ -41,6 +46,7 @@ _SENSITIVE_SEGMENT_PAIRS = frozenset(
         ("account", "id"),
         ("user", "id"),
         ("owner", "id"),
+        ("api", "key"),
     }
 )
 
@@ -212,6 +218,21 @@ def _deep_sanitize(obj: Any) -> Any:
     if isinstance(obj, dict):
         out: dict[str, Any] = {}
         for k, v in obj.items():
+            kl = str(k).lower()
+            if kl in {"latitude", "longitude", "geolat", "geolon"}:
+                if isinstance(v, bool):
+                    out[k] = v
+                elif type(v) in (int, float):
+                    out[k] = None
+                elif isinstance(v, dict):
+                    out[k] = _deep_sanitize(v)
+                elif isinstance(v, list):
+                    out[k] = [_deep_sanitize(i) for i in v]
+                elif isinstance(v, str):
+                    out[k] = _redact_string_scalars(v)
+                else:
+                    out[k] = v
+                continue
             if _segment_key_is_sensitive(str(k)):
                 out[k] = _REDACTED
                 continue
@@ -221,17 +242,6 @@ def _deep_sanitize(obj: Any) -> Any:
                 out[k] = [_deep_sanitize(i) for i in v]
             elif isinstance(v, str):
                 out[k] = _redact_string_scalars(v)
-            elif (
-                isinstance(v, (int, float))
-                and not isinstance(v, bool)
-                and str(k).lower() in {
-                    "latitude",
-                    "longitude",
-                    "geolat",
-                    "geolon",
-                }
-            ):
-                out[k] = None
             else:
                 out[k] = v
         return out
@@ -283,7 +293,7 @@ def safe_export_filename(
     user_part: str | None, monitor_id: str, *, anonymous: bool = False
 ) -> str:
     """Single file component under ``gecko_shadow_dumps/`` (no path traversal)."""
-    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    ts = _utc_now().strftime("%Y%m%d_%H%M%S")
     if user_part:
         base = user_part
     elif anonymous:
@@ -339,7 +349,7 @@ def build_shadow_export_payload(
         "export_format": "gecko_ha_shadow_dump",
         "export_version": 1,
         "integration_version": integration_version(),
-        "exported_at_utc": datetime.now(UTC).isoformat(),
+        "exported_at_utc": _utc_now().isoformat(),
         "monitor_id": str(monitor_id),
         "vessel_id": str(vessel_id),
         "mqtt_connected": mqtt_connected,

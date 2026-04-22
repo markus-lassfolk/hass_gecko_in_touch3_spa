@@ -101,9 +101,12 @@ _ORP_FALSE_POSITIVE_SEGMENTS = frozenset({"orphan", "orphaned"})
 
 def _segment_is_ph(seg: str) -> bool:
     """True if segment denotes pH (handles camelCase keys like ``phValue`` → ``phvalue``)."""
+    seg = seg.lower()
     if seg == "ph":
         return True
     if not seg.startswith("ph"):
+        return False
+    if seg.startswith("phosphate"):
         return False
     if seg in _PH_FALSE_POSITIVE_SEGMENTS:
         return False
@@ -112,6 +115,7 @@ def _segment_is_ph(seg: str) -> bool:
 
 def _segment_is_orp(seg: str) -> bool:
     """True for ORP tokens including ``orpValue`` / ``orpmv`` style segments."""
+    seg = seg.lower()
     if seg == "orp":
         return True
     if not seg.startswith("orp"):
@@ -631,23 +635,24 @@ def infer_number_setpoint_limits(path: str, leaf: str) -> tuple[float, float, fl
 def infer_binary_sensor_device_class(path: str) -> BinarySensorDeviceClass | None:
     """Map shadow path tokens to HA binary device classes when unambiguous."""
     lower = path.lower()
-    if re.search(r"\b(leak|flood)\b", lower):
+    spaced = re.sub(r"[._\-]+", " ", lower)
+    if re.search(r"\b(leak|flood)\b", spaced):
         return BinarySensorDeviceClass.PROBLEM
-    if re.search(r"\b(connect|online|reachable)\b", lower):
+    if re.search(r"\b(connect|online|reachable)\b", spaced):
         return BinarySensorDeviceClass.CONNECTIVITY
-    if re.search(r"\b(running|active|pumping|circulat)\b", lower):
+    if re.search(r"\b(running|active|pumping|circulat)\b", spaced):
         return BinarySensorDeviceClass.RUNNING
-    if re.search(r"\b(heat|heating)\b", lower):
+    if re.search(r"\b(heat|heating)\b", spaced):
         return BinarySensorDeviceClass.HEAT
-    if re.search(r"\b(cool|cooling)\b", lower):
+    if re.search(r"\b(cool|cooling)\b", spaced):
         return BinarySensorDeviceClass.COLD
-    if re.search(r"\b(lock|locked)\b", lower):
+    if re.search(r"\b(lock|locked)\b", spaced):
         return BinarySensorDeviceClass.LOCK
-    if re.search(r"\b(motion|occup|presence)\b", lower):
+    if re.search(r"\b(motion|occup|presence)\b", spaced):
         return BinarySensorDeviceClass.MOTION
-    if re.search(r"\b(problem|fault|error|alarm|warn|trip)\b", lower):
+    if re.search(r"\b(problem|fault|error|alarm|warn|trip)\b", spaced):
         return BinarySensorDeviceClass.PROBLEM
-    if re.search(r"\b(power|on|enable|enabled)\b", lower):
+    if re.search(r"\b(power|on|enable|enabled)\b", spaced):
         return BinarySensorDeviceClass.POWER
     return None
 
@@ -667,9 +672,10 @@ def string_extension_enabled_by_default(path: str) -> bool:
     if _is_connectivity_shadow_metric_path(path) or _is_rf_diagnostic_path(path):
         return False
     lower = path.lower()
+    spaced = re.sub(r"[._\-]+", " ", lower)
     if lower.startswith("cloud.rest."):
         return any(
             tok in lower
             for tok in ("water", "status", "message", "text", "mode", "tile", "summary")
         )
-    return bool(re.search(r"\b(alarm|message|status|text|reason|fault)\b", lower))
+    return bool(re.search(r"\b(alarm|message|status|text|reason|fault)\b", spaced))
