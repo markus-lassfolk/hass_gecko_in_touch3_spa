@@ -100,7 +100,7 @@ PUBLISH_DESIRED_STATE_SCHEMA = vol.Schema(
 
 async def _async_client_for_monitor(hass: HomeAssistant, monitor_id: str) -> Any:
     mgr = await async_get_connection_manager(hass)
-    conn = mgr._connections.get(str(monitor_id))
+    conn = mgr.get_connection(monitor_id)
     if not conn or not conn.is_connected:
         raise HomeAssistantError(
             f"No active Gecko MQTT connection for monitor_id={monitor_id}"
@@ -212,7 +212,7 @@ async def async_handle_dump_shadow_snapshot(
         raise HomeAssistantError("Config entry not found")
 
     mgr = await async_get_connection_manager(hass)
-    conn = mgr._connections.get(monitor_id)
+    conn = mgr.get_connection(monitor_id)
     if not conn or not conn.gecko_client:
         raise HomeAssistantError(
             "No Gecko client for this monitor. Open the Gecko integration so MQTT "

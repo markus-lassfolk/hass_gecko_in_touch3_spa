@@ -336,7 +336,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             # Check if connection exists and is active
             connection_manager = await async_get_connection_manager(self.hass)
-            connection = connection_manager._connections.get(self.monitor_id)
+            connection = connection_manager.get_connection(self.monitor_id)
             
             await self._async_poll_cloud_tiles_if_due(connection)
             await self._async_poll_alerts_if_due()
@@ -350,7 +350,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     await self._simple_reconnect()
                     self._consecutive_failures = 0
                     # Re-check connection after reconnect attempt
-                    connection = connection_manager._connections.get(self.monitor_id)
+                    connection = connection_manager.get_connection(self.monitor_id)
                     if connection and connection.is_connected:
                         # Successfully reconnected, proceed to active path
                         client = await self.get_gecko_client()
@@ -504,7 +504,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Get the gecko client for this vessel's monitor."""
         try:
             connection_manager = await async_get_connection_manager(self.hass)
-            connection = connection_manager._connections.get(self.monitor_id)
+            connection = connection_manager.get_connection(self.monitor_id)
             
             if connection and connection.is_connected:
                 return connection.gecko_client

@@ -129,7 +129,7 @@ class GeckoUnknownZoneSetpointNumber(
 
     async def async_set_native_value(self, value: float) -> None:
         mgr = await async_get_connection_manager(self.hass)
-        conn = mgr._connections.get(self.coordinator.monitor_id)
+        conn = mgr.get_connection(self.coordinator.monitor_id)
         if not conn or not conn.is_connected or not conn.gecko_client:
             raise HomeAssistantError("Gecko MQTT connection is not available")
 

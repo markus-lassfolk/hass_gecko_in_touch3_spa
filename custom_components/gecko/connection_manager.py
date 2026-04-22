@@ -51,7 +51,7 @@ class GeckoConnectionManager:
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize the connection manager."""
         self.hass = hass
-        self._connections: dict[str, GeckoMonitorConnection] = {}
+        self._connections: dict[Any, GeckoMonitorConnection] = {}
         self._connection_lock = asyncio.Lock()
         self._shutdown_callbacks: list[Callable[[], None]] = []
         
@@ -59,7 +59,27 @@ class GeckoConnectionManager:
         self._cleanup_listener = hass.bus.async_listen_once(
             EVENT_HOMEASSISTANT_STOP, self._async_shutdown
         )
-    
+
+    @staticmethod
+    def _canonical_monitor_id(monitor_id: Any) -> str:
+        """Normalize monitor id for new connections and wire/API calls."""
+        return str(monitor_id).strip()
+
+    def _resolved_connection_key(self, monitor_id: Any) -> Any | None:
+        """Return the dict key used in ``_connections`` for this monitor, if any."""
+        s = self._canonical_monitor_id(monitor_id)
+        if not s:
+            return None
+        if s in self._connections:
+            return s
+        try:
+            n = int(s)
+        except (TypeError, ValueError):
+            return None
+        if n in self._connections:
+            return n
+        return None
+
     def _setup_client_handlers(
         self,
         gecko_client: Any,
@@ -98,7 +118,7 @@ class GeckoConnectionManager:
     
     async def async_get_or_create_connection(
         self,
-        monitor_id: str,
+        monitor_id: str | int,
         websocket_url: str,
         vessel_name: str,
         update_callback: Callable[[dict], None] | None = None,
@@ -107,60 +127,73 @@ class GeckoConnectionManager:
         """Get existing connection or create a new one for a monitor."""
         async with self._connection_lock:
             # Check if we already have a connection for this monitor
-            if monitor_id in self._connections:
-                connection = self._connections[monitor_id]
-                
+            existing_key = self._resolved_connection_key(monitor_id)
+            if existing_key is not None:
+                connection = self._connections[existing_key]
+
                 # Add the callback if provided
                 if update_callback and update_callback not in connection.update_callbacks:
                     connection.update_callbacks.append(update_callback)
-                
+
                 return connection
-            
-            # Create new connection
-            
+
+            # Create new connection (always store under canonical string key)
+            mid = self._canonical_monitor_id(monitor_id)
+
             try:
-                # Create transporter and client 
+                # Create transporter and client
                 transporter = MqttTransporter(
-                    broker_url=websocket_url, 
-                    monitor_id=monitor_id,
-                    token_refresh_callback=refresh_token_callback)
-                gecko_client = GeckoIotClient(monitor_id, 
-                                              transporter, 
-                                              config_timeout=CONFIG_TIMEOUT)
-                
+                    broker_url=websocket_url,
+                    monitor_id=mid,
+                    token_refresh_callback=refresh_token_callback,
+                )
+                gecko_client = GeckoIotClient(
+                    mid,
+                    transporter,
+                    config_timeout=CONFIG_TIMEOUT,
+                )
+
                 # Create connection object with refresh callback for reconnection
                 connection = GeckoMonitorConnection(
-                    monitor_id=monitor_id,
+                    monitor_id=mid,
                     gecko_client=gecko_client,
                     websocket_url=websocket_url,
                     vessel_name=vessel_name,
                     refresh_token_callback=refresh_token_callback,
                 )
-                
+
                 # Add callback if provided
                 if update_callback:
                     connection.update_callbacks.append(update_callback)
-                
+
                 # Set up handlers using the helper method
-                self._setup_client_handlers(gecko_client, connection, monitor_id)
-                
+                self._setup_client_handlers(gecko_client, connection, mid)
+
                 # Connect using executor since connect() is synchronous
                 await self.hass.async_add_executor_job(gecko_client.connect)
                 connection.is_connected = True
-                
+
                 # Store the connection
-                self._connections[monitor_id] = connection
-                
-                _LOGGER.info("Connected to monitor %s", monitor_id)
+                self._connections[mid] = connection
+
+                _LOGGER.info("Connected to monitor %s", mid)
                 return connection
-                
+
             except Exception as e:
-                _LOGGER.error("Failed to create connection for monitor %s: %s", monitor_id, e, exc_info=True)
+                _LOGGER.error(
+                    "Failed to create connection for monitor %s: %s",
+                    mid,
+                    e,
+                    exc_info=True,
+                )
                 raise
-    
-    def get_connection(self, monitor_id: str) -> GeckoMonitorConnection | None:
+
+    def get_connection(self, monitor_id: str | int) -> GeckoMonitorConnection | None:
         """Get existing connection for a monitor."""
-        return self._connections.get(monitor_id)
+        key = self._resolved_connection_key(monitor_id)
+        if key is None:
+            return None
+        return self._connections.get(key)
     
     async def async_remove_callback(self, monitor_id: str, callback: Callable[[dict], None]) -> None:
         """Remove a callback from a monitor connection.
@@ -168,30 +201,32 @@ class GeckoConnectionManager:
         Uses the connection lock to prevent race conditions with callback iteration.
         """
         async with self._connection_lock:
-            if monitor_id in self._connections:
-                connection = self._connections[monitor_id]
+            key = self._resolved_connection_key(monitor_id)
+            if key is not None:
+                connection = self._connections[key]
                 if callback in connection.update_callbacks:
                     connection.update_callbacks.remove(callback)
-                    
+
                     # If no more callbacks, we could optionally disconnect
                     # For now, keep connections alive as they may be reused
-    
+
     async def async_disconnect_monitor(self, monitor_id: str) -> None:
         """Disconnect and remove a monitor connection."""
         async with self._connection_lock:
-            if monitor_id in self._connections:
-                connection = self._connections[monitor_id]
-                
+            key = self._resolved_connection_key(monitor_id)
+            if key is not None:
+                connection = self._connections[key]
+
                 try:
                     if connection.is_connected and connection.gecko_client:
                         await self.hass.async_add_executor_job(connection.gecko_client.disconnect)
                         connection.is_connected = False
                 except Exception as e:
                     _LOGGER.error("Error disconnecting monitor %s: %s", monitor_id, e)
-                
+
                 # Remove from connections
-                del self._connections[monitor_id]
-    
+                del self._connections[key]
+
     async def async_reconnect_monitor(self, monitor_id: str) -> bool:
         """Reconnect a specific monitor connection.
         
@@ -200,12 +235,14 @@ class GeckoConnectionManager:
         
         Returns True if reconnection was successful, False otherwise.
         """
-        if monitor_id not in self._connections:
-            _LOGGER.warning("No existing connection found for monitor %s to reconnect", monitor_id)
+        mid = self._canonical_monitor_id(monitor_id)
+        key = self._resolved_connection_key(monitor_id)
+        if key is None:
+            _LOGGER.warning("No existing connection found for monitor %s to reconnect", mid)
             return False
-        
-        connection = self._connections[monitor_id]
-        
+
+        connection = self._connections[key]
+
         try:
             # Get the token refresh callback from the existing connection
             refresh_callback = None
@@ -213,12 +250,15 @@ class GeckoConnectionManager:
                 refresh_callback = connection.gecko_client.transporter._token_refresh_callback
             
             if not refresh_callback or not callable(refresh_callback):
-                _LOGGER.error("No token refresh callback available for monitor %s - cannot reconnect", monitor_id)
+                _LOGGER.error(
+                    "No token refresh callback available for monitor %s - cannot reconnect",
+                    mid,
+                )
                 return False
-            
+
             # Get fresh websocket URL with new token
-            _LOGGER.debug("Getting fresh token for monitor %s", monitor_id)
-            new_url = await self.hass.async_add_executor_job(refresh_callback, monitor_id)
+            _LOGGER.debug("Getting fresh token for monitor %s", mid)
+            new_url = await self.hass.async_add_executor_job(refresh_callback, mid)
             
             if not new_url or not isinstance(new_url, str):
                 _LOGGER.error("Failed to get new websocket URL for monitor %s", monitor_id)
@@ -239,11 +279,11 @@ class GeckoConnectionManager:
                 # Create new transporter and client with fresh URL
                 transporter = MqttTransporter(
                     broker_url=new_url,
-                    monitor_id=monitor_id,
-                    token_refresh_callback=refresh_callback
+                    monitor_id=mid,
+                    token_refresh_callback=refresh_callback,
                 )
-                
-                gecko_client = GeckoIotClient(monitor_id, transporter, config_timeout=CONFIG_TIMEOUT)
+
+                gecko_client = GeckoIotClient(mid, transporter, config_timeout=CONFIG_TIMEOUT)
                 
                 # Set up zone update handler to distribute to all callbacks
                 def on_zone_update(updated_zones):
@@ -302,50 +342,52 @@ class GeckoConnectionManager:
         """
         # Acquire lock at method entry to prevent race conditions
         async with self._connection_lock:
-            if monitor_id not in self._connections:
-                _LOGGER.error("No connection found for monitor %s to refresh", monitor_id)
+            mid = self._canonical_monitor_id(monitor_id)
+            key = self._resolved_connection_key(monitor_id)
+            if key is None:
+                _LOGGER.error("No connection found for monitor %s to refresh", mid)
                 return False
-            
-            connection = self._connections[monitor_id]
-            
+
+            connection = self._connections[key]
+
             try:
                 # Disconnect current connection
                 if connection.gecko_client and connection.is_connected:
                     await self.hass.async_add_executor_job(connection.gecko_client.disconnect)
                     connection.is_connected = False
-                
+
                 # Wait briefly before getting new token
                 await asyncio.sleep(TOKEN_REFRESH_DELAY)
 
                 # Use the stored refresh callback from connection object (avoids accessing private attributes)
                 refresh_callback = connection.refresh_token_callback
-                
+
                 if not refresh_callback or not callable(refresh_callback):
-                    _LOGGER.warning("No token refresh callback available for monitor %s", monitor_id)
+                    _LOGGER.warning("No token refresh callback available for monitor %s", mid)
                     return False
 
                 # Run the callback in executor since it might be blocking
-                new_url = await self.hass.async_add_executor_job(refresh_callback, monitor_id)
-                
+                new_url = await self.hass.async_add_executor_job(refresh_callback, mid)
+
                 if not new_url or not isinstance(new_url, str):
-                    _LOGGER.error("Failed to get new websocket URL for monitor %s", monitor_id)
+                    _LOGGER.error("Failed to get new websocket URL for monitor %s", mid)
                     return False
-                
+
                 if new_url != connection.websocket_url:
                     connection.websocket_url = new_url
 
                 # Re-instantiate transporter and gecko client with new token
                 transporter = MqttTransporter(
                     broker_url=new_url,
-                    monitor_id=monitor_id,
-                    token_refresh_callback=refresh_callback
+                    monitor_id=mid,
+                    token_refresh_callback=refresh_callback,
                 )
-                
+
                 # Create new gecko client
-                gecko_client = GeckoIotClient(monitor_id, transporter, config_timeout=CONFIG_TIMEOUT)
-                
+                gecko_client = GeckoIotClient(mid, transporter, config_timeout=CONFIG_TIMEOUT)
+
                 # Set up handlers using the helper method (DRY principle)
-                self._setup_client_handlers(gecko_client, connection, monitor_id)
+                self._setup_client_handlers(gecko_client, connection, mid)
                 
                 # Update connection with new client
                 connection.gecko_client = gecko_client
@@ -357,11 +399,11 @@ class GeckoConnectionManager:
                 await self.hass.async_add_executor_job(connection.gecko_client.connect)
                 connection.is_connected = True
 
-                _LOGGER.info("Refreshed and reconnected monitor %s", monitor_id)
+                _LOGGER.info("Refreshed and reconnected monitor %s", mid)
                 return True
 
             except Exception as e:
-                _LOGGER.error("Failed to refresh token for monitor %s: %s", monitor_id, e, exc_info=True)
+                _LOGGER.error("Failed to refresh token for monitor %s: %s", mid, e, exc_info=True)
                 # State is already set to False within the lock if disconnect succeeded
                 # No need to set it again outside the lock (fixes race condition)
                 return False
@@ -372,14 +414,15 @@ class GeckoConnectionManager:
     
     def get_connection_status(self, monitor_id: str) -> dict[str, Any]:
         """Get connection status for a monitor."""
-        if monitor_id not in self._connections:
+        key = self._resolved_connection_key(monitor_id)
+        if key is None:
             return {
                 "exists": False,
                 "connected": False,
-                "status": "No connection found"
+                "status": "No connection found",
             }
-        
-        connection = self._connections[monitor_id]
+
+        connection = self._connections[key]
         
         try:
             # Check if gecko client has connectivity status

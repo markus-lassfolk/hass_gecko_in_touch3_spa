@@ -97,6 +97,6 @@ class GeckoEntityAvailabilityMixin:
         if not connection_manager:
             return None
 
-        connection = connection_manager._connections.get(self.coordinator.monitor_id)
+        connection = connection_manager.get_connection(self.coordinator.monitor_id)
         return connection.gecko_client if connection else None
 
