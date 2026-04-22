@@ -172,7 +172,7 @@ def _flatten_numeric(
         return
     if isinstance(obj, bool):
         return
-    if isinstance(obj, (int, float)):
+    if isinstance(obj, int | float):
         if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
             return
         out[prefix] = obj

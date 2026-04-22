@@ -131,7 +131,7 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
             int(self._zone.speed) if self._zone.speed is not None else 0
         )
 
-        if isinstance(self._zone.speed, (int, float)):
+        if isinstance(self._zone.speed, int | float):
             if self._zone.speed < 34:
                 self._attr_speed = "low"
             elif self._zone.speed < 67:
