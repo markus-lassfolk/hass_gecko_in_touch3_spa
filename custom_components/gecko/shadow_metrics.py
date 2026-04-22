@@ -539,8 +539,6 @@ def apply_numeric_shadow_sensor_hints(entity: Any, path: str) -> None:
         entity._attr_state_class = SensorStateClass.TOTAL_INCREASING
     elif dc is not None:
         entity._attr_state_class = SensorStateClass.MEASUREMENT
-    else:
-        entity._attr_state_class = SensorStateClass.MEASUREMENT
 
 
 def chemistry_metric_enabled_by_default(path: str) -> bool:
