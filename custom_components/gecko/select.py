@@ -190,7 +190,7 @@ class GeckoWatercareSelectEntity(
             self.hass.loop.call_soon_threadsafe(_update_and_write)
         except Exception as e:
             _LOGGER.debug(
-                "Error handling operation mode update for %s: %s", self._attr_name, e
+                "Error handling operation mode update for %s: %s", self._vessel_name, e
             )
 
     @callback
@@ -201,7 +201,7 @@ class GeckoWatercareSelectEntity(
             self.hass.async_create_task(self._async_update_state_locked())
         except Exception as e:
             _LOGGER.debug(
-                "Error scheduling state update for %s: %s", self._attr_name, e
+                "Error scheduling state update for %s: %s", self._vessel_name, e
             )
 
     async def _async_update_state_locked(self) -> None:
@@ -223,18 +223,18 @@ class GeckoWatercareSelectEntity(
                 )
                 _LOGGER.debug(
                     "Updated watercare mode for %s: %s",
-                    self._attr_name,
+                    self._vessel_name,
                     self._attr_current_option,
                 )
             else:
                 _LOGGER.debug(
                     "Gecko client or operation mode controller not available for %s",
-                    self._attr_name,
+                    self._vessel_name,
                 )
                 self._attr_current_option = None
 
         except Exception as e:
-            _LOGGER.debug("Could not get operation mode for %s: %s", self._attr_name, e)
+            _LOGGER.debug("Could not get operation mode for %s: %s", self._vessel_name, e)
             self._attr_current_option = None
 
         await self._manage_operation_mode_callback(register=True)
