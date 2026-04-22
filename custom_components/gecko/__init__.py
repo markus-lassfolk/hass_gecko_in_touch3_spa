@@ -24,6 +24,8 @@ from .services import async_remove_services, async_setup_services
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
+_LOGGER = logging.getLogger(__name__)
+
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate config entry to latest version."""
@@ -141,7 +143,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Set up platforms immediately - entities will be created when zone data becomes available
     await hass.config_entries.async_forward_entry_setups(entry, _PLATFORMS)
-    
+
+    # Re-register domain services after a prior unload removed them (async_setup runs once per HA).
+    await async_setup_services(hass)
+
     _LOGGER.info("Gecko integration setup completed for %d vessels", vessels_count)
 
     return True

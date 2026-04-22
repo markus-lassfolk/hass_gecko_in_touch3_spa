@@ -186,7 +186,7 @@ class ConfigFlow(
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Options for optional REST enrichment."""
-        return GeckoOptionsFlow(config_entry)
+        return GeckoOptionsFlow()
 
 
 class GeckoOptionsFlow(config_entries.OptionsFlow):

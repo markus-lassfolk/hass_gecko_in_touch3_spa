@@ -607,9 +607,18 @@ def infer_number_setpoint_limits(path: str, leaf: str) -> tuple[float, float, fl
     """Return (native_min, native_max, step) for unknown-zone setpoint numbers."""
     lower = path.lower()
     lk = leaf.lower()
-    if "ph" in lower or lk == "ph" or lk.startswith("ph"):
+    segs = _path_segments(path)
+    if (
+        any(_segment_is_ph(s) for s in segs)
+        or lk == "ph"
+        or _segment_is_ph(lk)
+    ):
         return 0.0, 14.0, 0.1
-    if "orp" in lower:
+    if (
+        any(_segment_is_orp(s) for s in segs)
+        or lk == "orp"
+        or _segment_is_orp(lk)
+    ):
         return 0.0, 1000.0, 1.0
     if any(t in lower for t in ("temp", "temperature")) or any(
         t in lk for t in ("temp", "temperature")
