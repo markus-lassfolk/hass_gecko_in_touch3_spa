@@ -429,9 +429,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Get all zones for this vessel."""
         return self._zones
 
-    def sync_refresh_shadow_metrics(
-        self, gecko_client: Any | None
-    ) -> None:
+    def sync_refresh_shadow_metrics(self, gecko_client: Any | None) -> None:
         """Parse extension metrics from shadow; merge optional REST tile metrics (MQTT wins)."""
         # Ensure we're running on the event loop since callbacks may call async_add_entities
         if self.hass.loop != asyncio.get_running_loop():

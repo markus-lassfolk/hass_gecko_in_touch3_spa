@@ -272,10 +272,12 @@ class GeckoConnectionManager:
 
         try:
             refresh_callback = connection.refresh_token_callback
-            if not refresh_callback and hasattr(
-                connection.gecko_client, "transporter"
-            ) and hasattr(
-                connection.gecko_client.transporter, "_token_refresh_callback"
+            if (
+                not refresh_callback
+                and hasattr(connection.gecko_client, "transporter")
+                and hasattr(
+                    connection.gecko_client.transporter, "_token_refresh_callback"
+                )
             ):
                 refresh_callback = (
                     connection.gecko_client.transporter._token_refresh_callback
