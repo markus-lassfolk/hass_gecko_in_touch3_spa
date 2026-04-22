@@ -128,8 +128,7 @@ class GeckoShadowMetricSensor(
         config_entry: ConfigEntry,
         metric_path: str,
     ) -> None:
-        SensorEntity.__init__(self)
-        CoordinatorEntity.__init__(self, coordinator)
+        super().__init__(coordinator)
         self._metric_path = metric_path
         self._config_entry = config_entry
 
@@ -207,8 +206,7 @@ class GeckoShadowStringSensor(
         config_entry: ConfigEntry,
         path: str,
     ) -> None:
-        SensorEntity.__init__(self)
-        CoordinatorEntity.__init__(self, coordinator)
+        super().__init__(coordinator)
         self._path = path
         self._config_entry = config_entry
         vessel_slug = coordinator.vessel_name.lower().replace(" ", "_").replace(

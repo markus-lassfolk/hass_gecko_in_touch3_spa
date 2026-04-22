@@ -101,6 +101,7 @@ class GeckoWatercareSelectEntity(GeckoEntityAvailabilityMixin, CoordinatorEntity
         # Initialize availability (will be updated by mixin when added to hass)
         self._attr_available = False
         self._operation_mode_callback_registered = False
+        self._op_mode_bound_client: Any | None = None
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
@@ -116,19 +117,39 @@ class GeckoWatercareSelectEntity(GeckoEntityAvailabilityMixin, CoordinatorEntity
 
     async def _manage_operation_mode_callback(self, register: bool) -> None:
         """Register or unregister operation mode push updates from gecko_iot_client."""
-        if register == self._operation_mode_callback_registered:
+        if not register:
+            if self._op_mode_bound_client is not None:
+                self._op_mode_bound_client.off(
+                    EventChannel.OPERATION_MODE_UPDATE, self._on_operation_mode_update
+                )
+            self._op_mode_bound_client = None
+            self._operation_mode_callback_registered = False
             return
 
         gecko_client = await self.coordinator.get_gecko_client()
         if not gecko_client:
+            if self._op_mode_bound_client is not None:
+                self._op_mode_bound_client.off(
+                    EventChannel.OPERATION_MODE_UPDATE, self._on_operation_mode_update
+                )
+            self._op_mode_bound_client = None
+            self._operation_mode_callback_registered = False
             return
 
-        if register:
-            gecko_client.on(EventChannel.OPERATION_MODE_UPDATE, self._on_operation_mode_update)
-        else:
-            gecko_client.off(EventChannel.OPERATION_MODE_UPDATE, self._on_operation_mode_update)
+        if (
+            self._operation_mode_callback_registered
+            and self._op_mode_bound_client is gecko_client
+        ):
+            return
 
-        self._operation_mode_callback_registered = register
+        if self._op_mode_bound_client is not None:
+            self._op_mode_bound_client.off(
+                EventChannel.OPERATION_MODE_UPDATE, self._on_operation_mode_update
+            )
+
+        gecko_client.on(EventChannel.OPERATION_MODE_UPDATE, self._on_operation_mode_update)
+        self._op_mode_bound_client = gecko_client
+        self._operation_mode_callback_registered = True
 
     def _on_operation_mode_update(self, operation_mode_controller) -> None:
         """Handle operation mode updates (may run on library background thread)."""
@@ -169,9 +190,11 @@ class GeckoWatercareSelectEntity(GeckoEntityAvailabilityMixin, CoordinatorEntity
         except Exception as e:
             _LOGGER.debug("Could not get operation mode for %s: %s", self._attr_name, e)
             self._attr_current_option = None
-        
+
+        await self._manage_operation_mode_callback(register=True)
+
         # Availability is now updated via CONNECTIVITY_UPDATE events, not polling
-        
+
         # Write the updated state
         self.async_write_ha_state()
 

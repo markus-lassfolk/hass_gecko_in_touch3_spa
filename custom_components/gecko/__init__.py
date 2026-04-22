@@ -1,12 +1,14 @@
 """The Gecko integration."""
 
 from __future__ import annotations
-from dataclasses import dataclass
+
+from dataclasses import dataclass, field
 import logging
+from typing import Any
 import sys
 import os
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
@@ -18,19 +20,22 @@ from .oauth_implementation import GeckoPKCEOAuth2Implementation
 from .const import DOMAIN, OAUTH2_AUTHORIZE, OAUTH2_CLIENT_ID, OAUTH2_TOKEN
 from .coordinator import GeckoVesselCoordinator
 from .connection_manager import async_get_connection_manager
-from .services import async_setup_services
+from .services import async_remove_services, async_setup_services
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate config entry to latest version."""
-    _LOGGER.info("Migrating Gecko config entry from version %s", entry.version)
+    if entry.version > 2:
+        return False
 
     if entry.version == 1:
-        entry.version = 2
+        _LOGGER.info(
+            "Migrating Gecko config entry %s from version 1 to 2", entry.entry_id
+        )
+        hass.config_entries.async_update_entry(entry, version=2)
 
-    _LOGGER.info("Migration to version %s successful", entry.version)
     return True
 
 
@@ -55,8 +60,15 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
 @dataclass
 class GeckoRuntimeData:
     """Runtime data for Gecko integration."""
+
     api_client: OAuthGeckoApi
     coordinators: list[GeckoVesselCoordinator]
+    rest_vessels_response_cache: list[Any] | None = field(
+        default=None, repr=False, compare=False
+    )
+    rest_vessels_response_cache_mono: float | None = field(
+        default=None, repr=False, compare=False
+    )
 
 
 # List the platforms that this integration supports.
@@ -235,4 +247,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as ex:
         _LOGGER.error("Error disconnecting monitors during unload: %s", ex)
     
-    return await hass.config_entries.async_unload_platforms(entry, _PLATFORMS)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, _PLATFORMS)
+    if unload_ok and not any(
+        e.state is ConfigEntryState.LOADED
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if e.entry_id != entry.entry_id
+    ):
+        await async_remove_services(hass)
+    return unload_ok

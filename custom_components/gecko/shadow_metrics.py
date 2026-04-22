@@ -75,9 +75,45 @@ def _path_segments(path: str) -> list[str]:
     return [s for s in re.split(r"[._-]+", path.lower()) if s]
 
 
+_PH_FALSE_POSITIVE_SEGMENTS = frozenset(
+    {
+        "phase",
+        "phone",
+        "photo",
+        "phantom",
+        "phosphate",
+        "photon",
+        "physical",
+        "phonetic",
+        "phoning",
+        "phoney",
+        "phosphor",
+    }
+)
+
+_ORP_FALSE_POSITIVE_SEGMENTS = frozenset({"orphan", "orphaned"})
+
+
 def _segment_is_ph(seg: str) -> bool:
-    """True if segment denotes pH (not ``phase``, ``graph``, or ``alpha`` substrings)."""
-    return seg == "ph"
+    """True if segment denotes pH (handles camelCase keys like ``phValue`` → ``phvalue``)."""
+    if seg == "ph":
+        return True
+    if not seg.startswith("ph"):
+        return False
+    if seg in _PH_FALSE_POSITIVE_SEGMENTS:
+        return False
+    return bool(re.fullmatch(r"ph[a-z0-9]+", seg))
+
+
+def _segment_is_orp(seg: str) -> bool:
+    """True for ORP tokens including ``orpValue`` / ``orpmv`` style segments."""
+    if seg == "orp":
+        return True
+    if not seg.startswith("orp"):
+        return False
+    if seg in _ORP_FALSE_POSITIVE_SEGMENTS:
+        return False
+    return bool(re.fullmatch(r"orp[a-z0-9]+", seg))
 
 
 def _is_calibration_or_model_param_path(path: str) -> bool:
@@ -215,12 +251,8 @@ def extract_extension_metrics(
                 continue
             _flatten_numeric(feat_val, f"features.{feat_key}", out, 0)
 
-    for root_key, root_val in reported.items():
-        if _skip_extension_reported_root_key(root_key):
-            continue
-        if not isinstance(root_key, str):
-            continue
-        _flatten_numeric(root_val, root_key, out, 0)
+    # Do not flatten arbitrary other top-level ``reported`` keys: firmware counters,
+    # timestamps, and vendor metadata would become misleading "measurement" sensors.
 
     # Top-level connectivity / RF-style roots (skipped above to avoid crowding chemistry).
     for root_key, root_val in reported.items():
@@ -258,13 +290,6 @@ def _iter_extension_bases(
             if not isinstance(feat_key, str):
                 continue
             pairs.append((f"features.{feat_key}", feat_val))
-    for root_key, root_val in reported.items():
-        if _skip_extension_reported_root_key(root_key):
-            continue
-        if not isinstance(root_key, str):
-            continue
-        pairs.append((root_key, root_val))
-
     for root_key, root_val in reported.items():
         if not isinstance(root_key, str):
             continue
@@ -365,7 +390,7 @@ def infer_sensor_metadata(
     segs = _path_segments(path)
     if any(_segment_is_ph(s) for s in segs):
         device_class = SensorDeviceClass.PH
-    elif any(s == "orp" or s.startswith("orp_") for s in segs) or re.search(
+    elif any(_segment_is_orp(s) for s in segs) or re.search(
         r"\b(oxidation|redox|eh)\b", lower
     ):
         unit = "mV"
@@ -539,7 +564,7 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
     segs = _path_segments(path)
     if any(_segment_is_ph(s) for s in segs):
         return True
-    if any(s == "orp" or s.startswith("orp_") for s in segs) or re.search(
+    if any(_segment_is_orp(s) for s in segs) or re.search(
         r"\b(oxidation|redox|eh)\b", lower
     ):
         return True

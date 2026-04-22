@@ -191,8 +191,19 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not entry or not getattr(entry, "runtime_data", None):
             return
         api = entry.runtime_data.api_client
+        rd = entry.runtime_data
+        vessels: List[Any] | None = None
         try:
-            vessels = await api.async_get_vessels(str(self.account_id))
+            if (
+                rd.rest_vessels_response_cache is not None
+                and rd.rest_vessels_response_cache_mono is not None
+                and (now - rd.rest_vessels_response_cache_mono) < interval
+            ):
+                vessels = rd.rest_vessels_response_cache
+            else:
+                vessels = await api.async_get_vessels(str(self.account_id))
+                rd.rest_vessels_response_cache = vessels
+                rd.rest_vessels_response_cache_mono = now
         except Exception as err:
             _LOGGER.debug(
                 "Cloud tile REST poll skipped for %s: %s", self.vessel_name, err

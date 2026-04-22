@@ -113,13 +113,17 @@ async def _async_client_for_monitor_from_call(
 
 
 def _allowed_monitor_ids(entry) -> set[str]:
+    """Return real MQTT monitor ids only (``vesselId`` is accepted elsewhere for lookups)."""
     out: set[str] = set()
     for v in entry.data.get("vessels") or []:
         if not isinstance(v, dict):
             continue
         val = v.get("monitorId")
-        if val is not None and str(val):
-            out.add(str(val))
+        if val is None:
+            continue
+        mid = str(val).strip()
+        if mid:
+            out.add(mid)
     return out
 
 
@@ -259,6 +263,18 @@ async def async_handle_dump_shadow_snapshot(
         notification_id=f"gecko_shadow_dump_{monitor_id}",
     )
     _LOGGER.info("Gecko shadow dump written to %s", out_path)
+
+
+async def async_remove_services(hass: HomeAssistant) -> None:
+    """Unregister Gecko services when the integration is fully unloaded."""
+    for name in (
+        SERVICE_PUBLISH_ZONE_DESIRED,
+        SERVICE_PUBLISH_FEATURE_DESIRED,
+        SERVICE_PUBLISH_DESIRED_STATE,
+        SERVICE_DUMP_SHADOW_SNAPSHOT,
+    ):
+        if hass.services.has_service(DOMAIN, name):
+            hass.services.async_remove(DOMAIN, name)
 
 
 async def async_setup_services(hass: HomeAssistant) -> None:
