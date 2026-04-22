@@ -213,6 +213,8 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
     )
     if chem_tokens.intersection(segs):
         return True
+    if re.search(r"\b(chlorine|bromine|salinity|tds|sanitizer)\b", lower):
+        return True
     if "waterlab" in lower:
         return True
     return False
