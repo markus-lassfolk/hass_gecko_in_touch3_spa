@@ -88,7 +88,21 @@ class GeckoPKCEOAuth2Implementation(config_entry_oauth2_flow.LocalOAuth2Implemen
     async def async_generate_authorize_url(self, flow_id: str) -> str:
         """Generate authorize URL with a fresh verifier for this OAuth flow."""
         verifier = self.generate_code_verifier(self._code_verifier_length)
-        self.hass.data.setdefault(_DATA_KEY_PKCE_VERIFIERS, {})[flow_id] = verifier
+        store = self.hass.data.setdefault(_DATA_KEY_PKCE_VERIFIERS, {})
+        store[flow_id] = verifier
+        from homeassistant.config_entries import HANDLERS
+
+        active_flows = set()
+        if DOMAIN in HANDLERS:
+            active_flows = {
+                flow["flow_id"]
+                for flow in self.hass.config_entries.flow.async_progress_by_handler(
+                    DOMAIN
+                )
+            }
+        for stale_flow_id in list(store.keys()):
+            if stale_flow_id not in active_flows and stale_flow_id != flow_id:
+                store.pop(stale_flow_id, None)
         token = _active_pkce_verifier.set(verifier)
         try:
             return await super().async_generate_authorize_url(flow_id)

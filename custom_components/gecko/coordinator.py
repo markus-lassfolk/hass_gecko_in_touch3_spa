@@ -219,7 +219,6 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
         if not entry or not getattr(entry, "runtime_data", None):
             return
-        self._last_cloud_poll_monotonic = now
         api = entry.runtime_data.api_client
         rd = entry.runtime_data
         vessels: list[Any] | None = None
@@ -242,6 +241,8 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "Cloud tile REST poll skipped for %s: %s", self.vessel_name, err
             )
             return
+
+        self._last_cloud_poll_monotonic = now
 
         if not isinstance(vessels, list):
             return
@@ -277,7 +278,6 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
         if not entry or not getattr(entry, "runtime_data", None):
             return
-        self._last_alerts_poll_monotonic = now
         api = entry.runtime_data.api_client
         rd = entry.runtime_data
         messages_payload: Any | None = None
@@ -333,6 +333,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 exc,
             )
 
+        self._last_alerts_poll_monotonic = now
         snap = build_alerts_snapshot(
             messages_payload=messages_payload,
             actions_payload=actions_payload,
