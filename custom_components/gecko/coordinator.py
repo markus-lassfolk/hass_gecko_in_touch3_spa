@@ -562,10 +562,8 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.error("Failed to reconnect %s", self.vessel_name)
 
         except Exception as e:
-            _LOGGER.error("Failed to reconnect %s: %s", self.vessel_name, e)
-        except Exception as e:
             _LOGGER.error(
-                "Failed to reconnect %s (unexpected error): %s",
+                "Failed to reconnect %s: %s",
                 self.vessel_name,
                 e,
                 exc_info=True,
@@ -589,12 +587,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         except Exception as e:
             _LOGGER.error(
-                "Failed to get gecko client for vessel %s: %s", self.vessel_name, e
-            )
-            return None
-        except Exception as e:
-            _LOGGER.error(
-                "Failed to get gecko client for vessel %s (unexpected error): %s",
+                "Failed to get gecko client for vessel %s: %s",
                 self.vessel_name,
                 e,
                 exc_info=True,
