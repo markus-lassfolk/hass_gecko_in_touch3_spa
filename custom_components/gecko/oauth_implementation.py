@@ -18,6 +18,7 @@ import secrets
 from typing import Any
 
 from aiohttp import ClientError
+from homeassistant.config_entries import HANDLERS
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.event import async_call_later
@@ -108,7 +109,6 @@ class GeckoPKCEOAuth2Implementation(config_entry_oauth2_flow.LocalOAuth2Implemen
                 _PKCE_VERIFIER_TTL_SEC,
                 functools.partial(_drop_stale_pkce_verifier, self.hass, flow_id),
             )
-        from homeassistant.config_entries import HANDLERS
 
         active_flows = set()
         if DOMAIN in HANDLERS:

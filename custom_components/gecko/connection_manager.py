@@ -271,9 +271,10 @@ class GeckoConnectionManager:
         connection = self._connections[key]
 
         try:
-            # Get the token refresh callback from the existing connection
-            refresh_callback = None
-            if hasattr(connection.gecko_client, "transporter") and hasattr(
+            refresh_callback = connection.refresh_token_callback
+            if not refresh_callback and hasattr(
+                connection.gecko_client, "transporter"
+            ) and hasattr(
                 connection.gecko_client.transporter, "_token_refresh_callback"
             ):
                 refresh_callback = (
@@ -347,7 +348,7 @@ class GeckoConnectionManager:
             connection.is_connected = False
             return False
 
-    async def _async_shutdown(self, event: Event) -> None:
+    async def _async_shutdown(self, _event: Event) -> None:
         """Shutdown all connections."""
         # Disconnect all monitors
         monitor_ids = list(self._connections.keys())

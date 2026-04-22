@@ -15,6 +15,7 @@ from custom_components.gecko.oauth_implementation import (
 
 
 def _make_impl() -> GeckoPKCEOAuth2Implementation:
+    """Return a PKCE OAuth implementation backed by a minimal hass stub."""
     hass = SimpleNamespace(data={})
     return GeckoPKCEOAuth2Implementation(
         hass,
@@ -26,6 +27,7 @@ def _make_impl() -> GeckoPKCEOAuth2Implementation:
 
 
 def test_generate_code_verifier_length_bounds() -> None:
+    """Verifier length must be between 43 and 128 inclusive."""
     with pytest.raises(ValueError, match="43"):
         GeckoPKCEOAuth2Implementation.generate_code_verifier(42)
     with pytest.raises(ValueError, match="128"):
@@ -35,6 +37,7 @@ def test_generate_code_verifier_length_bounds() -> None:
 
 
 def test_compute_code_challenge_length_bounds() -> None:
+    """Challenge input length must be between 43 and 128 inclusive."""
     with pytest.raises(ValueError, match="43"):
         GeckoPKCEOAuth2Implementation.compute_code_challenge("x" * 42)
     ch = GeckoPKCEOAuth2Implementation.compute_code_challenge("x" * 43)
@@ -43,6 +46,7 @@ def test_compute_code_challenge_length_bounds() -> None:
 
 
 def test_compute_code_challenge_deterministic() -> None:
+    """S256 challenge is stable for a fixed verifier."""
     v = "a" * 50
     a = GeckoPKCEOAuth2Implementation.compute_code_challenge(v)
     b = GeckoPKCEOAuth2Implementation.compute_code_challenge(v)
@@ -50,6 +54,7 @@ def test_compute_code_challenge_deterministic() -> None:
 
 
 def test_extra_authorize_data_contains_pkce_and_scopes() -> None:
+    """Authorize payload includes PKCE, scopes, and API audience."""
     impl = _make_impl()
     extra = impl.extra_authorize_data
     assert extra["code_challenge_method"] == "S256"
@@ -59,6 +64,7 @@ def test_extra_authorize_data_contains_pkce_and_scopes() -> None:
 
 
 async def test_async_resolve_external_data_pops_stored_verifier() -> None:
+    """Token exchange uses the stored verifier and removes it from hass.data."""
     impl = _make_impl()
     flow_id = "flow-test-1"
     verifier = "b" * 43
@@ -89,6 +95,7 @@ async def test_async_resolve_external_data_pops_stored_verifier() -> None:
 
 
 async def test_async_resolve_external_data_requires_redirect_uri() -> None:
+    """Missing redirect_uri in state raises ClientError."""
     impl = _make_impl()
     with pytest.raises(ClientError):
         await impl.async_resolve_external_data(
@@ -97,6 +104,7 @@ async def test_async_resolve_external_data_requires_redirect_uri() -> None:
 
 
 async def test_async_resolve_external_data_missing_stored_verifier() -> None:
+    """When flow_id is set but no verifier is stored, token exchange fails."""
     impl = _make_impl()
     with pytest.raises(ClientError):
         await impl.async_resolve_external_data(

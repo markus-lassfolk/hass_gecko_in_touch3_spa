@@ -9,10 +9,18 @@ import time
 from datetime import timedelta
 from typing import Any
 
+from aiohttp import ClientError
+
 # Import from geckoIotClient
-from gecko_iot_client.models.zone_types import AbstractZone, ZoneType
+from gecko_iot_client.models.zone_types import (
+    AbstractZone,
+    ZoneType,
+)
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import (
+    DataUpdateCoordinator,
+    UpdateFailed,
+)
 
 from .cloud_tiles import (
     extract_cloud_tile_booleans,
@@ -190,7 +198,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self,
         connection: GeckoMonitorConnection | None,
     ) -> None:
-        """Optionally refresh app-style tile metrics from Gecko REST (account/vessel IDs from config)."""
+        """Optionally refresh tile metrics from Gecko REST using config account/vessel IDs."""
         opts = self._entry_options()
         interval = int(
             opts.get(CONF_CLOUD_REST_POLL_INTERVAL, DEFAULT_CLOUD_REST_POLL_INTERVAL)
@@ -248,7 +256,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     rd.rest_vessels_response_cache = vessels
                     rd.rest_vessels_response_cache_mono = now
                     rd.rest_vessels_cache_account_id = account_id
-        except Exception as err:
+        except (ClientError, TimeoutError, OSError) as err:
             _LOGGER.debug(
                 "Cloud tile REST poll skipped for %s: %s", self.vessel_name, err
             )
@@ -311,7 +319,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     rd.rest_alerts_messages_payload = messages_payload
                     rd.rest_alerts_messages_mono = now
                     rd.rest_alerts_messages_account_id = account_id
-        except Exception as exc:
+        except (ClientError, TimeoutError, OSError) as exc:
             err = f"messages_unread:{type(exc).__name__}"
             _LOGGER.debug(
                 "Alerts poll: messages/unread failed for %s: %s",
@@ -336,7 +344,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         "payload": actions_payload,
                         "mono": now,
                     }
-        except Exception as exc:
+        except (ClientError, TimeoutError, OSError) as exc:
             aerr = f"actions:{type(exc).__name__}"
             err = f"{err};{aerr}" if err else aerr
             _LOGGER.debug(
@@ -369,13 +377,13 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             try:
                 await self._async_poll_cloud_tiles_if_due(connection)
-            except Exception as err:
+            except (ClientError, TimeoutError, OSError) as err:
                 _LOGGER.debug(
                     "Cloud tile poll failed for %s: %s", self.vessel_name, err
                 )
             try:
                 await self._async_poll_alerts_if_due()
-            except Exception as err:
+            except (ClientError, TimeoutError, OSError) as err:
                 _LOGGER.debug("Alerts poll failed for %s: %s", self.vessel_name, err)
 
             if not connection or not connection.is_connected:
@@ -421,7 +429,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Get all zones for this vessel."""
         return self._zones
 
-    def sync_refresh_shadow_metrics(self, gecko_client: Any | None) -> None:
+    def sync_refresh_shadow_metrics(
+        self, gecko_client: Any | None
+    ) -> None:
         """Parse extension metrics from shadow; merge optional REST tile metrics (MQTT wins)."""
         # Ensure we're running on the event loop since callbacks may call async_add_entities
         if self.hass.loop != asyncio.get_running_loop():
@@ -495,23 +505,27 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return out
 
     def take_pending_bool_paths(self) -> list[str]:
+        """Paths not yet bound to binary_sensor entities; marks them registered."""
         out = sorted(self._pending_bool_paths)
         self._registered_bool_paths.update(out)
         self._pending_bool_paths.clear()
         return out
 
     def take_pending_string_paths(self) -> list[str]:
+        """Paths not yet bound to sensor (string) entities; marks them registered."""
         out = sorted(self._pending_string_paths)
         self._registered_string_paths.update(out)
         self._pending_string_paths.clear()
         return out
 
     def get_shadow_bool_value(self, path: str) -> bool | None:
+        """Return a bool leaf from the last shadow refresh, or None if absent."""
         if path not in self._shadow_bool_values:
             return None
         return self._shadow_bool_values[path]
 
     def get_shadow_string_value(self, path: str) -> str | None:
+        """Return a string leaf from the last shadow refresh, or None if absent."""
         if path not in self._shadow_string_values:
             return None
         return self._shadow_string_values[path]
@@ -549,7 +563,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else:
                 _LOGGER.error("Failed to reconnect %s", self.vessel_name)
 
-        except Exception as e:
+        except (ClientError, TimeoutError, OSError, RuntimeError) as e:
             _LOGGER.error("Failed to reconnect %s: %s", self.vessel_name, e)
 
     async def get_gecko_client(self):
@@ -560,15 +574,15 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             if connection and connection.is_connected:
                 return connection.gecko_client
-            else:
-                _LOGGER.warning(
-                    "No active connection found for vessel %s (monitor %s)",
-                    self.vessel_name,
-                    self.monitor_id,
-                )
-                return None
 
-        except Exception as e:
+            _LOGGER.warning(
+                "No active connection found for vessel %s (monitor %s)",
+                self.vessel_name,
+                self.monitor_id,
+            )
+            return None
+
+        except (ClientError, TimeoutError, OSError, RuntimeError) as e:
             _LOGGER.error(
                 "Failed to get gecko client for vessel %s: %s", self.vessel_name, e
             )
@@ -582,7 +596,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         from the Gecko API using the OAuth2-managed access token.
         """
 
-        def refresh_token_callback(monitor_id: str | None = None) -> str:
+        def refresh_token_callback(
+            monitor_id: str | None = None,
+        ) -> str:
             """Handle token refresh by getting a new websocket URL.
 
             This is a synchronous callback invoked from background threads by the
@@ -590,7 +606,8 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             execute the async API call on Home Assistant's event loop.
 
             Args:
-                monitor_id: The monitor ID that needs token refresh (optional, uses self.monitor_id if not provided)
+                monitor_id: Monitor ID to refresh; defaults to this coordinator's
+                    ``monitor_id`` when omitted.
 
             Returns:
                 New websocket URL with fresh JWT token, or original URL on failure
@@ -639,12 +656,12 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 new_url = livestream_data.get("brokerUrl")
                 if new_url:
                     return new_url
-                else:
-                    _LOGGER.error(
-                        "No brokerUrl in livestream response for vessel %s",
-                        self.vessel_name,
-                    )
-                    return websocket_url
+
+                _LOGGER.error(
+                    "No brokerUrl in livestream response for vessel %s",
+                    self.vessel_name,
+                )
+                return websocket_url
 
             except TimeoutError:
                 _LOGGER.error(
@@ -756,21 +773,13 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.entry_id,
         )
 
-        try:
-            # Connection manager will handle cleanup during Home Assistant shutdown
-            # We don't disconnect here as the connection may be shared
-            _LOGGER.debug(
-                "Coordinator releasing vessel %s (monitor %s)",
-                self.vessel_name,
-                self.monitor_id,
-            )
-
-        except Exception as ex:
-            _LOGGER.warning(
-                "Error during coordinator shutdown for vessel %s: %s",
-                self.vessel_name,
-                ex,
-            )
+        # Connection manager will handle cleanup during Home Assistant shutdown
+        # We don't disconnect here as the connection may be shared
+        _LOGGER.debug(
+            "Coordinator releasing vessel %s (monitor %s)",
+            self.vessel_name,
+            self.monitor_id,
+        )
 
         self._zones.clear()
         self._spa_state.clear()
