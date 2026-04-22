@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 from datetime import timedelta
@@ -402,38 +403,34 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Paths not yet bound to sensor entities; marks them registered."""
         out = sorted(self._pending_new_metric_paths)
         self._registered_shadow_metric_paths.update(out)
-        if not self._initial_setup_done or self._initial_paths_consumed["metric"]:
+        if self._initial_setup_done or self._initial_paths_consumed["metric"]:
             self._pending_new_metric_paths.clear()
-        else:
-            self._initial_paths_consumed["metric"] = True
+        self._initial_paths_consumed["metric"] = True
         return out
 
     def take_pending_number_paths(self) -> list[str]:
         """Unknown-zone setpoint paths for Number entities."""
         out = sorted(self._pending_number_paths)
         self._registered_number_paths.update(out)
-        if not self._initial_setup_done or self._initial_paths_consumed["number"]:
+        if self._initial_setup_done or self._initial_paths_consumed["number"]:
             self._pending_number_paths.clear()
-        else:
-            self._initial_paths_consumed["number"] = True
+        self._initial_paths_consumed["number"] = True
         return out
 
     def take_pending_bool_paths(self) -> list[str]:
         out = sorted(self._pending_bool_paths)
         self._registered_bool_paths.update(out)
-        if not self._initial_setup_done or self._initial_paths_consumed["bool"]:
+        if self._initial_setup_done or self._initial_paths_consumed["bool"]:
             self._pending_bool_paths.clear()
-        else:
-            self._initial_paths_consumed["bool"] = True
+        self._initial_paths_consumed["bool"] = True
         return out
 
     def take_pending_string_paths(self) -> list[str]:
         out = sorted(self._pending_string_paths)
         self._registered_string_paths.update(out)
-        if not self._initial_setup_done or self._initial_paths_consumed["string"]:
+        if self._initial_setup_done or self._initial_paths_consumed["string"]:
             self._pending_string_paths.clear()
-        else:
-            self._initial_paths_consumed["string"] = True
+        self._initial_paths_consumed["string"] = True
         return out
 
     def get_shadow_bool_value(self, path: str) -> bool | None:
