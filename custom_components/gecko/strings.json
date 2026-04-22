@@ -43,6 +43,26 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "gateway_status": {
+        "name": "Gateway Status"
+      },
+      "vessel_status": {
+        "name": "Spa Status"
+      },
+      "transport_connection": {
+        "name": "Transport Connection"
+      },
+      "overall_connection": {
+        "name": "Overall Connection"
+      },
+      "is_energy_saving": {
+        "name": "Energy Saving Mode"
+      },
+      "active_alerts": {
+        "name": "Active Alerts"
+      }
+    },
     "sensor": {
       "rf_strength": {
         "name": "RF Signal Strength"
@@ -50,11 +70,8 @@
       "rf_channel": {
         "name": "RF Channel"
       },
-      "gateway_status": {
-        "name": "Gateway Status"
-      },
-      "vessel_status": {
-        "name": "Spa Status"
+      "active_alerts_rest": {
+        "name": "Active Alerts"
       }
     },
     "select": {
@@ -69,6 +86,16 @@
           "other": "Other"
         }
       }
+    },
+    "climate": {
+      "thermostat": {
+        "name": "Thermostat {zone_id}"
+      }
+    }
+  },
+  "exceptions": {
+    "unsupported_hvac_mode": {
+      "message": "Unsupported HVAC mode: {hvac_mode}. Only HEAT mode is supported."
     }
   }
 }

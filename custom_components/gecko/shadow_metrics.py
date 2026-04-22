@@ -532,24 +532,6 @@ def humanize_shadow_path(path: str) -> str:
     return name if name else path
 
 
-def metric_path_to_entity_slug(path: str, max_len: int = 48) -> str:
-    """Turn a metric path into a safe unique entity name suffix.
-
-    When truncated, append a short hash of the full path so long paths that
-    share a prefix do not collide on ``entity_id``.
-    """
-    slug = re.sub(r"[^a-zA-Z0-9]+", "_", path).strip("_").lower()
-    if not slug:
-        slug = "metric"
-    if len(slug) > max_len:
-        digest = hashlib.sha256(path.encode("utf-8")).hexdigest()[:8]
-        keep = max_len - len(digest) - 1
-        if keep < 1:
-            keep = 1
-        slug = f"{slug[:keep]}_{digest}"
-    return slug
-
-
 def infer_sensor_metadata(
     path: str,
 ) -> tuple[SensorDeviceClass | None, str | None]:
