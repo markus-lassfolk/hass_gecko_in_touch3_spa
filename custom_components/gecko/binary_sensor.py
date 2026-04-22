@@ -47,6 +47,11 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[BinarySensorEntityDescription, ...] = (
         icon="mdi:connection",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
     ),
+    BinarySensorEntityDescription(
+        key="is_energy_saving",
+        name="Energy Saving Mode",
+        icon="mdi:leaf",
+    ),
 )
 
 
@@ -130,30 +135,38 @@ class GeckoBinarySensorEntity(CoordinatorEntity[GeckoVesselCoordinator], BinaryS
 
     def _update_state(self) -> None:
         """Update the binary sensor state from spa data."""
-        # Access connectivity status through connection manager
         try:
             connection_manager = self.hass.data.get(GECKO_CONNECTION_MANAGER_KEY)
-            
-            connectivity_status = None
-            if connection_manager:
-                connection = connection_manager.get_connection(self._monitor_id)
-                if connection:
-                    # Get connectivity status from connection (updated by gecko client callbacks)
-                    connectivity_status = connection.connectivity_status
-                    
-                    # Fallback to gecko client if connection status not yet updated
-                    if not connectivity_status and connection.gecko_client:
-                        connectivity_status = connection.gecko_client.connectivity_status
-            
+
+            if not connection_manager:
+                self._attr_is_on = False
+                return
+
+            connection = connection_manager.get_connection(self._monitor_id)
+            if not connection:
+                self._attr_is_on = False
+                return
+
+            if self.entity_description.key == "is_energy_saving":
+                gecko_client = connection.gecko_client
+                if gecko_client and gecko_client.operation_mode_controller:
+                    self._attr_is_on = gecko_client.operation_mode_controller.is_energy_saving
+                else:
+                    self._attr_is_on = False
+                return
+
+            connectivity_status = connection.connectivity_status
+            if not connectivity_status and connection.gecko_client:
+                connectivity_status = connection.gecko_client.connectivity_status
+
             if not connectivity_status:
                 self._attr_is_on = False
                 return
-            
-            # Update connectivity binary sensor state
+
             self._update_connectivity_from_status(connectivity_status)
-                
+
         except Exception as e:
-            _LOGGER.debug("Error updating connectivity binary sensor state for %s: %s", self._attr_name, e)
+            _LOGGER.debug("Error updating binary sensor state for %s: %s", self._attr_name, e)
             self._attr_is_on = False
 
     def _update_connectivity_from_status(self, connectivity_status) -> None:

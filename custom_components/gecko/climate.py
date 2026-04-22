@@ -23,9 +23,25 @@ from .const import DOMAIN
 from .coordinator import GeckoVesselCoordinator
 from .entity import GeckoEntityAvailabilityMixin
 from gecko_iot_client.models.zone_types import ZoneType
-from gecko_iot_client.models.temperature_control_zone import TemperatureControlZone
+from gecko_iot_client.models.temperature_control_zone import (
+    TemperatureControlZone,
+    TemperatureControlZoneStatus,
+)
 
 _LOGGER = logging.getLogger(__name__)
+
+# Map all TemperatureControlZoneStatus values to HVACAction
+_HVAC_ACTION_MAP = {
+    TemperatureControlZoneStatus.IDLE: HVACAction.IDLE,
+    TemperatureControlZoneStatus.HEATING: HVACAction.HEATING,
+    TemperatureControlZoneStatus.COOLING: HVACAction.COOLING,
+    TemperatureControlZoneStatus.INVALID: HVACAction.IDLE,
+    TemperatureControlZoneStatus.HEAT_PUMP_HEATING: HVACAction.HEATING,
+    TemperatureControlZoneStatus.HEAT_PUMP_AND_HEATER_HEATING: HVACAction.HEATING,
+    TemperatureControlZoneStatus.HEAT_PUMP_COOLING: HVACAction.COOLING,
+    TemperatureControlZoneStatus.HEAT_PUMP_DEFROSTING: HVACAction.DEFROSTING,
+    TemperatureControlZoneStatus.HEAT_PUMP_ERROR: HVACAction.IDLE,
+}
 
 
 async def async_setup_entry(
@@ -114,13 +130,13 @@ class GeckoClimate(GeckoEntityAvailabilityMixin, CoordinatorEntity[GeckoVesselCo
     
     def _update_from_zone(self) -> None:
         """Update state attributes from zone data."""
-        if self._zone.status:
-            self._attr_hvac_action = (
-                HVACAction.HEATING if self._zone.status.is_heating else HVACAction.IDLE
+        if self._zone.status is not None:
+            self._attr_hvac_action = _HVAC_ACTION_MAP.get(
+                self._zone.status, HVACAction.IDLE
             )
         else:
             self._attr_hvac_action = HVACAction.IDLE
-        
+
         self._attr_current_temperature = self._zone.temperature
         self._attr_target_temperature = self._zone.target_temperature
         self._attr_max_temp = self._zone.max_temperature_set_point_c
@@ -132,7 +148,17 @@ class GeckoClimate(GeckoEntityAvailabilityMixin, CoordinatorEntity[GeckoVesselCo
             self._attr_current_temperature,
             self._attr_target_temperature,
         )
-    
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose detailed spa-pack status and eco mode for automations."""
+        attrs: dict[str, Any] = {}
+        if self._zone.status is not None:
+            attrs["detailed_status"] = self._zone.status.name
+        if self._zone.mode is not None:
+            attrs["eco_mode"] = self._zone.mode.eco
+        return attrs
+
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""

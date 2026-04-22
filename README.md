@@ -133,11 +133,11 @@ The integration creates multiple entity types for comprehensive spa control:
 
 | Entity Type | Description | Example |
 |------------|-------------|---------|
-| **Climate** | Temperature control and monitoring | Set spa to 104°F (40°C) |
-| **Light** | LED lighting control with brightness | Adjust ambient lighting |
-| **Fan** | Pump and blower speed control | Set pump to High speed |
-| **Binary Sensor** | On/off status indicators | Gateway connected status |
-| **Select** | Mode selection (watercare, presets) | Switch to Energy Savings mode |
+| **Climate** | Temperature control and monitoring (heat pump aware `hvac_action`, extra status) | Set spa to 104°F (40°C) |
+| **Light** | LED on/off plus RGB and brightness when the zone supports it | Adjust ambient lighting |
+| **Fan** | Pump and blower speed control; optional initiator hints in attributes | Set pump to High speed |
+| **Binary Sensor** | Gateway/spa/connection status plus energy-saving mode flag | Gateway connected status |
+| **Select** | Watercare mode (updates when the spa changes mode, not only on poll) | Switch to Energy Savings mode |
 | **Sensor** | Numeric values from the cloud device shadow outside modeled zones (e.g. Waterlab / chemistry paths) | pH, ORP, or other metrics when the spa publishes them |
 
 ### Entity Examples

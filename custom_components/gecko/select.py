@@ -13,6 +13,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from gecko_iot_client.models.events import EventChannel
+
 from .const import DOMAIN
 from .coordinator import GeckoVesselCoordinator
 from .entity import GeckoEntityAvailabilityMixin
@@ -98,13 +100,48 @@ class GeckoWatercareSelectEntity(GeckoEntityAvailabilityMixin, CoordinatorEntity
         
         # Initialize availability (will be updated by mixin when added to hass)
         self._attr_available = False
+        self._operation_mode_callback_registered = False
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
         # Call parent classes - this ensures the mixin's connectivity registration happens
         await super().async_added_to_hass()
-        # Update state immediately when added
+        await self._manage_operation_mode_callback(register=True)
         await self._async_update_state()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """When entity is removed from hass."""
+        await self._manage_operation_mode_callback(register=False)
+        await super().async_will_remove_from_hass()
+
+    async def _manage_operation_mode_callback(self, register: bool) -> None:
+        """Register or unregister operation mode push updates from gecko_iot_client."""
+        if register == self._operation_mode_callback_registered:
+            return
+
+        gecko_client = await self.coordinator.get_gecko_client()
+        if not gecko_client:
+            return
+
+        if register:
+            gecko_client.on(EventChannel.OPERATION_MODE_UPDATE, self._on_operation_mode_update)
+        else:
+            gecko_client.off(EventChannel.OPERATION_MODE_UPDATE, self._on_operation_mode_update)
+
+        self._operation_mode_callback_registered = register
+
+    def _on_operation_mode_update(self, operation_mode_controller) -> None:
+        """Handle operation mode updates (may run on library background thread)."""
+        try:
+            new_option = operation_mode_controller.mode_name
+
+            def _update_and_write() -> None:
+                self._attr_current_option = new_option
+                self.async_write_ha_state()
+
+            self.hass.loop.call_soon_threadsafe(_update_and_write)
+        except Exception as e:
+            _LOGGER.debug("Error handling operation mode update for %s: %s", self._attr_name, e)
 
     @callback
     def _handle_coordinator_update(self) -> None:

@@ -132,7 +132,15 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
         _LOGGER.debug("Updating fan %s: is_on=%s, speed=%s", self._attr_name, self._attr_is_on, self._attr_speed)
         self._update_from_zone()
         self.async_write_ha_state()
-        
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Expose pump demand initiators when the spa reports them."""
+        initiators = self._zone.initiators
+        if initiators:
+            return {"initiators": [str(i) for i in initiators]}
+        return None
+
     async def async_turn_on(self, percentage: int | None = None, preset_mode: str | None = None, **kwargs) -> None:
         """Turn the fan on. Optionally set speed by percentage."""
         _LOGGER.debug("Turning on pump %s", self._attr_name)
