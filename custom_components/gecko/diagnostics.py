@@ -136,6 +136,14 @@ def _get_vessel_coordinators_diagnostics(
             entry["shadow_extension_metric_paths"] = sorted(
                 coord._shadow_metric_values.keys()
             )[:48]
+        entry["cloud_tile_metric_count"] = len(coord._cloud_tile_metrics)
+        entry["cloud_string_metric_count"] = len(coord._cloud_string_metrics)
+        entry["cloud_bool_metric_count"] = len(coord._cloud_bool_metrics)
+        if coord._cloud_tile_metrics:
+            entry["cloud_tile_metric_paths"] = sorted(
+                coord._cloud_tile_metrics.keys()
+            )[:48]
+        entry["last_cloud_poll_monotonic"] = coord._last_cloud_poll_monotonic
         out.append(entry)
     return out
 
@@ -152,6 +160,10 @@ async def async_get_config_entry_diagnostics(
             "title": config_entry.title,
             "domain": config_entry.domain,
             "state": config_entry.state.value,
+            "version": config_entry.version,
+            "has_account_id": bool(
+                str(config_entry.data.get("account_id", "")).strip()
+            ),
         },
         "vessels": _get_vessel_coordinators_diagnostics(config_entry),
         "connections": _get_connection_diagnostics(connection_manager),

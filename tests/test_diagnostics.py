@@ -83,6 +83,10 @@ def test_get_vessel_coordinators_diagnostics_with_coordinator() -> None:
         monitor_id="m1",
         _has_initial_zones=True,
         _shadow_metric_values={"zones.waterlab.z1.ph": 7.0},
+        _cloud_tile_metrics={"cloud.rest.readings.ph": 7.85},
+        _cloud_string_metrics={"cloud.rest.readings.ph.status": "high"},
+        _cloud_bool_metrics={},
+        _last_cloud_poll_monotonic=12345.0,
     )
 
     def get_all_zones():

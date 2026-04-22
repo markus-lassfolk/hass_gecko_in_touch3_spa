@@ -196,6 +196,38 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return ""
         return str(entry.data.get("account_id", "")).strip()
 
+    async def _async_lazy_resolve_account_id(self) -> str:
+        """Try once to resolve and persist account_id if missing from config entry."""
+        if getattr(self, "_account_id_resolve_attempted", False):
+            return ""
+        self._account_id_resolve_attempted = True
+        entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if not entry or not getattr(entry, "runtime_data", None):
+            return ""
+        api = entry.runtime_data.api_client
+        try:
+            user_id = await api.async_get_user_id()
+            user_data = await api.async_get_user_info(user_id)
+            acct = (user_data.get("account") or {}).get("accountId")
+            account_id = str(acct).strip() if acct else ""
+            if account_id:
+                data = dict(entry.data)
+                data["account_id"] = account_id
+                self.hass.config_entries.async_update_entry(entry, data=data)
+                _LOGGER.info(
+                    "Lazy-resolved account_id for %s (vessel %s)",
+                    self.vessel_name,
+                    self.vessel_id,
+                )
+                return account_id
+        except Exception as err:
+            _LOGGER.debug(
+                "Lazy account_id resolution failed for %s: %s",
+                self.vessel_name,
+                err,
+            )
+        return ""
+
     async def _async_poll_cloud_tiles_if_due(
         self,
         connection: GeckoMonitorConnection | None,
@@ -206,7 +238,15 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             opts.get(CONF_CLOUD_REST_POLL_INTERVAL, DEFAULT_CLOUD_REST_POLL_INTERVAL)
         )
         account_id = self._config_account_id()
+        if not account_id:
+            account_id = await self._async_lazy_resolve_account_id()
         if interval <= 0 or not account_id:
+            _LOGGER.debug(
+                "Cloud REST poll skipped for %s: interval=%d, has_account_id=%s",
+                self.vessel_name,
+                interval,
+                bool(account_id),
+            )
             return
 
         only_when_mqtt_down = bool(

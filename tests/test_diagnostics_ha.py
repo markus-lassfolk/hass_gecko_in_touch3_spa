@@ -51,6 +51,10 @@ async def test_async_get_config_entry_diagnostics_runtime_data(
         monitor_id="m1",
         _has_initial_zones=True,
         _shadow_metric_values={"zones.a": 1.0},
+        _cloud_tile_metrics={},
+        _cloud_string_metrics={},
+        _cloud_bool_metrics={},
+        _last_cloud_poll_monotonic=None,
         get_all_zones=lambda: {_ZoneType.FLOW: {}},
     )
     entry.runtime_data = SimpleNamespace(api_client=None, coordinators=[coord])
