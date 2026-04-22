@@ -150,8 +150,6 @@ class GeckoShadowMetricSensor(
         self.entity_id = f"sensor.{vessel_slug}_{path_slug}"
 
         apply_numeric_shadow_sensor_hints(self, metric_path)
-        if self._attr_device_class == SensorDeviceClass.PH:
-            self._attr_suggested_display_precision = 2
 
         chem_on = chemistry_metric_enabled_by_default(metric_path)
         diag_off = shadow_extension_diagnostic_disables_registry_default(metric_path)

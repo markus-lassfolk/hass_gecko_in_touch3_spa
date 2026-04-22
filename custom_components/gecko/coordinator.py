@@ -132,9 +132,6 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_handle_zone_update(self, data: dict[str, Any]) -> None:
         """Handle zone update in the event loop."""
-        gecko_client = await self.get_gecko_client()
-        self.sync_refresh_shadow_metrics(gecko_client)
-
         # Trigger entity discovery when zones are updated
         self.async_set_updated_data(data)
         

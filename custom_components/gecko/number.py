@@ -133,6 +133,7 @@ class GeckoUnknownZoneSetpointNumber(
         if not conn or not conn.is_connected or not conn.gecko_client:
             raise HomeAssistantError("Gecko MQTT connection is not available")
 
+        gecko_client = conn.gecko_client
         desired = {
             "zones": {
                 self._zone_type: {self._zone_id: {self._field_key: value}},
@@ -140,7 +141,7 @@ class GeckoUnknownZoneSetpointNumber(
         }
 
         def _pub() -> None:
-            conn.gecko_client.transporter.publish_desired_state(desired)
+            gecko_client.transporter.publish_desired_state(desired)
 
         await self.hass.async_add_executor_job(_pub)
         self._attr_native_value = value
