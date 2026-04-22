@@ -617,8 +617,10 @@ def infer_number_setpoint_limits(path: str, leaf: str) -> tuple[float, float, fl
     lk = leaf.lower()
     if "ph" in lower or lk == "ph" or lk.startswith("ph"):
         return 0.0, 14.0, 0.1
-    if any(t in lower for t in ("temp", "setpoint", "target")) or any(
-        t in lk for t in ("temp", "setpoint", "target")
+    if "orp" in lower:
+        return 0.0, 1000.0, 1.0
+    if any(t in lower for t in ("temp", "temperature")) or any(
+        t in lk for t in ("temp", "temperature")
     ):
         return 4.0, 42.0, 0.5
     return 0.0, 100.0, 1.0

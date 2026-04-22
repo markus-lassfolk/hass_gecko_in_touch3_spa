@@ -189,7 +189,7 @@ class ConfigFlow(
         return GeckoOptionsFlow(config_entry)
 
 
-class GeckoOptionsFlow(config_entries.OptionsFlowWithConfigEntry):
+class GeckoOptionsFlow(config_entries.OptionsFlow):
     """Integration options (REST poll for app-style tiles when MQTT is quiet)."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):

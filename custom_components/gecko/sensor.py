@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -143,9 +144,10 @@ class GeckoShadowMetricSensor(
             "shadow_path": metric_path,
             "gecko_diagnostic_group": classify_gecko_shadow_metric(metric_path),
         }
+        path_hash = hashlib.sha256(metric_path.encode("utf-8")).hexdigest()[:8]
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_"
-            f"{metric_path.replace('.', '_')}"
+            f"{metric_path.replace('.', '_')}_{path_hash}"
         )
         self.entity_id = f"sensor.{vessel_slug}_{path_slug}"
 

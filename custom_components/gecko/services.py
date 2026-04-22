@@ -160,7 +160,7 @@ async def async_handle_publish_zone_desired(hass: HomeAssistant, call: ServiceCa
     zone_id = str(call.data[ATTR_ZONE_ID])
     updates = call.data[ATTR_UPDATES]
     desired = {"zones": {zone_type: {zone_id: updates}}}
-    client.transporter.publish_desired_state(desired)
+    await hass.async_add_executor_job(client.transporter.publish_desired_state, desired)
 
 
 async def async_handle_publish_feature_desired(
@@ -171,7 +171,7 @@ async def async_handle_publish_feature_desired(
     client = await _async_client_for_monitor_from_call(hass, call)
     updates = call.data[ATTR_UPDATES]
     desired = {"features": updates}
-    client.transporter.publish_desired_state(desired)
+    await hass.async_add_executor_job(client.transporter.publish_desired_state, desired)
 
 
 async def async_handle_publish_desired_state(
@@ -181,7 +181,7 @@ async def async_handle_publish_desired_state(
     _validate_config_entry(hass, call)
     client = await _async_client_for_monitor_from_call(hass, call)
     fragment = call.data[ATTR_DESIRED_FRAGMENT]
-    client.transporter.publish_desired_state(fragment)
+    await hass.async_add_executor_job(client.transporter.publish_desired_state, fragment)
 
 
 DUMP_SHADOW_SCHEMA = vol.Schema(
