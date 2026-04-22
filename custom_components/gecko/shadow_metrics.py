@@ -364,6 +364,147 @@ def shadow_topology_summary(state_data: dict[str, Any] | None) -> dict[str, Any]
     return summary
 
 
+_CAMEL_SPLIT_RE = re.compile(
+    r"(?<=[a-z])(?=[A-Z])"         # aB -> a B
+    r"|(?<=[A-Z])(?=[A-Z][a-z])"   # ABc -> A Bc
+    r"|(?<=[a-zA-Z])(?=[0-9])"     # Ph7 -> Ph 7
+    r"|(?<=[0-9])(?=[A-Z])"        # 7P -> 7 P
+)
+
+_KNOWN_ABBREVIATIONS: dict[str, str] = {
+    "mv": "mV",
+    "ph": "pH",
+    "orp": "ORP",
+    "id": "ID",
+    "url": "URL",
+    "ip": "IP",
+    "rf": "RF",
+    "rssi": "RSSI",
+    "lqi": "LQI",
+    "snr": "SNR",
+    "uv": "UV",
+    "kwh": "kWh",
+    "hz": "Hz",
+    "tds": "TDS",
+    "r0": "R₀",
+    "t0": "T₀",
+    "psi": "PSI",
+    "lsi": "LSI",
+    "stc": "STC",
+    "wifi": "WiFi",
+}
+
+_AMBIGUOUS_LEAVES = frozenset({
+    "id", "channel", "strength", "offset", "beta", "status",
+    "value", "state", "mode", "type", "name", "level", "count",
+    "r0", "t0", "reading", "n",
+})
+
+_CONTEXT_ALIASES: dict[str, str] = {
+    "connectivity": "Conn.",
+    "features": "",
+    "waterlab": "Waterlab",
+    "sensor": "",
+    "therm": "Thermistor",
+    "zones": "",
+    "cloud": "",
+    "rest": "",
+    "readings": "",
+}
+
+_CONTEXT_PROMOTING_PARENTS = frozenset({
+    "waterlab", "therm", "ph", "orp", "cloud", "rest",
+})
+
+
+def _split_camel(name: str) -> str:
+    """Split camelCase / PascalCase into space-separated words.
+
+    Short tokens (<=3 chars, e.g. ``z1``, ``pH``) are kept intact.
+    """
+    if len(name) <= 3:
+        return name
+    return _CAMEL_SPLIT_RE.sub(" ", name)
+
+
+def _titlecase_with_abbrevs(words: str) -> str:
+    """Title-case a string while preserving known abbreviations.
+
+    Checks multi-word abbreviation matches first (e.g. "R 0" -> "R₀"),
+    then falls back to per-word processing.
+    """
+    collapsed = re.sub(r"\s+", "", words).lower()
+    if collapsed in _KNOWN_ABBREVIATIONS:
+        return _KNOWN_ABBREVIATIONS[collapsed]
+
+    parts = words.split()
+    out: list[str] = []
+    for w in parts:
+        low = w.lower()
+        if low in _KNOWN_ABBREVIATIONS:
+            out.append(_KNOWN_ABBREVIATIONS[low])
+        elif low == "per":
+            out.append("/")
+        elif low == "at":
+            out.append("at")
+        else:
+            out.append(w.capitalize())
+    merged: list[str] = []
+    for tok in out:
+        if tok == "/" and merged:
+            merged[-1] = merged[-1] + "/"
+        elif merged and merged[-1].endswith("/"):
+            merged[-1] = merged[-1] + tok
+        else:
+            merged.append(tok)
+    return " ".join(merged)
+
+
+def humanize_shadow_path(path: str) -> str:
+    """Produce a user-friendly entity name from a dotted shadow metric path.
+
+    Examples::
+
+        features.waterlab.sensor.ph.offsetMv      -> Waterlab pH Offset mV
+        connectivity.vesselStatus                  -> Vessel Status
+        features.waterlab.sensor.therm.R0          -> Waterlab Thermistor R₀
+        features.waterlab.sensor.ph.slopeMvPerPh   -> Waterlab pH Slope mV/pH
+        connectivity.strength                      -> Conn. Signal Strength
+        features.operationMode                     -> Operation Mode
+        cloud.rest.temperature                     -> Cloud Temperature
+    """
+    segments = path.split(".")
+    leaf = segments[-1] if segments else path
+    leaf_words = _split_camel(leaf).replace("_", " ").strip()
+
+    leaf_lower = leaf.lower()
+    needs_context = leaf_lower in _AMBIGUOUS_LEAVES or len(leaf_lower) <= 2
+    has_promoting_parent = any(
+        s.lower() in _CONTEXT_PROMOTING_PARENTS for s in segments[:-1]
+    )
+    needs_context = needs_context or has_promoting_parent
+
+    context_parts: list[str] = []
+    if needs_context and len(segments) > 1:
+        for seg in segments[:-1]:
+            alias = _CONTEXT_ALIASES.get(seg.lower())
+            if alias is not None:
+                if alias:
+                    context_parts.append(alias)
+            else:
+                nice = _split_camel(seg).replace("_", " ").strip()
+                context_parts.append(_titlecase_with_abbrevs(nice))
+
+    if leaf_lower == "strength" and any(
+        s.lower() in ("connectivity", "rf", "signal") for s in segments
+    ):
+        leaf_words = "Signal Strength"
+
+    result_parts = context_parts + [_titlecase_with_abbrevs(leaf_words)]
+    name = " ".join(result_parts)
+    return name if name else path
+
+
 def metric_path_to_entity_slug(path: str, max_len: int = 48) -> str:
     """Turn a metric path into a safe unique entity name suffix.
 
@@ -406,6 +547,7 @@ def infer_sensor_metadata(
         or lower.endswith("_temp")
         or "temp_" in lower
         or re.search(r"\btemp\b", lower)
+        or "temp" in segs
     ):
         device_class = SensorDeviceClass.TEMPERATURE
         unit = UnitOfTemperature.CELSIUS
@@ -463,6 +605,16 @@ def infer_sensor_metadata(
         if dur_dc is not None:
             device_class = dur_dc
         unit = "s" if "second" in lower or lower.endswith("sec") else "min"
+
+    if device_class is None and lower.startswith("cloud.rest.readings."):
+        reading_key = path.split(".")[-1].lower()
+        _READINGS_PPM = frozenset({
+            "totalalkalinity", "totalhardness", "freechlorine",
+            "totalchlorine", "cyanuricacid", "calciumhardness",
+            "adjustedtotalalkalinity",
+        })
+        if reading_key in _READINGS_PPM:
+            unit = "ppm"
 
     return device_class, unit
 
@@ -600,6 +752,16 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
         tail in lower for tail in (".ph", ".orp", "orp_mv", "temp_c", "disc_elements.")
     ):
         return True
+    if lower.startswith("cloud.rest.readings."):
+        reading_key = path.split(".")[-1].lower()
+        if reading_key in (
+            "watertemp", "lsi", "phstc20",
+            "freechlorine", "totalchlorine",
+            "totalalkalinity", "totalhardness",
+            "cyanuricacid", "calciumhardness",
+            "adjustedtotalalkalinity",
+        ):
+            return True
     return False
 
 

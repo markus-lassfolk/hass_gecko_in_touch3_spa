@@ -25,8 +25,8 @@ DOMAIN = "gecko"
 # Config entry options (REST enrichment; IDs always from entry data at runtime)
 CONF_CLOUD_REST_POLL_INTERVAL = "cloud_rest_poll_interval"
 CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN = "cloud_rest_only_when_mqtt_down"
-DEFAULT_CLOUD_REST_POLL_INTERVAL = 0
-DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN = True
+DEFAULT_CLOUD_REST_POLL_INTERVAL = 300
+DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN = False
 
 # Optional REST poll for account unread messages + per-vessel actions (not history).
 CONF_ALERTS_POLL_INTERVAL = "alerts_poll_interval"

@@ -103,3 +103,115 @@ def test_disc_elements_snake_case_under_status() -> None:
 def test_extract_strings_status_not_dict() -> None:
     vessel = {"status": "ok"}
     assert cloud_tiles.extract_cloud_tile_strings(vessel) == {}
+
+
+_V6_VESSEL_DETAIL = {
+    "vesselId": 25657,
+    "readings": {
+        "ph": {
+            "readingType": "ph",
+            "value": 7.85,
+            "unit": "ph",
+            "status": "high",
+            "abbreviation": "pH",
+            "title": "pH",
+            "source": "monitor",
+        },
+        "orp": {
+            "readingType": "orp",
+            "value": 198,
+            "unit": "mV",
+            "status": "really_low",
+            "abbreviation": "ORP",
+            "title": "Oxidation Reduction Potential",
+            "source": "monitor",
+        },
+        "waterTemp": {
+            "readingType": "waterTemp",
+            "value": 29,
+            "unit": "C",
+            "status": "ok",
+            "title": "Water Temperature",
+            "source": "monitor",
+        },
+        "totalAlkalinity": {
+            "readingType": "totalAlkalinity",
+            "value": 120,
+            "unit": "ppm",
+            "status": "ok",
+            "title": "Total Alkalinity",
+            "source": "report",
+        },
+        "freeChlorine": {
+            "readingType": "freeChlorine",
+            "value": 0,
+            "unit": "ppm",
+            "status": "really_low",
+            "title": "Free Chlorine",
+            "source": "report",
+        },
+        "lsi": {
+            "readingType": "lsi",
+            "value": -0.45,
+            "unit": "lsi",
+            "status": "really_low",
+            "title": "Langelier Saturation Index",
+            "source": "computed",
+        },
+        "wifiRssi": {
+            "readingType": "wifiRssi",
+            "value": 82,
+            "unit": "db",
+            "status": "ok",
+            "title": "WiFi RSSI",
+            "source": "monitor",
+        },
+    },
+    "monitorReadings": {
+        "ph": {
+            "readingType": "ph",
+            "value": 7.85,
+            "unit": "ph",
+        },
+    },
+}
+
+
+def test_extract_vessel_readings_metrics() -> None:
+    m = cloud_tiles.extract_vessel_readings_metrics(_V6_VESSEL_DETAIL)
+    assert m["cloud.rest.readings.ph"] == 7.85
+    assert m["cloud.rest.readings.orp"] == 198
+    assert m["cloud.rest.readings.waterTemp"] == 29
+    assert m["cloud.rest.readings.totalAlkalinity"] == 120
+    assert m["cloud.rest.readings.freeChlorine"] == 0
+    assert m["cloud.rest.readings.lsi"] == -0.45
+    assert m["cloud.rest.readings.wifiRssi"] == 82
+
+
+def test_extract_vessel_readings_metrics_empty() -> None:
+    assert cloud_tiles.extract_vessel_readings_metrics({}) == {}
+    assert cloud_tiles.extract_vessel_readings_metrics("bad") == {}
+
+
+def test_extract_vessel_readings_no_duplicate_from_monitor_readings() -> None:
+    """readings takes priority; monitorReadings should not overwrite."""
+    m = cloud_tiles.extract_vessel_readings_metrics(_V6_VESSEL_DETAIL)
+    assert m["cloud.rest.readings.ph"] == 7.85
+
+
+def test_extract_vessel_readings_strings() -> None:
+    s = cloud_tiles.extract_vessel_readings_strings(_V6_VESSEL_DETAIL)
+    assert s["cloud.rest.readings.ph.status"] == "high"
+    assert s["cloud.rest.readings.ph.title"] == "pH"
+    assert s["cloud.rest.readings.ph.source"] == "monitor"
+    assert s["cloud.rest.readings.orp.abbreviation"] == "ORP"
+    assert s["cloud.rest.readings.waterTemp.title"] == "Water Temperature"
+
+
+def test_extract_vessel_readings_strings_empty() -> None:
+    assert cloud_tiles.extract_vessel_readings_strings({}) == {}
+
+
+def test_is_wifi_diagnostic_reading() -> None:
+    assert cloud_tiles.is_wifi_diagnostic_reading("wifiRssi") is True
+    assert cloud_tiles.is_wifi_diagnostic_reading("ph") is False

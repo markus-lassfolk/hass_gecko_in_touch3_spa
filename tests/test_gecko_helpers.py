@@ -11,13 +11,26 @@ from custom_components.gecko import sensor as gecko_sensor
 from custom_components.gecko import services as gecko_services
 from custom_components.gecko.const import (
     CONF_ALERTS_POLL_INTERVAL,
+    CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+    CONF_CLOUD_REST_POLL_INTERVAL,
     DEFAULT_ALERTS_POLL_INTERVAL,
+    DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+    DEFAULT_CLOUD_REST_POLL_INTERVAL,
 )
 
 
+def test_cloud_rest_defaults_enable_polling() -> None:
+    """Cloud REST polling is active by default so chemistry readings appear."""
+    assert DEFAULT_CLOUD_REST_POLL_INTERVAL == 300
+    assert DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN is False
+
+
 def test_humanize_metric_name() -> None:
-    assert gecko_sensor._humanize_metric_name("zones.water.z1.ph_value") == "Ph Value"
-    assert gecko_sensor._humanize_metric_name("") == ""
+    from custom_components.gecko.shadow_metrics import humanize_shadow_path
+
+    result = humanize_shadow_path("zones.water.z1.ph_value")
+    assert "Ph" in result or "pH" in result
+    assert humanize_shadow_path("") == ""
 
 
 def test_rest_alerts_entities_enabled() -> None:

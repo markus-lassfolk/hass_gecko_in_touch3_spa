@@ -187,6 +187,65 @@ def extract_cloud_tile_metrics(vessel: dict[str, Any]) -> dict[str, float | int]
     return out
 
 
+_WIFI_DIAGNOSTIC_READINGS = frozenset({"wifiRssi", "wifi_rssi"})
+
+
+def extract_vessel_readings_metrics(
+    vessel: dict[str, Any],
+) -> dict[str, float | int]:
+    """Numeric values from the v6 ``readings`` / ``monitorReadings`` objects.
+
+    Produces paths like ``cloud.rest.readings.ph``, ``cloud.rest.readings.orp``,
+    ``cloud.rest.readings.waterTemp``, etc.
+    """
+    out: dict[str, float | int] = {}
+    if not isinstance(vessel, dict):
+        return out
+    for readings_key in ("readings", "monitorReadings", "reportReadings"):
+        readings = vessel.get(readings_key)
+        if not isinstance(readings, dict):
+            continue
+        for key, entry in readings.items():
+            if not isinstance(key, str) or not isinstance(entry, dict):
+                continue
+            path = f"cloud.rest.readings.{key}"
+            if path in out:
+                continue
+            n = _num(entry.get("value"))
+            if n is not None:
+                out[path] = n
+    return out
+
+
+def extract_vessel_readings_strings(
+    vessel: dict[str, Any],
+) -> dict[str, str]:
+    """Status / title strings from v6 ``readings``.
+
+    Produces paths like ``cloud.rest.readings.ph.status`` = "high",
+    ``cloud.rest.readings.ph.title`` = "pH", etc.
+    """
+    out: dict[str, str] = {}
+    if not isinstance(vessel, dict):
+        return out
+    readings = vessel.get("readings")
+    if not isinstance(readings, dict):
+        return out
+    for key, entry in readings.items():
+        if not isinstance(key, str) or not isinstance(entry, dict):
+            continue
+        for leaf in ("status", "title", "unit", "abbreviation", "source"):
+            s = _string_leaf(entry.get(leaf))
+            if s:
+                out[f"cloud.rest.readings.{key}.{leaf}"] = s
+    return out
+
+
+def is_wifi_diagnostic_reading(reading_key: str) -> bool:
+    """True for readings that are WiFi/RF diagnostics, not chemistry."""
+    return reading_key in _WIFI_DIAGNOSTIC_READINGS
+
+
 def find_vessel_record(
     vessels: list[dict[str, Any]], vessel_id: str | int
 ) -> dict[str, Any] | None:

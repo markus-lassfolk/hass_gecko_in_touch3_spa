@@ -336,3 +336,70 @@ def test_string_extension_cloud_rest_mode_token() -> None:
 
 def test_metric_path_to_entity_slug_empty_path() -> None:
     assert shadow_metrics.metric_path_to_entity_slug("...") == "metric"
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("features.waterlab.sensor.ph.offsetMv", "Waterlab pH Offset mV"),
+        ("features.waterlab.sensor.ph.slopeMvPerPh", "Waterlab pH Slope mV/pH"),
+        ("features.waterlab.sensor.ph.offsetMvAtPh7", "Waterlab pH Offset mV at pH 7"),
+        ("features.waterlab.sensor.therm.R0", "Waterlab Thermistor R₀"),
+        ("features.waterlab.sensor.therm.T0", "Waterlab Thermistor T₀"),
+        ("features.waterlab.sensor.therm.beta", "Waterlab Thermistor Beta"),
+        ("connectivity.vesselStatus", "Vessel Status"),
+        ("connectivity.gatewayStatus", "Gateway Status"),
+        ("connectivity.channel", "Conn. Channel"),
+        ("connectivity.id", "Conn. ID"),
+        ("connectivity.strength", "Conn. Signal Strength"),
+        ("features.operationMode", "Operation Mode"),
+        ("cloud.rest.temperature", "Temperature"),
+        ("zones.waterlab.z1.reading", "Waterlab Z1 Reading"),
+        ("features.extra.n", "Extra N"),
+        ("cloud.rest.readings.ph", "pH"),
+        ("cloud.rest.readings.waterTemp", "Water Temp"),
+        ("cloud.rest.readings.totalAlkalinity", "Total Alkalinity"),
+        ("cloud.rest.readings.lsi", "LSI"),
+        ("cloud.rest.readings.wifiRssi", "WiFi RSSI"),
+    ],
+)
+def test_humanize_shadow_path(path: str, expected: str) -> None:
+    assert shadow_metrics.humanize_shadow_path(path) == expected
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("cloud.rest.readings.ph", True),
+        ("cloud.rest.readings.orp", True),
+        ("cloud.rest.readings.waterTemp", True),
+        ("cloud.rest.readings.totalAlkalinity", True),
+        ("cloud.rest.readings.freeChlorine", True),
+        ("cloud.rest.readings.lsi", True),
+        ("cloud.rest.readings.wifiRssi", False),
+        ("cloud.rest.summary.ph", True),
+        ("cloud.rest.summary.orp_mv", True),
+    ],
+)
+def test_chemistry_metric_enabled_readings(path: str, expected: bool) -> None:
+    assert shadow_metrics.chemistry_metric_enabled_by_default(path) is expected
+
+
+@pytest.mark.parametrize(
+    ("path", "dc", "unit"),
+    [
+        ("cloud.rest.readings.ph", "ph", None),
+        ("cloud.rest.readings.orp", "voltage", "mV"),
+        ("cloud.rest.readings.waterTemp", "temperature", "°C"),
+        ("cloud.rest.readings.totalAlkalinity", None, "ppm"),
+        ("cloud.rest.readings.freeChlorine", None, "ppm"),
+        ("cloud.rest.readings.lsi", None, None),
+    ],
+)
+def test_infer_sensor_metadata_readings(path, dc, unit) -> None:
+    result_dc, result_unit = shadow_metrics.infer_sensor_metadata(path)
+    if dc is None:
+        assert result_dc is None
+    else:
+        assert result_dc is not None and result_dc.value == dc
+    assert result_unit == unit

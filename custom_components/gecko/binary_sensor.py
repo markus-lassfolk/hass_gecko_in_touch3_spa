@@ -24,6 +24,7 @@ from .entity import GeckoEntityAvailabilityMixin
 from .shadow_metrics import (
     binary_extension_enabled_by_default,
     classify_gecko_shadow_metric,
+    humanize_shadow_path,
     infer_binary_sensor_device_class,
     metric_path_to_entity_slug,
 )
@@ -271,8 +272,7 @@ class GeckoShadowBoolBinarySensor(
     ) -> None:
         super().__init__(coordinator)
         self._path = path
-        tail = path.split(".")[-1]
-        self._attr_name = tail.replace("_", " ").strip().title() or tail
+        self._attr_name = humanize_shadow_path(path)
         path_hash = hashlib.sha256(path.encode("utf-8")).hexdigest()[:8]
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_"

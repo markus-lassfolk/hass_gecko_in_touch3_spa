@@ -23,6 +23,7 @@ from .shadow_metrics import (
     apply_numeric_shadow_sensor_hints,
     chemistry_metric_enabled_by_default,
     classify_gecko_shadow_metric,
+    humanize_shadow_path,
     metric_path_to_entity_slug,
     shadow_extension_diagnostic_disables_registry_default,
     shadow_metric_icon,
@@ -30,12 +31,6 @@ from .shadow_metrics import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _humanize_metric_name(path: str) -> str:
-    """Short display name from dotted path."""
-    tail = path.split(".")[-1]
-    return tail.replace("_", " ").strip().title() or path
 
 
 async def async_setup_entry(
@@ -137,7 +132,7 @@ class GeckoShadowMetricSensor(
         self._metric_path = metric_path
         self._config_entry = config_entry
 
-        self._attr_name = _humanize_metric_name(metric_path)
+        self._attr_name = humanize_shadow_path(metric_path)
         self._attr_extra_state_attributes = {
             "shadow_path": metric_path,
             "gecko_diagnostic_group": classify_gecko_shadow_metric(metric_path),
@@ -205,7 +200,7 @@ class GeckoShadowStringSensor(
         super().__init__(coordinator)
         self._path = path
         self._config_entry = config_entry
-        self._attr_name = _humanize_metric_name(path)
+        self._attr_name = humanize_shadow_path(path)
         path_hash = hashlib.sha256(path.encode("utf-8")).hexdigest()[:8]
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_"
