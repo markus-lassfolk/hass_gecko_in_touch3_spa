@@ -25,8 +25,8 @@ DOMAIN = "gecko"
 # Config entry options (REST enrichment; IDs always from entry data at runtime)
 CONF_CLOUD_REST_POLL_INTERVAL = "cloud_rest_poll_interval"
 CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN = "cloud_rest_only_when_mqtt_down"
-DEFAULT_CLOUD_REST_POLL_INTERVAL = 0
-DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN = True
+DEFAULT_CLOUD_REST_POLL_INTERVAL = 300
+DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN = False
 
 # Optional REST poll for account unread messages + per-vessel actions (not history).
 CONF_ALERTS_POLL_INTERVAL = "alerts_poll_interval"
@@ -42,5 +42,17 @@ API_BASE_URL = "https://api.geckowatermonitor.com"
 
 # Client configuration
 CONFIG_TIMEOUT = (
-    10.0  # Default timeout for GeckoIotClient configuration loading in seconds
+    20.0  # Default timeout for GeckoIotClient configuration loading in seconds
 )
+
+# Home Assistant core rejects ``Sensor.native_value`` strings longer than this.
+MAX_SENSOR_STATE_LENGTH = 255
+
+
+def clamp_sensor_native_str(value: str, max_len: int = MAX_SENSOR_STATE_LENGTH) -> str:
+    """Clamp string sensor state to a length Home Assistant accepts."""
+    if len(value) <= max_len:
+        return value
+    if max_len <= 3:
+        return value[:max_len]
+    return value[: max_len - 3] + "..."

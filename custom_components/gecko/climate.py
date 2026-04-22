@@ -124,7 +124,8 @@ class GeckoClimate(
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, str(coordinator.vessel_id))}
         )
-        self._attr_name = f"Thermostat {zone.id}"
+        self._attr_translation_key = "thermostat"
+        self._attr_translation_placeholders = {"zone_id": str(zone.id)}
 
         # Set temperature limits
         self._attr_min_temp = self._zone.min_temperature_set_point_c
@@ -209,6 +210,7 @@ class GeckoClimate(
                 f"Unsupported HVAC mode: {hvac_mode}. Only HEAT mode is supported.",
                 translation_domain=DOMAIN,
                 translation_key="unsupported_hvac_mode",
+                translation_placeholders={"hvac_mode": str(hvac_mode)},
             )
 
         # HEAT mode is the only supported mode and is always active

@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from typing import Literal
 
+from gecko_iot_client.models.zone_types import ZoneType
 from homeassistant.components.sensor import (
+    SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory
+from homeassistant.const import EntityCategory, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -23,7 +26,7 @@ from .shadow_metrics import (
     apply_numeric_shadow_sensor_hints,
     chemistry_metric_enabled_by_default,
     classify_gecko_shadow_metric,
-    metric_path_to_entity_slug,
+    humanize_shadow_path,
     shadow_extension_diagnostic_disables_registry_default,
     shadow_metric_icon,
     string_extension_enabled_by_default,
@@ -31,11 +34,73 @@ from .shadow_metrics import (
 
 _LOGGER = logging.getLogger(__name__)
 
+SpaTempKind = Literal["target", "current"]
 
-def _humanize_metric_name(path: str) -> str:
-    """Short display name from dotted path."""
-    tail = path.split(".")[-1]
-    return tail.replace("_", " ").strip().title() or path
+
+class GeckoSpaTemperatureSensor(
+    GeckoEntityAvailabilityMixin, CoordinatorEntity, SensorEntity
+):
+    """Numeric mirror of spa thermostat zone temps for cards that only accept ``sensor``."""
+
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 1
+
+    def __init__(
+        self,
+        coordinator: GeckoVesselCoordinator,
+        config_entry: ConfigEntry,
+        zone_id: int,
+        kind: SpaTempKind,
+    ) -> None:
+        super().__init__(coordinator)
+        self._zone_id = zone_id
+        self._kind: SpaTempKind = kind
+        self._attr_translation_key = (
+            "spa_target_temperature" if kind == "target" else "spa_current_temperature"
+        )
+        self._attr_translation_placeholders = {"zone_id": str(zone_id)}
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{coordinator.vessel_id}_"
+            f"spa_{kind}_temperature_{zone_id}"
+        )
+        self._attr_device_info = dr.DeviceInfo(
+            identifiers={(DOMAIN, str(coordinator.vessel_id))},
+        )
+        self._attr_available = False
+        self._update_native_value()
+
+    def _get_zone(self):
+        for z in self.coordinator.get_zones_by_type(ZoneType.TEMPERATURE_CONTROL_ZONE):
+            if getattr(z, "id", None) == self._zone_id:
+                return z
+        return None
+
+    def _update_native_value(self) -> None:
+        zone = self._get_zone()
+        if not zone:
+            self._attr_native_value = None
+            return
+        try:
+            if self._kind == "target":
+                raw = getattr(zone, "target_temperature", None)
+            else:
+                raw = getattr(zone, "temperature", None)
+            self._attr_native_value = float(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            self._attr_native_value = None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._update_native_value()
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._update_native_value()
 
 
 async def async_setup_entry(
@@ -54,6 +119,7 @@ async def async_setup_entry(
         return
 
     initial_entities: list[SensorEntity] = []
+    spa_temp_zone_ids: dict[str, set[int]] = {}
 
     for coordinator in coordinators:
         pending = coordinator.take_pending_new_metric_paths()
@@ -90,6 +156,44 @@ async def async_setup_entry(
                 )
 
         coordinator.register_shadow_metric_callback(_on_shadow_metric_discovery)
+
+        def _discover_spa_temperature_sensors(
+            coord: GeckoVesselCoordinator = coordinator,
+        ) -> None:
+            vessel_key = f"{coord.entry_id}_{coord.vessel_id}"
+            if vessel_key not in spa_temp_zone_ids:
+                spa_temp_zone_ids[vessel_key] = set()
+            zones = coord.get_zones_by_type(ZoneType.TEMPERATURE_CONTROL_ZONE)
+            new_entities: list[SensorEntity] = []
+            for zone in zones:
+                zid = getattr(zone, "id", None)
+                if zid is None:
+                    continue
+                zid_int = int(zid)
+                if zid_int in spa_temp_zone_ids[vessel_key]:
+                    continue
+                new_entities.extend(
+                    [
+                        GeckoSpaTemperatureSensor(
+                            coord, config_entry, zid_int, "target"
+                        ),
+                        GeckoSpaTemperatureSensor(
+                            coord, config_entry, zid_int, "current"
+                        ),
+                    ]
+                )
+                spa_temp_zone_ids[vessel_key].add(zid_int)
+            if new_entities:
+                async_add_entities(new_entities)
+
+        _discover_spa_temperature_sensors()
+
+        def _on_zone_update_discover_spa_temps(
+            coord: GeckoVesselCoordinator = coordinator,
+        ) -> None:
+            _discover_spa_temperature_sensors(coord)
+
+        coordinator.register_zone_update_callback(_on_zone_update_discover_spa_temps)
 
     if initial_entities:
         async_add_entities(initial_entities)
@@ -137,11 +241,7 @@ class GeckoShadowMetricSensor(
         self._metric_path = metric_path
         self._config_entry = config_entry
 
-        vessel_slug = (
-            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
-        )
-        path_slug = metric_path_to_entity_slug(metric_path)
-        self._attr_name = _humanize_metric_name(metric_path)
+        self._attr_name = humanize_shadow_path(metric_path)
         self._attr_extra_state_attributes = {
             "shadow_path": metric_path,
             "gecko_diagnostic_group": classify_gecko_shadow_metric(metric_path),
@@ -151,8 +251,6 @@ class GeckoShadowMetricSensor(
             f"{config_entry.entry_id}_{coordinator.monitor_id}_"
             f"{metric_path.replace('.', '_')}_{path_hash}"
         )
-        self.entity_id = f"sensor.{vessel_slug}_{path_slug}"
-
         apply_numeric_shadow_sensor_hints(self, metric_path)
 
         chem_on = chemistry_metric_enabled_by_default(metric_path)
@@ -211,17 +309,12 @@ class GeckoShadowStringSensor(
         super().__init__(coordinator)
         self._path = path
         self._config_entry = config_entry
-        vessel_slug = (
-            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
-        )
-        path_slug = metric_path_to_entity_slug(path)
-        self._attr_name = _humanize_metric_name(path)
+        self._attr_name = humanize_shadow_path(path)
         path_hash = hashlib.sha256(path.encode("utf-8")).hexdigest()[:8]
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_"
             f"str_{path.replace('.', '_')}_{path_hash}"
         )
-        self.entity_id = f"sensor.{vessel_slug}_str_{path_slug}"
         self._attr_extra_state_attributes = {
             "shadow_path": path,
             "gecko_diagnostic_group": classify_gecko_shadow_metric(path),
@@ -264,14 +357,10 @@ class GeckoRestActiveAlertsSensor(CoordinatorEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator)
         self._config_entry = config_entry
-        vessel_slug = (
-            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
-        )
-        self._attr_name = "Active alerts (REST)"
+        self._attr_translation_key = "active_alerts_rest"
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_rest_active_alerts"
         )
-        self.entity_id = f"sensor.{vessel_slug}_rest_active_alerts"
         self._attr_icon = "mdi:bell-badge"
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, str(coordinator.vessel_id))},

@@ -12,6 +12,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from .const import clamp_sensor_native_str
+
 
 def _num(v: Any) -> float | int | None:
     if isinstance(v, bool) or v is None:
@@ -86,11 +88,9 @@ def _temp_c(disc: dict[str, Any], status: dict[str, Any]) -> float | int | None:
 def _string_leaf(v: Any) -> str | None:
     if isinstance(v, str) and v.strip():
         s = v.strip()
-        if len(s) > 256:
-            return None
         if s.startswith("eyJ"):
             return None
-        return s
+        return clamp_sensor_native_str(s)
     return None
 
 
@@ -184,6 +184,152 @@ def extract_cloud_tile_metrics(vessel: dict[str, Any]) -> dict[str, float | int]
     if orp is not None:
         out["cloud.rest.summary.orp_mv"] = orp
 
+    return out
+
+
+def _iter_readings_dicts(vessel: dict[str, Any]):
+    """Yield (key, readings_dict) from both top-level and status-nested locations."""
+    readings_root_keys = (
+        "readings",
+        "monitorReadings",
+        "reportReadings",
+        "computedReadings",
+    )
+    for rk in readings_root_keys:
+        rd = vessel.get(rk)
+        if isinstance(rd, dict):
+            yield rk, rd
+    status = vessel.get("status")
+    if isinstance(status, dict):
+        for rk in readings_root_keys:
+            rd = status.get(rk)
+            if isinstance(rd, dict):
+                yield rk, rd
+
+
+def extract_vessel_readings_metrics(
+    vessel: dict[str, Any],
+) -> dict[str, float | int]:
+    """Numeric values from the v6 ``readings`` / ``monitorReadings`` objects.
+
+    Looks both at the top level and inside ``status`` (the v6 vessel detail
+    nests readings under ``status.readings``).
+
+    Produces paths like ``cloud.rest.readings.ph``, ``cloud.rest.readings.orp``,
+    ``cloud.rest.readings.waterTemp``, etc.
+    """
+    out: dict[str, float | int] = {}
+    if not isinstance(vessel, dict):
+        return out
+    for _rk, readings in _iter_readings_dicts(vessel):
+        for key, entry in readings.items():
+            if not isinstance(key, str) or not isinstance(entry, dict):
+                continue
+            path = f"cloud.rest.readings.{key}"
+            if path in out:
+                continue
+            n = _num(entry.get("value"))
+            if n is not None:
+                out[path] = n
+    return out
+
+
+def extract_vessel_readings_strings(
+    vessel: dict[str, Any],
+) -> dict[str, str]:
+    """Status / title strings from v6 ``readings``.
+
+    Produces paths like ``cloud.rest.readings.ph.status`` = "high",
+    ``cloud.rest.readings.ph.title`` = "pH", etc.
+    """
+    out: dict[str, str] = {}
+    if not isinstance(vessel, dict):
+        return out
+    for _rk, readings in _iter_readings_dicts(vessel):
+        for key, entry in readings.items():
+            if not isinstance(key, str) or not isinstance(entry, dict):
+                continue
+            for leaf in ("status", "title", "unit", "abbreviation", "source"):
+                full_path = f"cloud.rest.readings.{key}.{leaf}"
+                if full_path in out:
+                    continue
+                s = _string_leaf(entry.get(leaf))
+                if s:
+                    out[full_path] = s
+    return out
+
+
+def extract_vessel_action_strings(
+    vessel: dict[str, Any],
+) -> dict[str, str]:
+    """Action titles and instructions from v6 ``status.actions``.
+
+    Produces paths like ``cloud.rest.actions.lower_ph`` = "Lower Your pH"
+    and ``cloud.rest.actions.lower_ph.instructions`` = joined instruction text.
+    """
+    out: dict[str, str] = {}
+    if not isinstance(vessel, dict):
+        return out
+    status = _status_dict(vessel)
+    actions = status.get("actions")
+    if not isinstance(actions, list):
+        return out
+    for action in actions:
+        if not isinstance(action, dict):
+            continue
+        atype = action.get("type")
+        if not isinstance(atype, str) or not atype.strip():
+            continue
+        title = _string_leaf(action.get("title"))
+        if title:
+            out[f"cloud.rest.actions.{atype}"] = title
+        instructions = action.get("instructions")
+        joined: str | None = None
+        if isinstance(instructions, list):
+            texts = [
+                _string_leaf(i.get("text")) for i in instructions if isinstance(i, dict)
+            ]
+            joined = " | ".join(t for t in texts if t) or None
+        elif isinstance(instructions, str) and instructions.strip():
+            joined = instructions.strip()
+        if joined:
+            out[f"cloud.rest.actions.{atype}.instructions"] = clamp_sensor_native_str(
+                joined
+            )
+    return out
+
+
+def extract_vessel_action_metrics(
+    vessel: dict[str, Any],
+) -> dict[str, float | int]:
+    """Numeric action metrics from v6 ``status`` (currently: pending action count)."""
+    out: dict[str, float | int] = {}
+    if not isinstance(vessel, dict):
+        return out
+    status = _status_dict(vessel)
+    actions = status.get("actions")
+    if isinstance(actions, list):
+        out["cloud.rest.actions.count"] = len(actions)
+    return out
+
+
+def extract_vessel_disc_strings(
+    vessel: dict[str, Any],
+) -> dict[str, str]:
+    """Extra disc element strings from v6 ``status.discElements``.
+
+    Picks up ``waterStatusColor``, ``lastUpdatedText``, etc. that the
+    generic ``extract_cloud_tile_strings`` does not cover.
+    """
+    out: dict[str, str] = {}
+    if not isinstance(vessel, dict):
+        return out
+    status = _status_dict(vessel)
+    disc = _disc_elements(status)
+    for key in ("waterStatusColor", "lastUpdatedText"):
+        s = _string_leaf(disc.get(key))
+        if s:
+            out[f"cloud.rest.disc.{key}"] = s
     return out
 
 

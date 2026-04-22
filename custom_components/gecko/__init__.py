@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from gecko_iot_client.transporters.exceptions import (
+    ConfigurationError as GeckoConfigurationError,
+)
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -19,7 +23,11 @@ from .api import OAuthGeckoApi
 from .connection_manager import async_get_connection_manager
 from .const import (
     CONF_ALERTS_POLL_INTERVAL,
+    CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+    CONF_CLOUD_REST_POLL_INTERVAL,
     DEFAULT_ALERTS_POLL_INTERVAL,
+    DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+    DEFAULT_CLOUD_REST_POLL_INTERVAL,
     DOMAIN,
     OAUTH2_AUTHORIZE,
     OAUTH2_CLIENT_ID,
@@ -219,6 +227,15 @@ class GeckoRuntimeData:
     rest_alerts_actions_cache: dict[tuple[str, str], dict[str, Any]] = field(
         default_factory=dict, repr=False, compare=False
     )
+    rest_vessel_detail_cache: dict[str, dict[str, Any]] = field(
+        default_factory=dict, repr=False, compare=False
+    )
+    rest_vessel_detail_mono: dict[str, float] = field(
+        default_factory=dict, repr=False, compare=False
+    )
+    rest_vessel_detail_lock: asyncio.Lock = field(
+        default_factory=asyncio.Lock, repr=False, compare=False
+    )
 
 
 # List the platforms that this integration supports.
@@ -233,8 +250,61 @@ _PLATFORMS: list[Platform] = [
 ]
 
 
+def _migrate_options_defaults(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """One-time migration: update saved options that still carry old disabled-by-default values.
+
+    Before v2.2.0 the defaults were poll_interval=0 and mqtt_only=True which
+    got persisted when the user opened the options flow.  Update them to the
+    new defaults so chemistry polling starts automatically.
+    """
+    opts = dict(entry.options)
+
+    # Skip if already migrated
+    if opts.get("_options_defaults_migrated"):
+        return
+
+    # Fresh installs often have no persisted options yet — nothing to migrate;
+    # avoid an unnecessary ``async_update_entry`` write on every first setup.
+    if not opts:
+        return
+
+    changed = False
+    if opts.get(CONF_CLOUD_REST_POLL_INTERVAL) == 0:
+        opts[CONF_CLOUD_REST_POLL_INTERVAL] = DEFAULT_CLOUD_REST_POLL_INTERVAL
+        changed = True
+    if opts.get(CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN) is True:
+        opts[CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN] = (
+            DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN
+        )
+        changed = True
+
+    # Stamp completion for any non-empty options so we do not re-run this path on
+    # every startup when values already match the new defaults (Bugbot / review).
+    opts["_options_defaults_migrated"] = True
+
+    if changed:
+        _LOGGER.info(
+            "Migrated cloud REST options to new defaults for entry %s "
+            "(poll_interval=%s, mqtt_only=%s)",
+            entry.entry_id,
+            opts.get(CONF_CLOUD_REST_POLL_INTERVAL),
+            opts.get(CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN),
+        )
+
+    hass.config_entries.async_update_entry(entry, options=opts)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Gecko from a config entry."""
+    _t0 = time.monotonic()
+    _LOGGER.debug(
+        "Gecko setup starting for entry %s (%d vessels configured)",
+        entry.entry_id,
+        len(entry.data.get("vessels", [])),
+    )
+
+    _migrate_options_defaults(hass, entry)
+
     # Fallback: resolve missing account_id for version-2 entries (recovery path)
     if (
         entry.version == _TARGET_ENTRY_VERSION
@@ -298,29 +368,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinators=coordinators,
     )
 
-    # Create devices for each vessel/spa and set up geckoIotClient
-    # Use specific exceptions to trigger Home Assistant's retry mechanism only for
-    # connection-related issues, not programming errors
     try:
+        _t1 = time.monotonic()
         await _setup_vessels_and_gecko_clients(hass, entry)
-    except (ConnectionError, TimeoutError, OSError) as ex:
-        # These indicate temporary connection issues that should trigger retry
+        _LOGGER.debug(
+            "Gecko vessel connections established in %.1fs", time.monotonic() - _t1
+        )
+    except (ConnectionError, TimeoutError, OSError, GeckoConfigurationError) as ex:
+        _LOGGER.debug("Gecko setup triggering retry (ConfigEntryNotReady): %s", ex)
         raise ConfigEntryNotReady(f"Failed to connect to Gecko device: {ex}") from ex
     except KeyError as ex:
-        # Missing required data (e.g., 'refresh_token') indicates auth issues
+        _LOGGER.debug("Gecko setup triggering retry (missing key): %s", ex)
         raise ConfigEntryNotReady(f"Failed to connect to Gecko device: {ex}") from ex
 
-    # One refresh + zone wait before platforms so each platform does not repeat the wait.
     for coordinator in entry.runtime_data.coordinators:
+        _t2 = time.monotonic()
         await coordinator.async_ensure_initial_setup()
+        _LOGGER.debug(
+            "Initial setup for %s completed in %.1fs",
+            coordinator.vessel_name,
+            time.monotonic() - _t2,
+        )
 
-    # Set up platforms immediately - entities will be created when zone data becomes available
     await hass.config_entries.async_forward_entry_setups(entry, _PLATFORMS)
-
-    # Domain services (async_setup runs only once per HA restart; unload may remove them).
     await async_setup_services(hass)
 
-    _LOGGER.info("Gecko integration setup completed for %d vessels", vessels_count)
+    _LOGGER.info(
+        "Gecko integration setup completed for %d vessels in %.1fs",
+        vessels_count,
+        time.monotonic() - _t0,
+    )
 
     return True
 
@@ -347,10 +424,9 @@ async def _setup_vessels_and_gecko_clients(
             _setup_vessel_device(entry, vessel, device_registry)
             await _setup_vessel_gecko_client(vessel, api_client, coordinator)
         except Exception as e:
-            _LOGGER.error(
+            _LOGGER.debug(
                 "Failed to setup vessel %s: %s", vessel_name, e, exc_info=True
             )
-            # Re-raise to allow async_setup_entry to handle with ConfigEntryNotReady
             raise
 
 
@@ -396,8 +472,20 @@ async def _setup_vessel_gecko_client(
         return
 
     try:
+        _LOGGER.debug(
+            "Fetching livestream URL for vessel %s (monitor %s)",
+            vessel_name,
+            monitor_id,
+        )
+        _t0 = time.monotonic()
         livestream_data = await api_client.async_get_monitor_livestream(monitor_id)
         websocket_url = livestream_data.get("brokerUrl")
+        _LOGGER.debug(
+            "Livestream URL obtained for monitor %s in %.1fs (url_present=%s)",
+            monitor_id,
+            time.monotonic() - _t0,
+            bool(websocket_url),
+        )
 
         if not websocket_url:
             _LOGGER.error(
@@ -406,44 +494,38 @@ async def _setup_vessel_gecko_client(
             )
             return
 
-        # Don't create zones from spa configuration in coordinator - let GeckoIotClient handle this
-        # The coordinator will get zones from the GeckoIotClient once it's connected and configured
-
-        # Use the singleton connection manager through the coordinator
-        success = await coordinator.async_setup_monitor_connection(
-            websocket_url=websocket_url
+        _t1 = time.monotonic()
+        await coordinator.async_setup_monitor_connection(websocket_url=websocket_url)
+        _LOGGER.debug(
+            "MQTT connection for vessel %s (monitor %s) established in %.1fs",
+            vessel_name,
+            monitor_id,
+            time.monotonic() - _t1,
         )
 
-        if not success:
-            raise ConnectionError(
-                f"Failed to setup connection for monitor {monitor_id}"
-            )
-
     except Exception as ex:
-        _LOGGER.error(
+        _LOGGER.debug(
             "Failed to set up connection for monitor %s: %s",
             monitor_id,
             ex,
-            exc_info=True,
         )
         raise
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    # Clean up all vessel coordinators
+    _LOGGER.debug("Gecko unloading entry %s", entry.entry_id)
     runtime_data: GeckoRuntimeData = entry.runtime_data
     for coordinator in runtime_data.coordinators:
         await coordinator.async_shutdown()
 
-    # Disconnect all monitors from the connection manager
-    # This ensures fresh connections on reload with updated config/tokens
     try:
         connection_manager = await async_get_connection_manager(hass)
         vessels = entry.data.get("vessels", [])
         for vessel in vessels:
             monitor_id = vessel.get("monitorId")
             if monitor_id:
+                _LOGGER.debug("Disconnecting monitor %s during unload", monitor_id)
                 await connection_manager.async_disconnect_monitor(monitor_id)
     except Exception as ex:
         _LOGGER.error("Error disconnecting monitors during unload: %s", ex)
@@ -455,4 +537,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if e.entry_id != entry.entry_id
     ):
         await async_remove_services(hass)
+    _LOGGER.debug(
+        "Gecko unload complete for entry %s (ok=%s)", entry.entry_id, unload_ok
+    )
     return unload_ok

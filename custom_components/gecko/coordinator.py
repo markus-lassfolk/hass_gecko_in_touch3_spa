@@ -26,6 +26,11 @@ from .cloud_tiles import (
     extract_cloud_tile_booleans,
     extract_cloud_tile_metrics,
     extract_cloud_tile_strings,
+    extract_vessel_action_metrics,
+    extract_vessel_action_strings,
+    extract_vessel_disc_strings,
+    extract_vessel_readings_metrics,
+    extract_vessel_readings_strings,
     find_vessel_record,
 )
 from .connection_manager import (
@@ -40,6 +45,7 @@ from .const import (
     DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
     DOMAIN,
+    clamp_sensor_native_str,
 )
 from .rest_alerts import build_alerts_snapshot
 from .shadow_metrics import (
@@ -139,6 +145,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
         self._last_alerts_poll_monotonic: float | None = None
         self._last_zone_shadow_refresh_mono: float | None = None
+        self._account_id_resolve_attempted = False
 
     def register_zone_update_callback(self, callback):
         """Register a callback to be called when zone data updates."""
@@ -174,7 +181,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if inspect.iscoroutine(result):
                         await result
             except Exception as ex:
-                _LOGGER.error(
+                _LOGGER.warning(
                     "Error in zone update callback for vessel %s: %s",
                     self.vessel_name,
                     ex,
@@ -194,6 +201,42 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return ""
         return str(entry.data.get("account_id", "")).strip()
 
+    async def _async_lazy_resolve_account_id(self) -> str:
+        """Resolve and persist ``account_id`` when missing (retries after transient failures).
+
+        Only sets ``_account_id_resolve_attempted`` after a successful persist so a
+        token/network/API error on an earlier poll does not block later attempts.
+        """
+        if self._account_id_resolve_attempted:
+            return ""
+        entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if not entry or not getattr(entry, "runtime_data", None):
+            return ""
+        api = entry.runtime_data.api_client
+        try:
+            user_id = await api.async_get_user_id()
+            user_data = await api.async_get_user_info(user_id)
+            acct = (user_data.get("account") or {}).get("accountId")
+            account_id = str(acct).strip() if acct else ""
+            if account_id:
+                data = dict(entry.data)
+                data["account_id"] = account_id
+                self.hass.config_entries.async_update_entry(entry, data=data)
+                self._account_id_resolve_attempted = True
+                _LOGGER.info(
+                    "Lazy-resolved account_id for %s (vessel %s)",
+                    self.vessel_name,
+                    self.vessel_id,
+                )
+                return account_id
+        except Exception as err:
+            _LOGGER.debug(
+                "Lazy account_id resolution failed for %s: %s",
+                self.vessel_name,
+                err,
+            )
+        return ""
+
     async def _async_poll_cloud_tiles_if_due(
         self,
         connection: GeckoMonitorConnection | None,
@@ -204,7 +247,15 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             opts.get(CONF_CLOUD_REST_POLL_INTERVAL, DEFAULT_CLOUD_REST_POLL_INTERVAL)
         )
         account_id = self._config_account_id()
+        if not account_id:
+            account_id = await self._async_lazy_resolve_account_id()
         if interval <= 0 or not account_id:
+            _LOGGER.debug(
+                "Cloud REST poll skipped for %s: interval=%d, has_account_id=%s",
+                self.vessel_name,
+                interval,
+                bool(account_id),
+            )
             return
 
         only_when_mqtt_down = bool(
@@ -274,9 +325,47 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             return
 
-        self._cloud_tile_metrics = extract_cloud_tile_metrics(vessel_rec)
-        self._cloud_string_metrics = extract_cloud_tile_strings(vessel_rec)
-        self._cloud_bool_metrics = extract_cloud_tile_booleans(vessel_rec)
+        tile_metrics = extract_cloud_tile_metrics(vessel_rec)
+        tile_strings = extract_cloud_tile_strings(vessel_rec)
+        tile_bools = extract_cloud_tile_booleans(vessel_rec)
+
+        # v6 vessel detail has a richer ``readings`` object with pH, ORP,
+        # alkalinity, chlorine, etc. — data not available in the v4 list.
+        vid = str(self.vessel_id)
+        detail: dict | None = None
+        try:
+            async with rd.rest_vessel_detail_lock:
+                cached_mono = rd.rest_vessel_detail_mono.get(vid)
+                if (
+                    cached_mono is not None
+                    and (now - cached_mono) < interval
+                    and vid in rd.rest_vessel_detail_cache
+                ):
+                    detail = rd.rest_vessel_detail_cache[vid]
+            if detail is None:
+                detail = await api.async_get_vessel_detail(str(account_id), vid)
+                async with rd.rest_vessel_detail_lock:
+                    rd.rest_vessel_detail_cache[vid] = detail
+                    rd.rest_vessel_detail_mono[vid] = now
+            if isinstance(detail, dict):
+                readings_metrics = extract_vessel_readings_metrics(detail)
+                readings_strings = extract_vessel_readings_strings(detail)
+                action_metrics = extract_vessel_action_metrics(detail)
+                action_strings = extract_vessel_action_strings(detail)
+                disc_strings = extract_vessel_disc_strings(detail)
+                tile_metrics.update(readings_metrics)
+                tile_metrics.update(action_metrics)
+                tile_strings.update(readings_strings)
+                tile_strings.update(action_strings)
+                tile_strings.update(disc_strings)
+        except (ClientError, TimeoutError, OSError) as err:
+            _LOGGER.debug(
+                "v6 vessel detail poll skipped for %s: %s", self.vessel_name, err
+            )
+
+        self._cloud_tile_metrics = tile_metrics
+        self._cloud_string_metrics = tile_strings
+        self._cloud_bool_metrics = tile_bools
 
     async def _async_poll_alerts_if_due(self) -> None:
         """Poll Gecko REST for new/active alerts (messages + vessel actions)."""
@@ -371,7 +460,6 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Gecko API."""
         try:
-            # Check if connection exists and is active
             connection_manager = await async_get_connection_manager(self.hass)
             connection = connection_manager.get_connection(self.monitor_id)
 
@@ -388,24 +476,31 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             if not connection or not connection.is_connected:
                 self._consecutive_failures += 1
+                _LOGGER.debug(
+                    "Update cycle: %s disconnected (failure %d/%d, "
+                    "connection_exists=%s)",
+                    self.vessel_name,
+                    self._consecutive_failures,
+                    MAX_CONSECUTIVE_FAILURES,
+                    connection is not None,
+                )
 
-                # After 2 consecutive failures (1 minute), try to reconnect with fresh token
                 if self._consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                     _LOGGER.warning(
-                        "Connection lost for %s, attempting reconnect", self.vessel_name
+                        "Connection lost for %s (monitor %s), attempting reconnect "
+                        "after %d consecutive failures",
+                        self.vessel_name,
+                        self.monitor_id,
+                        self._consecutive_failures,
                     )
                     await self._simple_reconnect()
                     self._consecutive_failures = 0
-                    # Re-check connection after reconnect attempt
                     connection = connection_manager.get_connection(self.monitor_id)
                     if connection and connection.is_connected:
-                        # Successfully reconnected, proceed to active path
                         client = await self.get_gecko_client()
                         self.sync_refresh_shadow_metrics(client)
                         return {"status": "active", "vessel_id": self.vessel_id}
 
-                # MQTT shadow is unavailable; still merge REST tile metrics into shadow
-                # caches so cloud.rest.* entities update while disconnected.
                 self.sync_refresh_shadow_metrics(None)
                 return {"status": "disconnected", "vessel_id": self.vessel_id}
 
@@ -414,9 +509,14 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             client = await self.get_gecko_client()
             self.sync_refresh_shadow_metrics(client)
 
-            # Data will be updated by geckoIotClient callbacks
             return {"status": "active", "vessel_id": self.vessel_id}
         except Exception as exception:
+            _LOGGER.debug(
+                "Update cycle exception for %s (monitor %s): %s",
+                self.vessel_name,
+                self.monitor_id,
+                exception,
+            )
             raise UpdateFailed(
                 f"Error communicating with Gecko API for vessel {self.vessel_name}: {exception}"
             ) from exception
@@ -464,7 +564,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         mqtt_strings = extract_extension_strings(state) if state else {}
         merged_strings: dict[str, str] = dict(self._cloud_string_metrics)
         merged_strings.update(mqtt_strings)
-        self._shadow_string_values = merged_strings
+        self._shadow_string_values = {
+            k: clamp_sensor_native_str(v) for k, v in merged_strings.items()
+        }
         new_string_paths = (
             set(self._shadow_string_values) - self._registered_string_paths
         )
@@ -535,36 +637,63 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         async with self._initial_setup_lock:
             if self._initial_setup_done:
                 return
+            _LOGGER.debug(
+                "Starting initial setup for %s (monitor %s)",
+                self.vessel_name,
+                self.monitor_id,
+            )
+            _t0 = time.monotonic()
             await self.async_refresh()
             client = await self.get_gecko_client()
             if client:
                 await self.async_wait_for_initial_zone_data(timeout=15.0)
             else:
                 _LOGGER.debug(
-                    "Skipping initial zone wait for %s (no MQTT yet); "
+                    "Skipping initial zone wait for %s (no MQTT client yet); "
                     "REST/shadow entities still initialize from refresh",
                     self.vessel_name,
                 )
             self._initial_setup_done = True
+            _LOGGER.debug(
+                "Initial setup for %s completed in %.1fs (has_client=%s, has_zones=%s)",
+                self.vessel_name,
+                time.monotonic() - _t0,
+                client is not None,
+                self._has_initial_zones,
+            )
 
     async def _simple_reconnect(self) -> None:
         """Simple reconnection - let geckoIotClient handle token refresh."""
         try:
+            _LOGGER.debug(
+                "Initiating reconnect for %s (monitor %s)",
+                self.vessel_name,
+                self.monitor_id,
+            )
+            _t0 = time.monotonic()
             connection_manager = await async_get_connection_manager(self.hass)
-
-            # Reconnect - the geckoIotClient will automatically call the token
-            # refresh callback to get a fresh URL with new tokens
             success = await connection_manager.async_reconnect_monitor(self.monitor_id)
 
             if success:
-                _LOGGER.info("Reconnected %s", self.vessel_name)
+                _LOGGER.info(
+                    "Reconnected %s (monitor %s) in %.1fs",
+                    self.vessel_name,
+                    self.monitor_id,
+                    time.monotonic() - _t0,
+                )
             else:
-                _LOGGER.error("Failed to reconnect %s", self.vessel_name)
+                _LOGGER.error(
+                    "Failed to reconnect %s (monitor %s) after %.1fs",
+                    self.vessel_name,
+                    self.monitor_id,
+                    time.monotonic() - _t0,
+                )
 
         except Exception as e:
             _LOGGER.error(
-                "Failed to reconnect %s: %s",
+                "Failed to reconnect %s (monitor %s): %s",
                 self.vessel_name,
+                self.monitor_id,
                 e,
                 exc_info=True,
             )
@@ -578,11 +707,20 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if connection and connection.is_connected:
                 return connection.gecko_client
 
-            _LOGGER.warning(
-                "No active connection found for vessel %s (monitor %s)",
-                self.vessel_name,
-                self.monitor_id,
-            )
+            if connection is not None:
+                _LOGGER.debug(
+                    "Gecko client not ready for %s (monitor %s); "
+                    "connection exists, MQTT still establishing or reconnecting",
+                    self.vessel_name,
+                    self.monitor_id,
+                )
+            else:
+                _LOGGER.debug(
+                    "No connection registered yet for vessel %s (monitor %s); "
+                    "setup may still be in progress or retrying after timeout",
+                    self.vessel_name,
+                    self.monitor_id,
+                )
             return None
 
         except Exception as e:
@@ -622,7 +760,11 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             target_monitor_id = monitor_id or self.monitor_id
 
             try:
-                # Get the config entry
+                _LOGGER.debug(
+                    "Token refresh callback invoked for %s (monitor %s)",
+                    self.vessel_name,
+                    target_monitor_id,
+                )
                 entry = self.hass.config_entries.async_get_entry(self.entry_id)
                 if not entry:
                     _LOGGER.error(
@@ -658,9 +800,13 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # Wait for the API call to complete (with timeout)
                 livestream_data = future.result(timeout=30.0)
 
-                # Extract the new websocket URL
                 new_url = livestream_data.get("brokerUrl")
                 if new_url:
+                    _LOGGER.debug(
+                        "Token refresh succeeded for %s (url_changed=%s)",
+                        self.vessel_name,
+                        new_url != websocket_url,
+                    )
                     return new_url
 
                 _LOGGER.error(
@@ -686,33 +832,29 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return refresh_token_callback
 
-    async def async_setup_monitor_connection(self, websocket_url: str) -> bool:
-        """Set up a connection to this vessel's monitor using the singleton connection manager."""
+    async def async_setup_monitor_connection(self, websocket_url: str) -> None:
+        """Set up a connection to this vessel's monitor using the singleton connection manager.
+
+        Raises on failure (callers should catch and handle accordingly).
+        """
         try:
-            # Get the singleton connection manager
             connection_manager = await async_get_connection_manager(self.hass)
 
-            # Create update callback for this vessel's coordinator
             def on_zone_update(updated_zones):
-                # Store the updated zones from GeckoIotClient (these have state managers!)
                 self._zones = updated_zones
 
-                # Mark this vessel as having received zones
                 if not self._has_initial_zones:
                     self._has_initial_zones = True
                     if not self._initial_zones_loaded_event.is_set():
                         self._initial_zones_loaded_event.set()
 
-                # Schedule the async call to run on the event loop from background thread
                 asyncio.run_coroutine_threadsafe(
                     self._async_handle_zone_update({"last_update": "zone_update"}),
                     self.hass.loop,
                 )
 
-            # Create refresh token callback
             refresh_token_callback = self._create_refresh_token_callback(websocket_url)
 
-            # Get or create connection with refresh token callback
             await connection_manager.async_get_or_create_connection(
                 monitor_id=self.monitor_id,
                 websocket_url=websocket_url,
@@ -721,16 +863,13 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 refresh_token_callback=refresh_token_callback,
             )
 
-            return True
-
         except Exception as e:
-            _LOGGER.error(
+            _LOGGER.debug(
                 "Failed to set up connection for vessel %s: %s",
                 self.vessel_name,
                 e,
-                exc_info=True,
             )
-            return False
+            raise
 
     async def async_get_operation_mode_status(self):
         """Get operation mode status for this vessel's monitor."""
@@ -752,18 +891,29 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self, timeout: float = INITIAL_ZONE_TIMEOUT
     ) -> bool:
         """Wait for this vessel to receive its initial zone data."""
+        _LOGGER.debug(
+            "Waiting up to %.1fs for initial zone data for %s",
+            timeout,
+            self.vessel_name,
+        )
+        _t0 = time.monotonic()
         try:
             await asyncio.wait_for(
                 self._initial_zones_loaded_event.wait(), timeout=timeout
             )
             _LOGGER.debug(
-                "Initial zone data loaded for vessel %s within timeout",
+                "Initial zone data loaded for %s in %.1fs",
                 self.vessel_name,
+                time.monotonic() - _t0,
             )
             return True
         except TimeoutError:
             _LOGGER.warning(
-                "Timeout waiting for initial zone data for vessel %s", self.vessel_name
+                "Timeout waiting for initial zone data for %s "
+                "(waited %.1fs, limit %.1fs)",
+                self.vessel_name,
+                time.monotonic() - _t0,
+                timeout,
             )
             return False
 

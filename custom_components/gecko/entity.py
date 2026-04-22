@@ -47,15 +47,32 @@ class GeckoEntityAvailabilityMixin:
 
         gecko_client = await self.coordinator.get_gecko_client()
         if not gecko_client:
+            if register:
+                _LOGGER.debug(
+                    "Cannot register connectivity callback for %s: "
+                    "no gecko client available yet (vessel %s, monitor %s)",
+                    getattr(self, "entity_id", "?"),
+                    self.coordinator.vessel_name,
+                    self.coordinator.monitor_id,
+                )
             return
 
         if register:
             gecko_client.on(
                 EventChannel.CONNECTIVITY_UPDATE, self._on_connectivity_update
             )
+            _LOGGER.debug(
+                "Registered connectivity callback for %s (vessel %s)",
+                getattr(self, "entity_id", "?"),
+                self.coordinator.vessel_name,
+            )
         else:
             gecko_client.off(
                 EventChannel.CONNECTIVITY_UPDATE, self._on_connectivity_update
+            )
+            _LOGGER.debug(
+                "Unregistered connectivity callback for %s",
+                getattr(self, "entity_id", "?"),
             )
 
         self._connectivity_callback_registered = register
@@ -98,7 +115,17 @@ class GeckoEntityAvailabilityMixin:
 
         connection_manager = self.hass.data.get(GECKO_CONNECTION_MANAGER_KEY)
         if not connection_manager:
+            _LOGGER.debug(
+                "Connection manager not in hass.data yet for %s",
+                getattr(self, "entity_id", "?"),
+            )
             return None
 
         connection = connection_manager.get_connection(self.coordinator.monitor_id)
+        if not connection:
+            _LOGGER.debug(
+                "No connection found for monitor %s (entity %s)",
+                self.coordinator.monitor_id,
+                getattr(self, "entity_id", "?"),
+            )
         return connection.gecko_client if connection else None

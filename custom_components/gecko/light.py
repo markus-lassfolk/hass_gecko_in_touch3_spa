@@ -56,12 +56,11 @@ async def async_setup_entry(
             light_zones = coordinator.get_zones_by_type(ZoneType.LIGHTING_ZONE)
 
             for zone in light_zones:
-                # Check if entity already exists
-                entity_id = f"{coordinator.vessel_name}_light_{zone.id}".lower()
-                if entity_id not in created_entity_ids:
+                dedup_key = f"{coordinator.vessel_id}_light_{zone.id}"
+                if dedup_key not in created_entity_ids:
                     entity = GeckoLight(coordinator, config_entry, zone)
                     new_entities.append(entity)
-                    created_entity_ids.add(entity_id)
+                    created_entity_ids.add(dedup_key)
 
             if new_entities:
                 async_add_entities(new_entities)
@@ -96,11 +95,10 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
 
         self._zone = zone
         self._rgb_color_capable = callable(getattr(zone, "set_color", None))
-        self.entity_id = f"light.{coordinator.vessel_name}_light_{zone.id}".lower()
 
         self._attr_name = f"Light zone {zone.id}"
         self._attr_unique_id = (
-            f"{config_entry.entry_id}_{coordinator.vessel_name}_light_{zone.id}"
+            f"{config_entry.entry_id}_{coordinator.vessel_id}_light_{zone.id}"
         )
 
         # Device info for grouping entities - reference the actual device created in __init__.py

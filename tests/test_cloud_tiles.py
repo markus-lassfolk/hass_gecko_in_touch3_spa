@@ -103,3 +103,221 @@ def test_disc_elements_snake_case_under_status() -> None:
 def test_extract_strings_status_not_dict() -> None:
     vessel = {"status": "ok"}
     assert cloud_tiles.extract_cloud_tile_strings(vessel) == {}
+
+
+_V6_VESSEL_DETAIL = {
+    "vesselId": 25657,
+    "status": {
+        "discElements": {
+            "name": "Villa Polly",
+            "waterStatusColor": "red",
+            "tempC": 29,
+            "text": "2 actions needed",
+            "lastUpdatedText": "34 minutes ago",
+        },
+        "actions": [
+            {
+                "type": "lower_ph",
+                "triggerType": "onDemand",
+                "title": "Lower Your pH",
+                "isChemicalAction": True,
+                "instructions": [
+                    {"text": "Be sure your pump is running."},
+                    {"text": "Follow all safety guidelines."},
+                ],
+            },
+            {
+                "type": "raise_orp_chlorine",
+                "triggerType": "onDemand",
+                "title": "Raise Your ORP",
+                "isChemicalAction": True,
+                "instructions": [
+                    {"text": "Target a free chlorine of 3 ppm."},
+                ],
+            },
+        ],
+        "readings": {
+            "ph": {
+                "readingType": "ph",
+                "value": 7.85,
+                "unit": "ph",
+                "status": "high",
+                "abbreviation": "pH",
+                "title": "pH",
+                "source": "monitor",
+            },
+            "orp": {
+                "readingType": "orp",
+                "value": 198,
+                "unit": "mV",
+                "status": "really_low",
+                "abbreviation": "ORP",
+                "title": "Oxidation Reduction Potential",
+                "source": "monitor",
+            },
+            "waterTemp": {
+                "readingType": "waterTemp",
+                "value": 29,
+                "unit": "C",
+                "status": "ok",
+                "title": "Water Temperature",
+                "source": "monitor",
+            },
+            "totalAlkalinity": {
+                "readingType": "totalAlkalinity",
+                "value": 120,
+                "unit": "ppm",
+                "status": "ok",
+                "title": "Total Alkalinity",
+                "source": "report",
+            },
+            "freeChlorine": {
+                "readingType": "freeChlorine",
+                "value": 0,
+                "unit": "ppm",
+                "status": "really_low",
+                "title": "Free Chlorine",
+                "source": "report",
+            },
+            "lsi": {
+                "readingType": "lsi",
+                "value": -0.45,
+                "unit": "lsi",
+                "status": "really_low",
+                "title": "Langelier Saturation Index",
+                "source": "computed",
+            },
+            "wifiRssi": {
+                "readingType": "wifiRssi",
+                "value": 82,
+                "unit": "db",
+                "status": "ok",
+                "title": "WiFi RSSI",
+                "source": "monitor",
+            },
+        },
+        "monitorReadings": {
+            "ph": {
+                "readingType": "ph",
+                "value": 7.85,
+                "unit": "ph",
+            },
+        },
+    },
+}
+
+
+def test_extract_vessel_readings_metrics() -> None:
+    m = cloud_tiles.extract_vessel_readings_metrics(_V6_VESSEL_DETAIL)
+    assert m["cloud.rest.readings.ph"] == 7.85
+    assert m["cloud.rest.readings.orp"] == 198
+    assert m["cloud.rest.readings.waterTemp"] == 29
+    assert m["cloud.rest.readings.totalAlkalinity"] == 120
+    assert m["cloud.rest.readings.freeChlorine"] == 0
+    assert m["cloud.rest.readings.lsi"] == -0.45
+    assert m["cloud.rest.readings.wifiRssi"] == 82
+
+
+def test_extract_vessel_readings_metrics_empty() -> None:
+    assert cloud_tiles.extract_vessel_readings_metrics({}) == {}
+    assert cloud_tiles.extract_vessel_readings_metrics("bad") == {}
+
+
+def test_extract_vessel_readings_no_duplicate_from_monitor_readings() -> None:
+    """readings takes priority; monitorReadings should not overwrite."""
+    m = cloud_tiles.extract_vessel_readings_metrics(_V6_VESSEL_DETAIL)
+    assert m["cloud.rest.readings.ph"] == 7.85
+
+
+def test_extract_vessel_readings_strings() -> None:
+    s = cloud_tiles.extract_vessel_readings_strings(_V6_VESSEL_DETAIL)
+    assert s["cloud.rest.readings.ph.status"] == "high"
+    assert s["cloud.rest.readings.ph.title"] == "pH"
+    assert s["cloud.rest.readings.ph.source"] == "monitor"
+    assert s["cloud.rest.readings.orp.abbreviation"] == "ORP"
+    assert s["cloud.rest.readings.waterTemp.title"] == "Water Temperature"
+
+
+def test_extract_vessel_readings_strings_empty() -> None:
+    assert cloud_tiles.extract_vessel_readings_strings({}) == {}
+
+
+def test_extract_vessel_action_strings() -> None:
+    s = cloud_tiles.extract_vessel_action_strings(_V6_VESSEL_DETAIL)
+    assert s["cloud.rest.actions.lower_ph"] == "Lower Your pH"
+    assert s["cloud.rest.actions.raise_orp_chlorine"] == "Raise Your ORP"
+    assert (
+        "Be sure your pump is running." in s["cloud.rest.actions.lower_ph.instructions"]
+    )
+    assert (
+        "Follow all safety guidelines." in s["cloud.rest.actions.lower_ph.instructions"]
+    )
+    assert (
+        s["cloud.rest.actions.raise_orp_chlorine.instructions"]
+        == "Target a free chlorine of 3 ppm."
+    )
+
+
+def test_extract_vessel_action_strings_empty() -> None:
+    assert cloud_tiles.extract_vessel_action_strings({}) == {}
+    assert cloud_tiles.extract_vessel_action_strings({"status": {}}) == {}
+
+
+def test_extract_vessel_action_instructions_clamped_to_ha_limit() -> None:
+    """Joined instruction text must not exceed HA sensor native_value length."""
+    from custom_components.gecko.const import MAX_SENSOR_STATE_LENGTH
+
+    long_bits = ["part one " * 40, "part two " * 40, "part three " * 40]
+    vessel = {
+        "status": {
+            "actions": [
+                {
+                    "type": "raise_orp_chlorine",
+                    "title": "Raise Your ORP",
+                    "instructions": [{"text": t} for t in long_bits],
+                }
+            ]
+        }
+    }
+    s = cloud_tiles.extract_vessel_action_strings(vessel)
+    instr = s["cloud.rest.actions.raise_orp_chlorine.instructions"]
+    assert len(instr) == MAX_SENSOR_STATE_LENGTH
+    assert instr.endswith("...")
+
+
+def test_extract_vessel_action_instructions_plain_string() -> None:
+    vessel = {
+        "status": {
+            "actions": [
+                {
+                    "type": "raise_orp_chlorine",
+                    "title": "Raise Your ORP",
+                    "instructions": "One line of advice from the API.",
+                }
+            ]
+        }
+    }
+    s = cloud_tiles.extract_vessel_action_strings(vessel)
+    assert (
+        s["cloud.rest.actions.raise_orp_chlorine.instructions"]
+        == "One line of advice from the API."
+    )
+
+
+def test_extract_vessel_action_metrics() -> None:
+    m = cloud_tiles.extract_vessel_action_metrics(_V6_VESSEL_DETAIL)
+    assert m["cloud.rest.actions.count"] == 2
+
+
+def test_extract_vessel_action_metrics_empty() -> None:
+    assert cloud_tiles.extract_vessel_action_metrics({}) == {}
+
+
+def test_extract_vessel_disc_strings() -> None:
+    s = cloud_tiles.extract_vessel_disc_strings(_V6_VESSEL_DETAIL)
+    assert s["cloud.rest.disc.waterStatusColor"] == "red"
+    assert s["cloud.rest.disc.lastUpdatedText"] == "34 minutes ago"
+
+
+def test_extract_vessel_disc_strings_empty() -> None:
+    assert cloud_tiles.extract_vessel_disc_strings({}) == {}

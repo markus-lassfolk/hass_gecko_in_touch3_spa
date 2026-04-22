@@ -1,3 +1,5 @@
+"""Gecko REST helpers layered on ``gecko_iot_client`` (OAuth session, HA HTTP client)."""
+
 import logging
 from typing import Any
 
@@ -35,6 +37,15 @@ class GeckoSpaApiMixin:
         return await self.async_request(
             "GET",
             f"/v2/accounts/{account_id}/vessels/{vessel_id}/actions",
+        )
+
+    async def async_get_vessel_detail(
+        self, account_id: str, vessel_id: str
+    ) -> dict[str, Any]:
+        """V6 vessel detail with full readings (pH, ORP, alkalinity, chlorine, etc.)."""
+        return await self.async_request(
+            "GET",
+            f"/v6/accounts/{account_id}/vessels/{vessel_id}?customActionsVersion=0",
         )
 
 

@@ -63,7 +63,7 @@ def _path_looks_sensitive(path: str) -> bool:
 
 
 def _string_value_ok(s: str) -> bool:
-    if not s or len(s) > 256:
+    if not s or len(s) > 255:
         return False
     if s.startswith("eyJ"):
         return False
@@ -364,6 +364,191 @@ def shadow_topology_summary(state_data: dict[str, Any] | None) -> dict[str, Any]
     return summary
 
 
+_CAMEL_SPLIT_RE = re.compile(
+    r"(?<=[a-z])(?=[A-Z])"  # aB -> a B
+    r"|(?<=[A-Z])(?=[A-Z][a-z])"  # ABc -> A Bc
+    r"|(?<=[a-zA-Z])(?=[0-9])"  # Ph7 -> Ph 7
+    r"|(?<=[0-9])(?=[A-Z])"  # 7P -> 7 P
+)
+
+_KNOWN_ABBREVIATIONS: dict[str, str] = {
+    "mv": "mV",
+    "ph": "pH",
+    "orp": "ORP",
+    "id": "ID",
+    "url": "URL",
+    "ip": "IP",
+    "rf": "RF",
+    "rssi": "RSSI",
+    "lqi": "LQI",
+    "snr": "SNR",
+    "uv": "UV",
+    "kwh": "kWh",
+    "hz": "Hz",
+    "tds": "TDS",
+    "r0": "R₀",
+    "t0": "T₀",
+    "psi": "PSI",
+    "lsi": "LSI",
+    "stc": "STC",
+    "wifi": "WiFi",
+}
+
+# ``cloud.rest.readings.*`` chemistry leaves that stay in Diagnostics until enabled.
+# Primary dashboard chemistry stays on: pH/ORP (via path segments), water temp,
+# free/total chlorine; see ``chemistry_metric_enabled_by_default``.
+_CLOUD_REST_READINGS_OFF_BY_DEFAULT = frozenset(
+    {
+        "adjustedtotalalkalinity",
+        "calciumhardness",
+        "cyanuricacid",
+        "lsi",
+        "phstc20",
+        "totalalkalinity",
+        "totalhardness",
+    }
+)
+
+_AMBIGUOUS_LEAVES = frozenset(
+    {
+        "id",
+        "channel",
+        "strength",
+        "offset",
+        "beta",
+        "status",
+        "value",
+        "state",
+        "mode",
+        "type",
+        "name",
+        "level",
+        "count",
+        "r0",
+        "t0",
+        "reading",
+        "n",
+        "instructions",
+    }
+)
+
+_CONTEXT_ALIASES: dict[str, str] = {
+    "connectivity": "Conn.",
+    "features": "",
+    "waterlab": "Waterlab",
+    "sensor": "",
+    "therm": "Thermistor",
+    "zones": "",
+    "cloud": "",
+    "rest": "",
+    "readings": "",
+    "actions": "Action",
+    "disc": "Status",
+    # REST vessel list ``status.discElements`` / ``disc_elements`` (app dashboard tile).
+    "disc_elements": "Status",
+}
+
+_CONTEXT_PROMOTING_PARENTS = frozenset(
+    {
+        "waterlab",
+        "therm",
+        "ph",
+        "orp",
+        "cloud",
+        "rest",
+        "actions",
+    }
+)
+
+
+def _split_camel(name: str) -> str:
+    """Split camelCase / PascalCase into space-separated words.
+
+    Short tokens (<=3 chars, e.g. ``z1``, ``pH``) are kept intact.
+    """
+    if len(name) <= 3:
+        return name
+    return _CAMEL_SPLIT_RE.sub(" ", name)
+
+
+def _titlecase_with_abbrevs(words: str) -> str:
+    """Title-case a string while preserving known abbreviations.
+
+    Checks multi-word abbreviation matches first (e.g. "R 0" -> "R₀"),
+    then falls back to per-word processing.
+    """
+    collapsed = re.sub(r"\s+", "", words).lower()
+    if collapsed in _KNOWN_ABBREVIATIONS:
+        return _KNOWN_ABBREVIATIONS[collapsed]
+
+    parts = words.split()
+    out: list[str] = []
+    for w in parts:
+        low = w.lower()
+        if low in _KNOWN_ABBREVIATIONS:
+            out.append(_KNOWN_ABBREVIATIONS[low])
+        elif low == "per":
+            out.append("/")
+        elif low == "at":
+            out.append("at")
+        else:
+            out.append(w.capitalize())
+    merged: list[str] = []
+    for tok in out:
+        if tok == "/" and merged:
+            merged[-1] = merged[-1] + "/"
+        elif merged and merged[-1].endswith("/"):
+            merged[-1] = merged[-1] + tok
+        else:
+            merged.append(tok)
+    return " ".join(merged)
+
+
+def humanize_shadow_path(path: str) -> str:
+    """Produce a user-friendly entity name from a dotted shadow metric path.
+
+    Examples::
+
+        features.waterlab.sensor.ph.offsetMv      -> Waterlab pH Offset mV
+        connectivity.vesselStatus                  -> Vessel Status
+        features.waterlab.sensor.therm.R0          -> Waterlab Thermistor R₀
+        features.waterlab.sensor.ph.slopeMvPerPh   -> Waterlab pH Slope mV/pH
+        connectivity.strength                      -> Conn. Signal Strength
+        features.operationMode                     -> Operation Mode
+        cloud.rest.temperature                     -> Temperature
+    """
+    segments = path.split(".")
+    leaf = segments[-1] if segments else path
+    leaf_words = _split_camel(leaf).replace("_", " ").strip()
+
+    leaf_lower = leaf.lower()
+    needs_context = leaf_lower in _AMBIGUOUS_LEAVES or len(leaf_lower) <= 2
+    has_promoting_parent = any(
+        s.lower() in _CONTEXT_PROMOTING_PARENTS for s in segments[:-1]
+    )
+    needs_context = needs_context or has_promoting_parent
+
+    context_parts: list[str] = []
+    if needs_context and len(segments) > 1:
+        for seg in segments[:-1]:
+            alias = _CONTEXT_ALIASES.get(seg.lower())
+            if alias is not None:
+                if alias:
+                    context_parts.append(alias)
+            else:
+                nice = _split_camel(seg).replace("_", " ").strip()
+                context_parts.append(_titlecase_with_abbrevs(nice))
+
+    if leaf_lower == "strength" and any(
+        s.lower() in ("connectivity", "rf", "signal") for s in segments
+    ):
+        leaf_words = "Signal Strength"
+
+    result_parts = context_parts + [_titlecase_with_abbrevs(leaf_words)]
+    name = " ".join(result_parts)
+    return name if name else path
+
+
 def metric_path_to_entity_slug(path: str, max_len: int = 48) -> str:
     """Turn a metric path into a safe unique entity name suffix.
 
@@ -375,9 +560,7 @@ def metric_path_to_entity_slug(path: str, max_len: int = 48) -> str:
         slug = "metric"
     if len(slug) > max_len:
         digest = hashlib.sha256(path.encode("utf-8")).hexdigest()[:8]
-        keep = max_len - len(digest) - 1
-        if keep < 1:
-            keep = 1
+        keep = max(max_len - len(digest) - 1, 1)
         slug = f"{slug[:keep]}_{digest}"
     return slug
 
@@ -406,6 +589,7 @@ def infer_sensor_metadata(
         or lower.endswith("_temp")
         or "temp_" in lower
         or re.search(r"\btemp\b", lower)
+        or "temp" in segs
     ):
         device_class = SensorDeviceClass.TEMPERATURE
         unit = UnitOfTemperature.CELSIUS
@@ -463,6 +647,22 @@ def infer_sensor_metadata(
         if dur_dc is not None:
             device_class = dur_dc
         unit = "s" if "second" in lower or lower.endswith("sec") else "min"
+
+    if device_class is None and lower.startswith("cloud.rest.readings."):
+        reading_key = path.split(".")[-1].lower()
+        readings_ppm_leaves = frozenset(
+            {
+                "totalalkalinity",
+                "totalhardness",
+                "freechlorine",
+                "totalchlorine",
+                "cyanuricacid",
+                "calciumhardness",
+                "adjustedtotalalkalinity",
+            }
+        )
+        if reading_key in readings_ppm_leaves:
+            unit = "ppm"
 
     return device_class, unit
 
@@ -566,6 +766,18 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
     if "operationmode" in lower:
         return False
 
+    # REST: duplicate aggregates and specialist/secondary chemistry (readings are canonical).
+    if lower.startswith("cloud.rest.summary."):
+        return False
+    if lower == "cloud.rest.actions.count":
+        return False
+    if lower.endswith("disc_elements.temp_c"):
+        return False
+    if lower.startswith("cloud.rest.readings."):
+        reading_key = path.split(".")[-1].lower()
+        if reading_key in _CLOUD_REST_READINGS_OFF_BY_DEFAULT:
+            return False
+
     segs = _path_segments(path)
     if any(_segment_is_ph(s) for s in segs):
         return True
@@ -591,15 +803,29 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
     )
     if chem_tokens.intersection(segs):
         return True
-    if re.search(
-        r"\b(chlorine|bromine|salinity|tds|sanitizer|alkalinity|hardness|calcium|cyanuric|bromide|turbidity|conductivity)\b",
-        lower,
-    ):
+    _chem_word_re = (
+        r"\b(chlorine|bromine|salinity|tds|sanitizer|alkalinity|hardness|"
+        r"calcium|cyanuric|bromide|turbidity|conductivity)\b"
+    )
+    if re.search(_chem_word_re, lower):
         return True
     if lower.startswith("cloud.rest.") and any(
-        tail in lower for tail in (".ph", ".orp", "orp_mv", "temp_c", "disc_elements.")
+        tail in lower
+        for tail in (
+            ".ph",
+            ".orp",
+            "orp_mv",
+        )
     ):
         return True
+    if lower.startswith("cloud.rest.readings."):
+        reading_key = path.split(".")[-1].lower()
+        if reading_key in (
+            "watertemp",
+            "freechlorine",
+            "totalchlorine",
+        ):
+            return True
     return False
 
 
@@ -676,6 +902,15 @@ def string_extension_enabled_by_default(path: str) -> bool:
     if lower.startswith("cloud.rest."):
         return any(
             tok in lower
-            for tok in ("water", "status", "message", "text", "mode", "tile", "summary")
+            for tok in (
+                "water",
+                "status",
+                "message",
+                "text",
+                "mode",
+                "tile",
+                "summary",
+                "actions.",
+            )
         )
     return bool(re.search(r"\b(alarm|message|status|text|reason|fault)\b", spaced))

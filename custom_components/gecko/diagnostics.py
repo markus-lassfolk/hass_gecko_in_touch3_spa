@@ -7,6 +7,7 @@ from typing import Any
 
 from gecko_iot_client import GeckoIotClient
 from gecko_iot_client.models.connectivity import ConnectivityStatus
+from gecko_iot_client.models.zone_types import ZoneType
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
@@ -14,6 +15,40 @@ from .connection_manager import async_get_connection_manager
 from .shadow_metrics import shadow_topology_summary
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _temperature_control_zones_summary(coordinator: Any) -> list[dict[str, Any]]:
+    """Per-zone current/target °C for diagnostics (same source as ``climate`` entities)."""
+    getter = getattr(coordinator, "get_zones_by_type", None)
+    if not callable(getter):
+        return []
+    try:
+        zones = getter(ZoneType.TEMPERATURE_CONTROL_ZONE)
+    except Exception:  # pragma: no cover - defensive
+        return []
+    rows: list[dict[str, Any]] = []
+    for zone in zones:
+        zid = getattr(zone, "id", None)
+        if zid is None:
+            continue
+        row: dict[str, Any] = {"zone_id": zid}
+        try:
+            cur = getattr(zone, "temperature", None)
+            tgt = getattr(zone, "target_temperature", None)
+            if cur is not None:
+                row["current_temperature_c"] = float(cur)
+            if tgt is not None:
+                row["target_temperature_c"] = float(tgt)
+            tmin = getattr(zone, "min_temperature_set_point_c", None)
+            tmax = getattr(zone, "max_temperature_set_point_c", None)
+            if tmin is not None:
+                row["min_setpoint_c"] = float(tmin)
+            if tmax is not None:
+                row["max_setpoint_c"] = float(tmax)
+        except (TypeError, ValueError):
+            continue
+        rows.append(row)
+    return rows
 
 
 def _get_gecko_client_info(gecko_client: GeckoIotClient) -> dict[str, Any]:
@@ -136,6 +171,17 @@ def _get_vessel_coordinators_diagnostics(
             entry["shadow_extension_metric_paths"] = sorted(
                 coord._shadow_metric_values.keys()
             )[:48]
+        entry["cloud_tile_metric_count"] = len(coord._cloud_tile_metrics)
+        entry["cloud_string_metric_count"] = len(coord._cloud_string_metrics)
+        entry["cloud_bool_metric_count"] = len(coord._cloud_bool_metrics)
+        if coord._cloud_tile_metrics:
+            entry["cloud_tile_metric_paths"] = sorted(coord._cloud_tile_metrics.keys())[
+                :48
+            ]
+        entry["last_cloud_poll_monotonic"] = coord._last_cloud_poll_monotonic
+        tcz = _temperature_control_zones_summary(coord)
+        if tcz:
+            entry["temperature_control_zones"] = tcz
         out.append(entry)
     return out
 
@@ -152,6 +198,10 @@ async def async_get_config_entry_diagnostics(
             "title": config_entry.title,
             "domain": config_entry.domain,
             "state": config_entry.state.value,
+            "version": config_entry.version,
+            "has_account_id": bool(
+                str(config_entry.data.get("account_id", "")).strip()
+            ),
         },
         "vessels": _get_vessel_coordinators_diagnostics(config_entry),
         "connections": _get_connection_diagnostics(connection_manager),

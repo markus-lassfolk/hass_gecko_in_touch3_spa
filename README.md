@@ -146,12 +146,171 @@ On the Gecko card → **Configure**:
 | **Fan** | Pumps / blowers |
 | **Select** | Watercare operation mode |
 | **Binary sensor** | Connection stack, energy saving, dynamic shadow booleans, **REST active alerts** (on when there is something to review, per snapshot rules) |
-| **Sensor** | RF strength/channel, gateway/spa status text where modeled, **dynamic shadow numerics**, **dynamic shadow strings**, **REST active alerts** (counts / short previews) |
+| **Sensor** | **Spa target / current temperature** (°C, per thermostat zone — for cards that only accept `sensor`), **dynamic shadow numerics**, **dynamic shadow strings**, optional **REST active alerts** count + previews |
 | **Number** | Writable unknown-zone **setpoints** (shadow **desired**), where paths match supported setpoint shapes |
 
 **Shadow extension sensors:** values under `cloud.rest.*` can remain available from REST when MQTT is offline; pure MQTT paths follow normal entity availability.
 
 **Diagnostics:** **Download diagnostics** on the integration entry includes `shadow_topology` (and related client summaries) for mapping work.
+
+---
+
+## Supported entities and values
+
+Everything below is **per vessel / spa device** unless noted. Zone counts and shadow leaves depend on your pack hardware and firmware.
+
+### Climate (`climate`)
+
+| Item | Supported values / behavior |
+|------|-----------------------------|
+| **Entities** | One **thermostat** per **temperature control** zone from `gecko_iot_client` (zone id in the translated name). |
+| **HVAC mode** | **`heat` only** — other modes are rejected by the service layer. |
+| **Temperature** | **Current** and **target** in **°C**; target step **0.5**; min/max setpoints come from the zone configuration. |
+| **`hvac_action`** | Derived from spa status: **`idle`**, **`heating`**, **`cooling`**, **`defrosting`** (heat-pump defrost), or idle fallbacks for invalid / error-like library states. |
+| **Attributes** | When present: **`detailed_status`** — raw status enum name from the library; **`eco_mode`** — eco flag from the zone mode object. |
+
+### Light (`light`)
+
+| Item | Supported values / behavior |
+|------|-----------------------------|
+| **Entities** | One entity per **lighting** zone. |
+| **Color modes** | **`onoff`** only, or **`rgb`** when the zone supports `set_color` (RGB zones do not also expose a separate on/off-only mode). |
+| **State** | **`on` / `off`**; for RGB zones: **`rgb_color`** `(R,G,B)` and **`brightness`** when reported. |
+| **Attributes** | Optional **`effect`** string when the zone exposes an effect name. |
+
+### Fan (`fan`)
+
+| Item | Supported values / behavior |
+|------|-----------------------------|
+| **Entities** | One per **flow** zone (pump, blower, waterfall-style types from the library). |
+| **Features** | **On/off**; **`set_speed`** when the zone reports preset-based speed capability. |
+| **Preset / speed labels** | Internal speed strings **`off`**, **`low`**, **`medium`**, **`high`** mapped to the library’s discrete speed levels. |
+| **Percentage** | 0–100 from the zone; for display bands: **0–33 → low**, **34–66 → medium**, **67–100 → high** when mapping to those labels. |
+| **Preset list** | When supported, **`preset_mode`** / speed list uses the **preset names** from the device (not a fixed HA list). |
+| **Attributes** | Optional **`initiators`** — list of demand initiator strings when the spa reports them. |
+
+### Select — Watercare (`select`)
+
+| HA option value (state) | Meaning (sent to spa as library mode name) |
+|-------------------------|-------------------------------------------|
+| `away` | Away |
+| `standard` | Standard |
+| `savings` | Savings |
+| `super_savings` | Super Savings |
+| `weekender` | Weekender |
+| `other` | Other |
+
+Unknown library names are normalized to a snake_case option when possible.
+
+### Binary sensor (`binary_sensor`)
+
+**Fixed connectivity / mode (one set per vessel)**
+
+| Entity (translation key) | Device class (typical) | **On** when |
+|--------------------------|------------------------|-------------|
+| **Gateway Status** | `connectivity` | Library gateway status string is **`connected`** (case-insensitive). |
+| **Spa Status** | `running` | Library vessel status string is **`running`** (case-insensitive). |
+| **Transport Connection** | `connectivity` | Cloud **transport** link boolean is true. |
+| **Overall Connection** | `connectivity` | Library reports **fully connected**. |
+| **Energy Saving Mode** | _(none)_ | Operation mode controller reports **energy saving** active. |
+
+**Optional REST alerts** (created only if **Alerts poll interval** is greater than `0`)
+
+| Entity | Device class | **On** when |
+|--------|--------------|-------------|
+| **Active Alerts** | `problem` | REST snapshot **`total`** (unread scoped messages + active actions) is greater than zero. |
+
+**Dynamic shadow booleans**
+
+| Aspect | Detail |
+|--------|--------|
+| **Attributes** | Same as numeric shadow sensors: **`shadow_path`**, **`gecko_diagnostic_group`**. |
+| **Source** | Boolean leaves under **unknown `zones.*` types**, under **`features.*`**, under **`connectivity*`** trees in **reported** shadow (and merged **`cloud.rest.*`** bools). |
+| **Heuristic device classes** | Paths may get classes such as **`moisture`** (leak/flood), **`connectivity`**, **`running`**, **`heat`** / **`cold`**, **`lock`**, **`motion`**, **`problem`**, **`power`** when path tokens match (see code `infer_binary_sensor_device_class`). |
+| **Default visibility** | Paths suggesting **alarm / fault / leak / warning** tend to be **enabled by default**; connectivity-like and RF-diagnostic paths stay **disabled diagnostics** until you enable them. |
+
+### Sensor (`sensor`)
+
+**Spa thermostat mirror sensors** (one **temperature control** zone each)
+
+| Entity | Meaning |
+|--------|---------|
+| **Target temperature {zone_id}** | Same value as the **`climate`** thermostat **setpoint** (°C). |
+| **Current temperature {zone_id}** | Same value as the thermostat **measured** spa temperature (°C). |
+
+These use `device_class: temperature` and `state_class: measurement` so pool/spa dashboard cards that only list **`sensor`** entities (for example some **Pool Monitor** cards) can bind to them instead of `climate`.
+
+**Optional REST active alerts** (alerts poll interval greater than `0`)
+
+| State | Type | Meaning |
+|-------|------|---------|
+| **`state`** | integer | **`total`** = count of **scoped unread messages** plus **active vessel actions** (capped lists in attributes). |
+| **`messages`** attribute | list | Up to **16** entries: `id`, `title`, `preview` (short body). |
+| **`actions`** attribute | list | Up to **16** entries: `id`, `title`, `status`. |
+| **`updated_at`** | ISO timestamp | When the snapshot was built. |
+| **`error`** | string or empty | Set when the REST merge reports an error string. |
+
+**Dynamic shadow numeric sensors**
+
+| Aspect | Detail |
+|--------|--------|
+| **Attributes** | Each entity exposes **`shadow_path`** (dotted path) and **`gecko_diagnostic_group`** (`calibration_model`, `rf`, `connectivity`, `chemistry_live`, `chemistry_other`, `other`) for automations and support. |
+| **Sources** | Numeric leaves under **`zones.<type>.<id>`** for zone types **other than** `flow`, `lighting`, `temperatureControl`; under **`features.<feature>`**; under top-level **`connectivity`** / **`connectivity…`** keys in **reported**. |
+| **Caps** | Rough safety limits: up to **192** numeric paths, **128** booleans, **128** strings (deeply nested shadow is truncated by depth/limits). |
+| **Setpoints** | Single-leaf unknown-zone paths whose last segment looks like a **setpoint** (`setpoint`, `targetTemp`, `goal`, …) become **`number`** entities instead of sensors. |
+| **Units / device classes** | Inferred from path text (examples): **pH** → `ph`; **ORP / redox** → `voltage` in **mV**; **temperature** → **°C**; humidity/moisture **%**; **V / A / W / kWh / Hz**; pressure **psi** or **bar**; flow **gal/min** or **L/min**; conductivity **µS/cm**; **TDS**; various chemistry-related **ppm**; duration when names include seconds/minutes. |
+| **Default vs diagnostic** | Likely **live chemistry** paths (pH/ORP/chlorine/salinity/TDS/etc., and selected **`cloud.rest.readings.*`** keys) are often **enabled by default**. **Calibration/model** parameters (e.g. offset/slope mV, thermistor **R0/T0/beta**), **RF diagnostics**, and generic **connectivity** numerics are usually **disabled diagnostics**. |
+
+**Dynamic shadow string sensors**
+
+| Aspect | Detail |
+|--------|--------|
+| **Attributes** | **`shadow_path`**, **`gecko_diagnostic_group`** (same buckets as numerics). |
+| **Sources** | Same extension trees as booleans; strings must be **non-empty**, **≤ 255** characters, not JWT-like, not on sensitive path tokens. **`features.operationMode`** strings are skipped (watercare is already the **select**). |
+| **REST merge** | **`cloud.rest.*`** strings from vessel summary / readings / actions (see below). |
+| **Default visibility** | Paths containing tokens like **water, status, message, mode, tile, summary, actions** under REST, or **alarm / message / status / fault** in the shadow, are more likely enabled by default; others are often diagnostics. |
+
+### Number (`number`)
+
+| Aspect | Detail |
+|--------|--------|
+| **Role** | Writable **single-leaf** setpoints for **unknown** zone types (`zones.{type}.{zoneId}.{leaf}`) where **type** is not `flow`, `lighting`, or `temperatureControl`, and **leaf** matches setpoint-like names (`setpoint`, `targetTemp`, `goal`, …). |
+| **Attributes** | **`shadow_path`**, **`zone_type`**, **`zone_id`**, **`field_key`** (same fragment keys used when publishing **desired**). |
+| **UI mode** | **Box** entry in HA. |
+| **Limits (heuristic)** | **pH-like paths:** 0–14 step **0.1**; **ORP-like:** 0–1000 step **1**; **temperature-like:** **4–42** °C step **0.5**; otherwise **0–100** step **1**. |
+| **Write path** | Publishes MQTT **`state.desired`** fragment `{ "zones": { "<type>": { "<id>": { "<leaf>": <value> } } } }` via the active Gecko client. |
+
+### Optional REST tile paths (`cloud.rest.*`)
+
+When **Cloud REST poll interval** is enabled, metrics are merged under **`cloud.rest.*`**. If MQTT later publishes the **same dotted path**, the **shadow (MQTT) value wins**.
+
+**Stable / documented numeric paths**
+
+| Path | Meaning |
+|------|---------|
+| `cloud.rest.disc_elements.temp_c` | Water / spa temperature in **°C** from disc or status-style fields. |
+| `cloud.rest.summary.ph` | **pH** from `phStatus` / `ph_status` style objects. |
+| `cloud.rest.summary.orp_mv` | **ORP** in millivolts from `orpStatus` / `orp_status` style objects. |
+| `cloud.rest.readings.<key>` | Numeric **`.value`** from each entry under REST **`readings`**, **`monitorReadings`**, **`reportReadings`**, or **`computedReadings`** (including when nested under **`status`**). Keys are **API-defined** (examples seen in the wild: `waterTemp`, `ph`, `orp`, `freeChlorine`, `totalAlkalinity`, `totalHardness`, `cyanuricAcid`, `calciumHardness`, `adjustedTotalAlkalinity`, `lsi`, `phStc20`, …). |
+| `cloud.rest.actions.count` | Number of **`status.actions`** list entries. |
+
+**String paths (representative)**
+
+| Pattern | Meaning |
+|---------|---------|
+| `cloud.rest.disc.*` / `cloud.rest.status.*` | Short strings from **`waterStatus`**, **`flowStatus`**, **`statusText`**, **`message`**, **`text`**, etc., including nested `text` / `message` / `value` leaves when the API uses objects. |
+| `cloud.rest.readings.<key>.status` / `.title` / `.unit` / `.abbreviation` / `.source` | Metadata strings beside each readings entry. |
+| `cloud.rest.actions.<actionType>` | Action **title**. |
+| `cloud.rest.actions.<actionType>.instructions` | Joined instruction text (length-clamped for HA). |
+| `cloud.rest.disc.waterStatusColor` | Tile color hint string when present. |
+| `cloud.rest.disc.lastUpdatedText` | Human “last updated” text when present. |
+
+**Boolean paths**
+
+| Pattern | Meaning |
+|---------|---------|
+| `cloud.rest.status.<key>` | Shallow boolean fields on the REST **status** object. |
+| `cloud.rest.disc_elements.<key>` | Booleans under **`discElements`** / **`disc_elements`**, including one level of nested bools. |
 
 ---
 
@@ -193,7 +352,7 @@ Call **`gecko.dump_shadow_snapshot`** with defaults for a **community-safe** exp
 
 ### Entities not updating
 
-- Inspect RF / connectivity **binary sensors**
+- Inspect connectivity **binary sensors** (gateway, transport, overall link, spa running)
 - Reload the integration entry, or restart HA if MQTT is stuck
 
 ### REST options seem to do nothing
