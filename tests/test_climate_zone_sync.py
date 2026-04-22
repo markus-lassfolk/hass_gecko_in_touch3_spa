@@ -6,7 +6,6 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-
 from custom_components.gecko.climate import GeckoClimate
 from gecko_iot_client.models.zone_types import ZoneType
 

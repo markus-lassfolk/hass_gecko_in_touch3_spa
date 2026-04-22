@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -12,7 +13,14 @@ from custom_components.gecko import shadow_dump
 
 def test_integration_version_reads_manifest() -> None:
     v = shadow_dump.integration_version()
-    assert v == "2.3.0"
+    manifest = (
+        Path(__file__).resolve().parent.parent
+        / "custom_components"
+        / "gecko"
+        / "manifest.json"
+    )
+    expected = json.loads(manifest.read_text(encoding="utf-8"))["version"]
+    assert v == expected
 
 
 def test_key_segments_splits_camel_and_separators() -> None:
