@@ -140,7 +140,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._shadow_metric_values = (
             extract_extension_metrics(state) if state else {}
         )
-        self._pending_new_metric_paths = (
+        self._pending_new_metric_paths |= (
             set(self._shadow_metric_values) - self._registered_shadow_metric_paths
         )
 

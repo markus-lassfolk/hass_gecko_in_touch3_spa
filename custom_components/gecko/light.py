@@ -195,8 +195,8 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
                     set_color_method(
                         existing_rgbi.r, existing_rgbi.g, existing_rgbi.b, brightness
                     )
-                elif callable(activate_method):
-                    activate_method()
+                else:
+                    set_color_method(255, 255, 255, brightness)
             elif callable(activate_method):
                 activate_method()
             else:
