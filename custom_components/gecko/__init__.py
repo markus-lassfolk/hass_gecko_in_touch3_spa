@@ -23,7 +23,11 @@ from .api import OAuthGeckoApi
 from .connection_manager import async_get_connection_manager
 from .const import (
     CONF_ALERTS_POLL_INTERVAL,
+    CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+    CONF_CLOUD_REST_POLL_INTERVAL,
     DEFAULT_ALERTS_POLL_INTERVAL,
+    DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+    DEFAULT_CLOUD_REST_POLL_INTERVAL,
     DOMAIN,
     OAUTH2_AUTHORIZE,
     OAUTH2_CLIENT_ID,
@@ -246,6 +250,32 @@ _PLATFORMS: list[Platform] = [
 ]
 
 
+def _migrate_options_defaults(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """One-time migration: update saved options that still carry old disabled-by-default values.
+
+    Before v2.2.0 the defaults were poll_interval=0 and mqtt_only=True which
+    got persisted when the user opened the options flow.  Update them to the
+    new defaults so chemistry polling starts automatically.
+    """
+    opts = dict(entry.options)
+    changed = False
+    if opts.get(CONF_CLOUD_REST_POLL_INTERVAL) == 0:
+        opts[CONF_CLOUD_REST_POLL_INTERVAL] = DEFAULT_CLOUD_REST_POLL_INTERVAL
+        changed = True
+    if opts.get(CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN) is True:
+        opts[CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN] = DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN
+        changed = True
+    if changed:
+        hass.config_entries.async_update_entry(entry, options=opts)
+        _LOGGER.info(
+            "Migrated cloud REST options to new defaults for entry %s "
+            "(poll_interval=%s, mqtt_only=%s)",
+            entry.entry_id,
+            opts.get(CONF_CLOUD_REST_POLL_INTERVAL),
+            opts.get(CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN),
+        )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Gecko from a config entry."""
     _t0 = time.monotonic()
@@ -254,6 +284,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.entry_id,
         len(entry.data.get("vessels", [])),
     )
+
+    _migrate_options_defaults(hass, entry)
 
     # Fallback: resolve missing account_id for version-2 entries (recovery path)
     if (
