@@ -27,11 +27,6 @@ from .shadow_metrics import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def _metric_enabled_by_default(path: str) -> bool:
-    """Expose likely water-chemistry metrics by default; other shadow leaves stay disabled."""
-    return chemistry_metric_enabled_by_default(path)
-
-
 def _humanize_metric_name(path: str) -> str:
     """Short display name from dotted path."""
     tail = path.split(".")[-1]
@@ -136,7 +131,7 @@ class GeckoShadowMetricSensor(
         if unit:
             self._attr_native_unit_of_measurement = unit
 
-        if _metric_enabled_by_default(metric_path):
+        if chemistry_metric_enabled_by_default(metric_path):
             self._attr_entity_registry_enabled_default = True
             self._attr_entity_category = None
         else:
