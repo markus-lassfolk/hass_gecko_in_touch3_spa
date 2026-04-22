@@ -113,7 +113,6 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Optional REST tile metrics (merged under ``cloud.rest.*``; shadow wins on overlap)
         self._cloud_tile_metrics: Dict[str, float | int] = {}
         self._cloud_string_metrics: Dict[str, str] = {}
-        self._cloud_bool_metrics: Dict[str, bool] = {}
         self._last_cloud_poll_monotonic: float | None = None
 
         # REST: unread messages (scoped) + vessel actions — not history.
@@ -597,7 +596,6 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._pending_number_paths.clear()
         self._cloud_tile_metrics.clear()
         self._cloud_string_metrics.clear()
-        self._cloud_bool_metrics.clear()
         self._last_cloud_poll_monotonic = None
         self._rest_alerts_snapshot = {
             "total": 0,
