@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 
 from homeassistant.components.number import NumberEntity, NumberMode
@@ -97,8 +98,10 @@ class GeckoUnknownZoneSetpointNumber(
         leaf = path.split(".")[-1]
         leaf_h = leaf.replace("_", " ").strip().title() or leaf
         self._attr_name = f"Setpoint {leaf_h}"
+        path_hash = hashlib.sha256(path.encode("utf-8")).hexdigest()[:8]
         self._attr_unique_id = (
-            f"{config_entry.entry_id}_{coordinator.monitor_id}_num_{slug}"
+            f"{config_entry.entry_id}_{coordinator.monitor_id}_"
+            f"num_{path.replace('.', '_')}_{path_hash}"
         )
         self.entity_id = f"number.{vessel_slug}_setpoint_{slug}"
         self._attr_entity_category = None

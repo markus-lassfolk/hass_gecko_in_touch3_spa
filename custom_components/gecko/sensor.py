@@ -207,8 +207,10 @@ class GeckoShadowStringSensor(
         )
         path_slug = metric_path_to_entity_slug(path)
         self._attr_name = _humanize_metric_name(path)
+        path_hash = hashlib.sha256(path.encode("utf-8")).hexdigest()[:8]
         self._attr_unique_id = (
-            f"{config_entry.entry_id}_{coordinator.monitor_id}_str_{path_slug}"
+            f"{config_entry.entry_id}_{coordinator.monitor_id}_"
+            f"str_{path.replace('.', '_')}_{path_hash}"
         )
         self.entity_id = f"sensor.{vessel_slug}_str_{path_slug}"
         self._attr_extra_state_attributes = {

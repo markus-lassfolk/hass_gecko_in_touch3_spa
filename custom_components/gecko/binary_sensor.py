@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Any
 
@@ -261,8 +262,10 @@ class GeckoShadowBoolBinarySensor(
         slug = metric_path_to_entity_slug(path)
         tail = path.split(".")[-1]
         self._attr_name = tail.replace("_", " ").strip().title() or tail
+        path_hash = hashlib.sha256(path.encode("utf-8")).hexdigest()[:8]
         self._attr_unique_id = (
-            f"{config_entry.entry_id}_{coordinator.monitor_id}_bool_{slug}"
+            f"{config_entry.entry_id}_{coordinator.monitor_id}_"
+            f"bool_{path.replace('.', '_')}_{path_hash}"
         )
         self.entity_id = f"binary_sensor.{vessel_slug}_bool_{slug}"
         self._attr_extra_state_attributes = {
