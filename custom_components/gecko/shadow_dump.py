@@ -315,7 +315,8 @@ def build_shadow_export_payload(
     """Assemble a JSON structure for maintainers.
 
     When ``sanitize_for_public_share`` is True (default), returns a deep-copied,
-    redacted payload suitable for community sharing.
+    redacted payload suitable for community sharing. When False, the returned
+    dict is still deep-copied so file writes do not race live MQTT state.
     """
     state = getattr(gecko_client, "_state", None)
     configuration = (
@@ -375,7 +376,9 @@ def build_shadow_export_payload(
     if sanitize_for_public_share:
         return sanitize_export_payload(payload)
     payload["sanitized_for_public_share"] = False
-    return payload
+    # Full raw dumps must not retain live client references: the write runs in
+    # an executor while MQTT may still mutate _state / zones.
+    return copy.deepcopy(payload)
 
 
 def write_json_file(path: Path, data: dict[str, Any]) -> None:
