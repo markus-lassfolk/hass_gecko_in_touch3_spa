@@ -491,8 +491,15 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if self._initial_setup_done:
                     return
                 await self.async_refresh()
-                await self.async_wait_for_initial_zone_data(timeout=15.0)
                 client = await self.get_gecko_client()
+                if client:
+                    await self.async_wait_for_initial_zone_data(timeout=15.0)
+                else:
+                    _LOGGER.debug(
+                        "Skipping initial zone wait for %s (no MQTT yet); "
+                        "REST/shadow entities still initialize from refresh",
+                        self.vessel_name,
+                    )
                 self.sync_refresh_shadow_metrics(client)
                 self._initial_setup_done = True
 
