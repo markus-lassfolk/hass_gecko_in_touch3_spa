@@ -355,8 +355,16 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             connection_manager = await async_get_connection_manager(self.hass)
             connection = connection_manager.get_connection(self.monitor_id)
 
-            await self._async_poll_cloud_tiles_if_due(connection)
-            await self._async_poll_alerts_if_due()
+            try:
+                await self._async_poll_cloud_tiles_if_due(connection)
+            except Exception as err:
+                _LOGGER.debug(
+                    "Cloud tile poll failed for %s: %s", self.vessel_name, err
+                )
+            try:
+                await self._async_poll_alerts_if_due()
+            except Exception as err:
+                _LOGGER.debug("Alerts poll failed for %s: %s", self.vessel_name, err)
 
             if not connection or not connection.is_connected:
                 self._consecutive_failures += 1
