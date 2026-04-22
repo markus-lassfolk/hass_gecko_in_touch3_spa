@@ -23,6 +23,17 @@ from .services import async_setup_services
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate config entry to latest version."""
+    _LOGGER.info("Migrating Gecko config entry from version %s", entry.version)
+
+    if entry.version == 1:
+        entry.version = 2
+
+    _LOGGER.info("Migration to version %s successful", entry.version)
+    return True
+
+
 async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     """Set up the Gecko component."""
     await async_setup_services(hass)

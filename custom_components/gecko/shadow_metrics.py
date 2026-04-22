@@ -254,7 +254,6 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
             "salinity",
             "tds",
             "sanitizer",
-            "waterlab",
             "alkalinity",
             "hardness",
             "calcium",
