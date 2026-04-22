@@ -511,7 +511,6 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     "REST/shadow entities still initialize from refresh",
                     self.vessel_name,
                 )
-            self.sync_refresh_shadow_metrics(client)
             self._initial_setup_done = True
 
     async def _simple_reconnect(self) -> None:
