@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import logging
 import time
 from datetime import timedelta
@@ -114,6 +113,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Track if initial setup has been completed to avoid redundant refresh during platform setup
         self._initial_setup_done = False
         self._initial_setup_lock = asyncio.Lock()
+        self._initial_paths_consumed = {"metric": False, "string": False, "bool": False, "number": False}
 
         # Optional REST tile metrics (merged under ``cloud.rest.*``; shadow wins on overlap)
         self._cloud_tile_metrics: Dict[str, float | int] = {}
@@ -384,9 +384,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             for callback in self._shadow_metric_callbacks:
                 try:
                     if callable(callback):
-                        result = callback()
-                        if inspect.iscoroutine(result):
-                            asyncio.run_coroutine_threadsafe(result, self.hass.loop)
+                        callback()
                 except Exception as ex:
                     _LOGGER.error(
                         "Error in shadow metric callback for vessel %s: %s",
@@ -400,34 +398,42 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         val = self._shadow_metric_values.get(metric_path)
         return val if val is not None else None
 
-    def has_pending_shadow_sensor_discovery(self) -> bool:
-        """True when dynamic shadow metric/string sensors may need to be added."""
-        return bool(self._pending_new_metric_paths or self._pending_string_paths)
-
     def take_pending_new_metric_paths(self) -> list[str]:
         """Paths not yet bound to sensor entities; marks them registered."""
         out = sorted(self._pending_new_metric_paths)
         self._registered_shadow_metric_paths.update(out)
-        self._pending_new_metric_paths.clear()
+        if not self._initial_setup_done or self._initial_paths_consumed["metric"]:
+            self._pending_new_metric_paths.clear()
+        else:
+            self._initial_paths_consumed["metric"] = True
         return out
 
     def take_pending_number_paths(self) -> list[str]:
         """Unknown-zone setpoint paths for Number entities."""
         out = sorted(self._pending_number_paths)
         self._registered_number_paths.update(out)
-        self._pending_number_paths.clear()
+        if not self._initial_setup_done or self._initial_paths_consumed["number"]:
+            self._pending_number_paths.clear()
+        else:
+            self._initial_paths_consumed["number"] = True
         return out
 
     def take_pending_bool_paths(self) -> list[str]:
         out = sorted(self._pending_bool_paths)
         self._registered_bool_paths.update(out)
-        self._pending_bool_paths.clear()
+        if not self._initial_setup_done or self._initial_paths_consumed["bool"]:
+            self._pending_bool_paths.clear()
+        else:
+            self._initial_paths_consumed["bool"] = True
         return out
 
     def take_pending_string_paths(self) -> list[str]:
         out = sorted(self._pending_string_paths)
         self._registered_string_paths.update(out)
-        self._pending_string_paths.clear()
+        if not self._initial_setup_done or self._initial_paths_consumed["string"]:
+            self._pending_string_paths.clear()
+        else:
+            self._initial_paths_consumed["string"] = True
         return out
 
     def get_shadow_bool_value(self, path: str) -> bool | None:
@@ -442,14 +448,15 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_ensure_initial_setup(self) -> None:
         """Ensure initial async refresh and shadow metrics refresh happen only once."""
-        async with self._initial_setup_lock:
-            if self._initial_setup_done:
-                return
-            await self.async_refresh()
-            await self.async_wait_for_initial_zone_data(timeout=15.0)
-            client = await self.get_gecko_client()
-            self.sync_refresh_shadow_metrics(client)
-            self._initial_setup_done = True
+        if not self._initial_setup_done:
+            async with self._initial_setup_lock:
+                if self._initial_setup_done:
+                    return
+                await self.async_refresh()
+                await self.async_wait_for_initial_zone_data(timeout=15.0)
+                client = await self.get_gecko_client()
+                self.sync_refresh_shadow_metrics(client)
+                self._initial_setup_done = True
 
     async def _simple_reconnect(self) -> None:
         """Simple reconnection - let geckoIotClient handle token refresh."""
