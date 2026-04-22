@@ -291,9 +291,23 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 exc,
             )
         try:
-            actions_payload = await api.async_get_vessel_actions_v2(
-                str(account_id), str(self.vessel_id)
-            )
+            async with rd.rest_alerts_actions_lock:
+                if (
+                    rd.rest_alerts_actions_payload is not None
+                    and rd.rest_alerts_actions_mono is not None
+                    and rd.rest_alerts_actions_account_id == account_id
+                    and rd.rest_alerts_actions_vessel_id == str(self.vessel_id)
+                    and (now - rd.rest_alerts_actions_mono) < interval
+                ):
+                    actions_payload = rd.rest_alerts_actions_payload
+                else:
+                    actions_payload = await api.async_get_vessel_actions_v2(
+                        str(account_id), str(self.vessel_id)
+                    )
+                    rd.rest_alerts_actions_payload = actions_payload
+                    rd.rest_alerts_actions_mono = now
+                    rd.rest_alerts_actions_account_id = account_id
+                    rd.rest_alerts_actions_vessel_id = str(self.vessel_id)
         except Exception as exc:
             aerr = f"actions:{type(exc).__name__}"
             err = f"{err};{aerr}" if err else aerr
@@ -335,6 +349,14 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.warning("Connection lost for %s, attempting reconnect", self.vessel_name)
                     await self._simple_reconnect()
                     self._consecutive_failures = 0
+                    # Re-check connection after reconnect attempt
+                    connection = connection_manager._connections.get(self.monitor_id)
+                    if connection and connection.is_connected:
+                        # Successfully reconnected, proceed to active path
+                        client = await self.get_gecko_client()
+                        self.sync_refresh_shadow_metrics(client)
+                        return {"status": "active", "vessel_id": self.vessel_id}
+                
                 # MQTT shadow is unavailable; still merge REST tile metrics into shadow
                 # caches so cloud.rest.* entities update while disconnected.
                 self.sync_refresh_shadow_metrics(None)
@@ -360,6 +382,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def sync_refresh_shadow_metrics(self, gecko_client: Any | None) -> None:
         """Parse extension metrics from shadow; merge optional REST tile metrics (MQTT wins)."""
+        # Ensure we're running on the event loop since callbacks may call async_add_entities
+        if self.hass.loop != asyncio.get_running_loop():
+            raise RuntimeError("sync_refresh_shadow_metrics must be called from the event loop")
         state = getattr(gecko_client, "_state", None) if gecko_client else None
         mqtt_metrics = extract_extension_metrics(state) if state else {}
         merged: Dict[str, float | int] = dict(self._cloud_tile_metrics)
