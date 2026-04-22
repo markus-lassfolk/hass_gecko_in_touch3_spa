@@ -295,6 +295,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             connection_manager = await async_get_connection_manager(self.hass)
             connection = connection_manager._connections.get(self.monitor_id)
             
+            await self._async_poll_cloud_tiles_if_due(connection)
+            await self._async_poll_alerts_if_due()
+            
             if not connection or not connection.is_connected:
                 self._consecutive_failures += 1
                 
@@ -306,9 +309,6 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return {"status": "disconnected", "vessel_id": self.vessel_id}
             
             self._consecutive_failures = 0
-
-            await self._async_poll_cloud_tiles_if_due(connection)
-            await self._async_poll_alerts_if_due()
 
             client = await self.get_gecko_client()
             self.sync_refresh_shadow_metrics(client)
