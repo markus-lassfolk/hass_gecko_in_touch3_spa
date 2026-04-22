@@ -219,7 +219,7 @@ class GeckoConnectionManager:
 
             except Exception as e:
                 elapsed = time.monotonic() - _t0
-                _LOGGER.error(
+                _LOGGER.debug(
                     "Failed to create connection for monitor %s after %.1fs: %s",
                     mid,
                     elapsed,

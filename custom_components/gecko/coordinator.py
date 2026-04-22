@@ -853,7 +853,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return True
 
         except Exception as e:
-            _LOGGER.error(
+            _LOGGER.debug(
                 "Failed to set up connection for vessel %s: %s",
                 self.vessel_name,
                 e,

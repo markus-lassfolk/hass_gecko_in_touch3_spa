@@ -42,5 +42,5 @@ API_BASE_URL = "https://api.geckowatermonitor.com"
 
 # Client configuration
 CONFIG_TIMEOUT = (
-    10.0  # Default timeout for GeckoIotClient configuration loading in seconds
+    20.0  # Default timeout for GeckoIotClient configuration loading in seconds
 )
