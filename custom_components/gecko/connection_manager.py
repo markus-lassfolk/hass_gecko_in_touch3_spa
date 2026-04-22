@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -27,6 +28,14 @@ RECONNECT_DELAY = 2  # seconds to wait before reconnecting
 # Global key for the connection manager
 GECKO_CONNECTION_MANAGER_KEY: HassKey[GeckoConnectionManager] = HassKey(
     f"{DOMAIN}_connection_manager"
+)
+
+# Home Assistant 2025.12+ prefers ``async_=True`` for async singletons; older cores
+# detect coroutine functions automatically and reject the keyword.
+_singleton_cm = (
+    singleton(GECKO_CONNECTION_MANAGER_KEY, async_=True)
+    if "async_" in inspect.signature(singleton).parameters
+    else singleton(GECKO_CONNECTION_MANAGER_KEY)
 )
 
 
@@ -473,7 +482,7 @@ class GeckoConnectionManager:
             return {"exists": True, "connected": False, "error": str(e)}
 
 
-@singleton(GECKO_CONNECTION_MANAGER_KEY, async_=True)
+@_singleton_cm
 async def async_get_connection_manager(hass: HomeAssistant) -> GeckoConnectionManager:
     """Get or create the singleton Gecko connection manager."""
     return GeckoConnectionManager(hass)
