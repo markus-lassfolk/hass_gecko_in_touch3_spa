@@ -394,6 +394,21 @@ _KNOWN_ABBREVIATIONS: dict[str, str] = {
     "wifi": "WiFi",
 }
 
+# ``cloud.rest.readings.*`` chemistry leaves that stay in Diagnostics until enabled.
+# Primary dashboard chemistry stays on: pH/ORP (via path segments), water temp,
+# free/total chlorine; see ``chemistry_metric_enabled_by_default``.
+_CLOUD_REST_READINGS_OFF_BY_DEFAULT = frozenset(
+    {
+        "adjustedtotalalkalinity",
+        "calciumhardness",
+        "cyanuricacid",
+        "lsi",
+        "phstc20",
+        "totalalkalinity",
+        "totalhardness",
+    }
+)
+
 _AMBIGUOUS_LEAVES = frozenset(
     {
         "id",
@@ -751,6 +766,18 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
     if "operationmode" in lower:
         return False
 
+    # REST: duplicate aggregates and specialist/secondary chemistry (readings are canonical).
+    if lower.startswith("cloud.rest.summary."):
+        return False
+    if lower == "cloud.rest.actions.count":
+        return False
+    if lower.endswith("disc_elements.temp_c") or lower.endswith(".disc_elements.temp_c"):
+        return False
+    if lower.startswith("cloud.rest.readings."):
+        reading_key = path.split(".")[-1].lower()
+        if reading_key in _CLOUD_REST_READINGS_OFF_BY_DEFAULT:
+            return False
+
     segs = _path_segments(path)
     if any(_segment_is_ph(s) for s in segs):
         return True
@@ -788,9 +815,6 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
             ".ph",
             ".orp",
             "orp_mv",
-            "temp_c",
-            "disc_elements.",
-            "actions.count",
         )
     ):
         return True
@@ -798,15 +822,8 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
         reading_key = path.split(".")[-1].lower()
         if reading_key in (
             "watertemp",
-            "lsi",
-            "phstc20",
             "freechlorine",
             "totalchlorine",
-            "totalalkalinity",
-            "totalhardness",
-            "cyanuricacid",
-            "calciumhardness",
-            "adjustedtotalalkalinity",
         ):
             return True
     return False

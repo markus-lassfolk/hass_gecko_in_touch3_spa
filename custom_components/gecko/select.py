@@ -44,6 +44,35 @@ _MODE_KEY_TO_LIBRARY: dict[str, str] = {
 _LIBRARY_TO_MODE_KEY: dict[str, str] = {v: k for k, v in _MODE_KEY_TO_LIBRARY.items()}
 
 
+def _normalize_watercare_user_option(option: str) -> str | None:
+    """Map HA option keys or legacy Title Case labels to a key in ``WATERCARE_MODE_OPTIONS``."""
+    if option in WATERCARE_MODE_OPTIONS:
+        return option
+    if option in _LIBRARY_TO_MODE_KEY:
+        return _LIBRARY_TO_MODE_KEY[option]
+    opt_lower = option.lower()
+    for lib_name, key in _LIBRARY_TO_MODE_KEY.items():
+        if lib_name.lower() == opt_lower:
+            return key
+    for key in WATERCARE_MODE_OPTIONS:
+        if key.lower() == opt_lower:
+            return key
+    return None
+
+
+def _coerce_library_mode_to_option(library_name: str | None) -> str | None:
+    """Map a library mode name to a valid ``current_option`` (never outside ``options``)."""
+    if not library_name:
+        return None
+    key = _LIBRARY_TO_MODE_KEY.get(library_name)
+    if key is not None:
+        return key
+    slug = library_name.lower().replace(" ", "_")
+    if slug in WATERCARE_MODE_OPTIONS:
+        return slug
+    return "other"
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -178,12 +207,9 @@ class GeckoWatercareSelectEntity(
     def _on_operation_mode_update(self, operation_mode_controller) -> None:
         """Handle operation mode updates (may run on library background thread)."""
         try:
-            new_option = _LIBRARY_TO_MODE_KEY.get(
-                operation_mode_controller.mode_name,
-                operation_mode_controller.mode_name.lower().replace(" ", "_"),
+            new_option = _coerce_library_mode_to_option(
+                operation_mode_controller.mode_name
             )
-            if new_option not in WATERCARE_MODE_OPTIONS:
-                new_option = None
 
             def _update_and_write() -> None:
                 self._attr_current_option = new_option
@@ -219,13 +245,7 @@ class GeckoWatercareSelectEntity(
 
             if gecko_client and gecko_client.operation_mode_controller:
                 library_name = gecko_client.operation_mode_controller.mode_name
-                new_option = _LIBRARY_TO_MODE_KEY.get(
-                    library_name,
-                    library_name.lower().replace(" ", "_"),
-                )
-                if new_option not in WATERCARE_MODE_OPTIONS:
-                    new_option = None
-                self._attr_current_option = new_option
+                self._attr_current_option = _coerce_library_mode_to_option(library_name)
                 _LOGGER.debug(
                     "Updated watercare mode for %s: %s",
                     self._vessel_name,
@@ -239,7 +259,9 @@ class GeckoWatercareSelectEntity(
                 self._attr_current_option = None
 
         except Exception as e:
-            _LOGGER.debug("Could not get operation mode for %s: %s", self._vessel_name, e)
+            _LOGGER.debug(
+                "Could not get operation mode for %s: %s", self._vessel_name, e
+            )
             self._attr_current_option = None
 
         await self._manage_operation_mode_callback(register=True)
@@ -251,11 +273,12 @@ class GeckoWatercareSelectEntity(
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
-        if option not in WATERCARE_MODE_OPTIONS:
+        normalized = _normalize_watercare_user_option(option)
+        if normalized is None:
             _LOGGER.error("Invalid watercare mode option: %s", option)
             return
 
-        library_name = _MODE_KEY_TO_LIBRARY.get(option, option)
+        library_name = _MODE_KEY_TO_LIBRARY.get(normalized, normalized)
         _LOGGER.debug(
             "Setting watercare mode for vessel %s to %s (library: %s)",
             self._vessel_name,

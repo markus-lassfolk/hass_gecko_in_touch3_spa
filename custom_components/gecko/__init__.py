@@ -263,6 +263,11 @@ def _migrate_options_defaults(hass: HomeAssistant, entry: ConfigEntry) -> None:
     if opts.get("_options_defaults_migrated"):
         return
 
+    # Fresh installs often have no persisted options yet — nothing to migrate;
+    # avoid an unnecessary ``async_update_entry`` write on every first setup.
+    if not opts:
+        return
+
     changed = False
     if opts.get(CONF_CLOUD_REST_POLL_INTERVAL) == 0:
         opts[CONF_CLOUD_REST_POLL_INTERVAL] = DEFAULT_CLOUD_REST_POLL_INTERVAL

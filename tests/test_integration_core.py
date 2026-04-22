@@ -41,6 +41,50 @@ async def test_async_setup_registers_oauth(hass: HomeAssistant) -> None:
     assert await gecko_pkg.async_setup(hass, {}) is True
 
 
+async def test_migrate_options_defaults_skips_empty_options(
+    hass: HomeAssistant,
+) -> None:
+    """Fresh entries with no persisted options should not trigger a config write."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"vessels": [], "account_id": "a1"},
+        options={},
+    )
+    entry.add_to_hass(hass)
+    with patch.object(hass.config_entries, "async_update_entry") as mock_upd:
+        gecko_pkg._migrate_options_defaults(hass, entry)
+    mock_upd.assert_not_called()
+
+
+async def test_lazy_resolve_account_id_retries_after_transient_error(
+    hass: HomeAssistant,
+) -> None:
+    """Failed lazy resolve must not set the one-shot flag; a later call may succeed."""
+    from custom_components.gecko.coordinator import GeckoVesselCoordinator
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"vessels": [], "account_id": ""},
+        options={},
+    )
+    rd = SimpleNamespace(api_client=MagicMock())
+    entry.runtime_data = rd
+    entry.add_to_hass(hass)
+
+    rd.api_client.async_get_user_id = AsyncMock(side_effect=[OSError("net"), "u1"])
+    rd.api_client.async_get_user_info = AsyncMock(
+        return_value={"account": {"accountId": "acct-99"}}
+    )
+
+    coord = GeckoVesselCoordinator(hass, entry.entry_id, "v1", "m1", "Spa")
+
+    assert await coord._async_lazy_resolve_account_id() == ""
+    assert coord._account_id_resolve_attempted is False
+
+    assert await coord._async_lazy_resolve_account_id() == "acct-99"
+    assert coord._account_id_resolve_attempted is True
+
+
 async def test_async_migrate_entry_bumps_version_and_account(
     hass: HomeAssistant,
 ) -> None:

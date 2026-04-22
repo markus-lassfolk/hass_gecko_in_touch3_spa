@@ -146,7 +146,7 @@ On the Gecko card → **Configure**:
 | **Fan** | Pumps / blowers |
 | **Select** | Watercare operation mode |
 | **Binary sensor** | Connection stack, energy saving, dynamic shadow booleans, **REST active alerts** (on when there is something to review, per snapshot rules) |
-| **Sensor** | **Dynamic shadow numerics** (including connectivity / RF-style numbers when the shadow exposes them), **dynamic shadow strings**, optional **REST active alerts** count + previews |
+| **Sensor** | **Spa target / current temperature** (°C, per thermostat zone — for cards that only accept `sensor`), **dynamic shadow numerics**, **dynamic shadow strings**, optional **REST active alerts** count + previews |
 | **Number** | Writable unknown-zone **setpoints** (shadow **desired**), where paths match supported setpoint shapes |
 
 **Shadow extension sensors:** values under `cloud.rest.*` can remain available from REST when MQTT is offline; pure MQTT paths follow normal entity availability.
@@ -230,6 +230,15 @@ Unknown library names are normalized to a snake_case option when possible.
 | **Default visibility** | Paths suggesting **alarm / fault / leak / warning** tend to be **enabled by default**; connectivity-like and RF-diagnostic paths stay **disabled diagnostics** until you enable them. |
 
 ### Sensor (`sensor`)
+
+**Spa thermostat mirror sensors** (one **temperature control** zone each)
+
+| Entity | Meaning |
+|--------|---------|
+| **Target temperature {zone_id}** | Same value as the **`climate`** thermostat **setpoint** (°C). |
+| **Current temperature {zone_id}** | Same value as the thermostat **measured** spa temperature (°C). |
+
+These use `device_class: temperature` and `state_class: measurement` so pool/spa dashboard cards that only list **`sensor`** entities (for example some **Pool Monitor** cards) can bind to them instead of `climate`.
 
 **Optional REST active alerts** (alerts poll interval greater than `0`)
 

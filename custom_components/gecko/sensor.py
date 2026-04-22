@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from typing import Literal
 
+from gecko_iot_client.models.zone_types import ZoneType
 from homeassistant.components.sensor import (
+    SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory
+from homeassistant.const import EntityCategory, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -31,6 +34,74 @@ from .shadow_metrics import (
 
 _LOGGER = logging.getLogger(__name__)
 
+SpaTempKind = Literal["target", "current"]
+
+
+class GeckoSpaTemperatureSensor(
+    GeckoEntityAvailabilityMixin, CoordinatorEntity, SensorEntity
+):
+    """Numeric mirror of spa thermostat zone temps for cards that only accept ``sensor``."""
+
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 1
+
+    def __init__(
+        self,
+        coordinator: GeckoVesselCoordinator,
+        config_entry: ConfigEntry,
+        zone_id: int,
+        kind: SpaTempKind,
+    ) -> None:
+        super().__init__(coordinator)
+        self._zone_id = zone_id
+        self._kind: SpaTempKind = kind
+        self._attr_translation_key = (
+            "spa_target_temperature" if kind == "target" else "spa_current_temperature"
+        )
+        self._attr_translation_placeholders = {"zone_id": str(zone_id)}
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{coordinator.vessel_id}_"
+            f"spa_{kind}_temperature_{zone_id}"
+        )
+        self._attr_device_info = dr.DeviceInfo(
+            identifiers={(DOMAIN, str(coordinator.vessel_id))},
+        )
+        self._attr_available = False
+        self._update_native_value()
+
+    def _get_zone(self):
+        for z in self.coordinator.get_zones_by_type(ZoneType.TEMPERATURE_CONTROL_ZONE):
+            if getattr(z, "id", None) == self._zone_id:
+                return z
+        return None
+
+    def _update_native_value(self) -> None:
+        zone = self._get_zone()
+        if not zone:
+            self._attr_native_value = None
+            return
+        try:
+            if self._kind == "target":
+                raw = getattr(zone, "target_temperature", None)
+            else:
+                raw = getattr(zone, "temperature", None)
+            self._attr_native_value = float(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            self._attr_native_value = None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._update_native_value()
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._update_native_value()
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -48,6 +119,7 @@ async def async_setup_entry(
         return
 
     initial_entities: list[SensorEntity] = []
+    spa_temp_zone_ids: dict[str, set[int]] = {}
 
     for coordinator in coordinators:
         pending = coordinator.take_pending_new_metric_paths()
@@ -84,6 +156,41 @@ async def async_setup_entry(
                 )
 
         coordinator.register_shadow_metric_callback(_on_shadow_metric_discovery)
+
+        @callback
+        def _discover_spa_temperature_sensors(
+            coord: GeckoVesselCoordinator = coordinator,
+        ) -> None:
+            vessel_key = f"{coord.entry_id}_{coord.vessel_id}"
+            if vessel_key not in spa_temp_zone_ids:
+                spa_temp_zone_ids[vessel_key] = set()
+            zones = coord.get_zones_by_type(ZoneType.TEMPERATURE_CONTROL_ZONE)
+            new_entities: list[SensorEntity] = []
+            for zone in zones:
+                zid = getattr(zone, "id", None)
+                if zid is None:
+                    continue
+                zid_int = int(zid)
+                if zid_int in spa_temp_zone_ids[vessel_key]:
+                    continue
+                new_entities.extend(
+                    [
+                        GeckoSpaTemperatureSensor(
+                            coord, config_entry, zid_int, "target"
+                        ),
+                        GeckoSpaTemperatureSensor(
+                            coord, config_entry, zid_int, "current"
+                        ),
+                    ]
+                )
+                spa_temp_zone_ids[vessel_key].add(zid_int)
+            if new_entities:
+                async_add_entities(new_entities)
+
+        _discover_spa_temperature_sensors()
+        coordinator.register_zone_update_callback(
+            lambda coord=coordinator: _discover_spa_temperature_sensors(coord)
+        )
 
     if initial_entities:
         async_add_entities(initial_entities)

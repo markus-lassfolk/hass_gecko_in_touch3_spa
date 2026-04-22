@@ -72,6 +72,12 @@
       },
       "active_alerts_rest": {
         "name": "Active Alerts"
+      },
+      "spa_target_temperature": {
+        "name": "Target temperature {zone_id}"
+      },
+      "spa_current_temperature": {
+        "name": "Current temperature {zone_id}"
       }
     },
     "select": {

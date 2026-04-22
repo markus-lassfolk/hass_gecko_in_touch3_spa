@@ -202,10 +202,13 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return str(entry.data.get("account_id", "")).strip()
 
     async def _async_lazy_resolve_account_id(self) -> str:
-        """Try once to resolve and persist account_id if missing from config entry."""
+        """Resolve and persist ``account_id`` when missing (retries after transient failures).
+
+        Only sets ``_account_id_resolve_attempted`` after a successful persist so a
+        token/network/API error on an earlier poll does not block later attempts.
+        """
         if self._account_id_resolve_attempted:
             return ""
-        self._account_id_resolve_attempted = True
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
         if not entry or not getattr(entry, "runtime_data", None):
             return ""
@@ -219,6 +222,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 data = dict(entry.data)
                 data["account_id"] = account_id
                 self.hass.config_entries.async_update_entry(entry, data=data)
+                self._account_id_resolve_attempted = True
                 _LOGGER.info(
                     "Lazy-resolved account_id for %s (vessel %s)",
                     self.vessel_name,
