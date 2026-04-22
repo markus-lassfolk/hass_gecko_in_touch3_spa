@@ -22,6 +22,9 @@
     }
   },
   "options": {
+    "abort": {
+      "reconfigure_successful": "Options saved; integration reloaded so alert entities match the new setting."
+    },
     "step": {
       "init": {
         "title": "Cloud REST & alerts",

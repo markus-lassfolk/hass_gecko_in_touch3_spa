@@ -578,11 +578,19 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if connection and connection.is_connected:
                 return connection.gecko_client
 
-            _LOGGER.warning(
-                "No active connection found for vessel %s (monitor %s)",
-                self.vessel_name,
-                self.monitor_id,
-            )
+            if connection is not None:
+                _LOGGER.debug(
+                    "Gecko client not ready for %s (monitor %s); "
+                    "connection exists, MQTT still establishing or reconnecting",
+                    self.vessel_name,
+                    self.monitor_id,
+                )
+            else:
+                _LOGGER.warning(
+                    "No connection registered for vessel %s (monitor %s)",
+                    self.vessel_name,
+                    self.monitor_id,
+                )
             return None
 
         except Exception as e:
@@ -728,9 +736,8 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "Failed to set up connection for vessel %s: %s",
                 self.vessel_name,
                 e,
-                exc_info=True,
             )
-            return False
+            raise
 
     async def async_get_operation_mode_status(self):
         """Get operation mode status for this vessel's monitor."""

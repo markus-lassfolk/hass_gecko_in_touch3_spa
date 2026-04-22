@@ -43,11 +43,11 @@ async def async_setup_entry(
             pump_zones = vessel_coordinator.get_zones_by_type(ZoneType.FLOW_ZONE)
             flow_zones = [zone for zone in pump_zones if isinstance(zone, FlowZone)]
             for zone in flow_zones:
-                entity_id = f"{vessel_coordinator.vessel_name}_pump_{zone.id}".lower()
-                if entity_id not in created_entity_ids:
+                dedup_key = f"{vessel_coordinator.vessel_id}_pump_{zone.id}"
+                if dedup_key not in created_entity_ids:
                     entity = GeckoFan(vessel_coordinator, config_entry, zone)
                     new_entities.append(entity)
-                    created_entity_ids.add(entity_id)
+                    created_entity_ids.add(dedup_key)
                     _LOGGER.debug(
                         "Created fan entity for vessel %s, zone %s",
                         vessel_coordinator.vessel_name,
@@ -82,7 +82,6 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
         CoordinatorEntity.__init__(self, coordinator)
         self._coordinator: GeckoVesselCoordinator = coordinator
         self._zone = zone
-        self.entity_id = f"fan.{coordinator.vessel_name}_pump_{zone.id}".lower()
         self._attr_name = zone.name
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.vessel_name}_pump_{zone.id}"
@@ -121,8 +120,10 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
 
     async def async_added_to_hass(self) -> None:
         """Register update callback when entity is added to hass."""
+        # super() already subscribes via CoordinatorEntity.async_added_to_hass();
+        # do NOT call async_add_listener again — that would fire the callback twice
+        # per coordinator update.
         await super().async_added_to_hass()
-        self.coordinator.async_add_listener(self._handle_coordinator_update)
 
     def _update_from_zone(self) -> None:
         """Update state attributes from zone data."""

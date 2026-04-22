@@ -7,6 +7,9 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from gecko_iot_client.transporters.exceptions import (
+    ConfigurationError as GeckoConfigurationError,
+)
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -303,11 +306,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # connection-related issues, not programming errors
     try:
         await _setup_vessels_and_gecko_clients(hass, entry)
-    except (ConnectionError, TimeoutError, OSError) as ex:
-        # These indicate temporary connection issues that should trigger retry
+    except (ConnectionError, TimeoutError, OSError, GeckoConfigurationError) as ex:
         raise ConfigEntryNotReady(f"Failed to connect to Gecko device: {ex}") from ex
     except KeyError as ex:
-        # Missing required data (e.g., 'refresh_token') indicates auth issues
         raise ConfigEntryNotReady(f"Failed to connect to Gecko device: {ex}") from ex
 
     # One refresh + zone wait before platforms so each platform does not repeat the wait.
@@ -409,22 +410,15 @@ async def _setup_vessel_gecko_client(
         # Don't create zones from spa configuration in coordinator - let GeckoIotClient handle this
         # The coordinator will get zones from the GeckoIotClient once it's connected and configured
 
-        # Use the singleton connection manager through the coordinator
-        success = await coordinator.async_setup_monitor_connection(
+        await coordinator.async_setup_monitor_connection(
             websocket_url=websocket_url
         )
-
-        if not success:
-            raise ConnectionError(
-                f"Failed to setup connection for monitor {monitor_id}"
-            )
 
     except Exception as ex:
         _LOGGER.error(
             "Failed to set up connection for monitor %s: %s",
             monitor_id,
             ex,
-            exc_info=True,
         )
         raise
 

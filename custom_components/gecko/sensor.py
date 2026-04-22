@@ -137,10 +137,6 @@ class GeckoShadowMetricSensor(
         self._metric_path = metric_path
         self._config_entry = config_entry
 
-        vessel_slug = (
-            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
-        )
-        path_slug = metric_path_to_entity_slug(metric_path)
         self._attr_name = _humanize_metric_name(metric_path)
         self._attr_extra_state_attributes = {
             "shadow_path": metric_path,
@@ -151,8 +147,6 @@ class GeckoShadowMetricSensor(
             f"{config_entry.entry_id}_{coordinator.monitor_id}_"
             f"{metric_path.replace('.', '_')}_{path_hash}"
         )
-        self.entity_id = f"sensor.{vessel_slug}_{path_slug}"
-
         apply_numeric_shadow_sensor_hints(self, metric_path)
 
         chem_on = chemistry_metric_enabled_by_default(metric_path)
@@ -211,17 +205,12 @@ class GeckoShadowStringSensor(
         super().__init__(coordinator)
         self._path = path
         self._config_entry = config_entry
-        vessel_slug = (
-            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
-        )
-        path_slug = metric_path_to_entity_slug(path)
         self._attr_name = _humanize_metric_name(path)
         path_hash = hashlib.sha256(path.encode("utf-8")).hexdigest()[:8]
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_"
             f"str_{path.replace('.', '_')}_{path_hash}"
         )
-        self.entity_id = f"sensor.{vessel_slug}_str_{path_slug}"
         self._attr_extra_state_attributes = {
             "shadow_path": path,
             "gecko_diagnostic_group": classify_gecko_shadow_metric(path),
@@ -264,14 +253,10 @@ class GeckoRestActiveAlertsSensor(CoordinatorEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator)
         self._config_entry = config_entry
-        vessel_slug = (
-            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
-        )
         self._attr_name = "Active alerts (REST)"
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_rest_active_alerts"
         )
-        self.entity_id = f"sensor.{vessel_slug}_rest_active_alerts"
         self._attr_icon = "mdi:bell-badge"
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, str(coordinator.vessel_id))},

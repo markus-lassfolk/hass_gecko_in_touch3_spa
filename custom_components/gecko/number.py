@@ -89,10 +89,6 @@ class GeckoUnknownZoneSetpointNumber(
         self._attr_native_max_value = nmax
         self._attr_native_step = step
 
-        vessel_slug = (
-            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
-        )
-        slug = metric_path_to_entity_slug(path)
         leaf = path.split(".")[-1]
         leaf_h = leaf.replace("_", " ").strip().title() or leaf
         self._attr_name = f"Setpoint {leaf_h}"
@@ -101,7 +97,6 @@ class GeckoUnknownZoneSetpointNumber(
             f"{config_entry.entry_id}_{coordinator.monitor_id}_"
             f"num_{path.replace('.', '_')}_{path_hash}"
         )
-        self.entity_id = f"number.{vessel_slug}_setpoint_{slug}"
         self._attr_entity_category = None
         self._attr_extra_state_attributes = {
             "shadow_path": path,

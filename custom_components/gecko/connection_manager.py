@@ -126,8 +126,10 @@ class GeckoConnectionManager:
                 # RUNNING vessel can lag MQTT; token refresh may still be required.
                 vessel_running = str(connectivity_status.vessel_status) == "RUNNING"
                 if vessel_running and not connection.is_connected:
-                    _LOGGER.warning(
-                        "Vessel running but connection not established for %s",
+                    # Expected race: connectivity can report RUNNING before ``connect()``
+                    # finishes or MQTT session is ready; avoid noisy WARNING in logs.
+                    _LOGGER.debug(
+                        "Vessel running but MQTT session not ready yet for %s",
                         monitor_id,
                     )
 

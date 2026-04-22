@@ -153,16 +153,10 @@ class GeckoBinarySensorEntity(
         self._vessel_name = coordinator.vessel_name
         self._vessel_id = coordinator.vessel_id
 
-        # Set up entity attributes
-        vessel_id_name = (
-            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
-        )
         self._attr_name = description.name
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.vessel_id}_{description.key}"
         )
-        self.entity_id = f"binary_sensor.{vessel_id_name}_{description.key}"
-
         # Device info for grouping entities
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, str(coordinator.vessel_id))},
@@ -277,10 +271,6 @@ class GeckoShadowBoolBinarySensor(
     ) -> None:
         super().__init__(coordinator)
         self._path = path
-        vessel_slug = (
-            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
-        )
-        slug = metric_path_to_entity_slug(path)
         tail = path.split(".")[-1]
         self._attr_name = tail.replace("_", " ").strip().title() or tail
         path_hash = hashlib.sha256(path.encode("utf-8")).hexdigest()[:8]
@@ -288,7 +278,6 @@ class GeckoShadowBoolBinarySensor(
             f"{config_entry.entry_id}_{coordinator.monitor_id}_"
             f"bool_{path.replace('.', '_')}_{path_hash}"
         )
-        self.entity_id = f"binary_sensor.{vessel_slug}_bool_{slug}"
         self._attr_extra_state_attributes = {
             "shadow_path": path,
             "gecko_diagnostic_group": classify_gecko_shadow_metric(path),
@@ -336,14 +325,10 @@ class GeckoRestActiveAlertsBinarySensor(
     ) -> None:
         super().__init__(coordinator)
         self._config_entry = config_entry
-        vessel_slug = (
-            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
-        )
         self._attr_name = "Active alerts"
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_rest_active_alerts_bin"
         )
-        self.entity_id = f"binary_sensor.{vessel_slug}_rest_active_alerts"
         self._attr_device_class = BinarySensorDeviceClass.PROBLEM
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, str(coordinator.vessel_id))},

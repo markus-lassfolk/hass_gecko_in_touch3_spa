@@ -193,35 +193,37 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Options for optional REST enrichment."""
-        return GeckoOptionsFlow(config_entry)
+        return GeckoOptionsFlow()
 
 
-class GeckoOptionsFlow(config_entries.OptionsFlowWithConfigEntry):
+class GeckoOptionsFlow(config_entries.OptionsFlow):
     """Integration options (REST poll for app-style tiles when MQTT is quiet)."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         """Configure optional cloud REST polling."""
+        opts = dict(self.config_entry.options)
+
         if user_input is not None:
-            # Crossing zero changes which platforms register REST alert entities.
-            # Reload here only — do not also register an entry update listener that
-            # reloads on the same toggle (double reload / duplicate MQTT setup).
             old_alerts = int(
-                self.options.get(
-                    CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL
-                )
+                opts.get(CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL)
             )
             new_alerts = int(
                 user_input.get(CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL)
             )
             if (old_alerts > 0) != (new_alerts > 0):
-                return self.async_update_reload_and_abort(
+                # Crossing zero changes which platforms register REST alert entities.
+                # Reload here — do not also register an entry update listener that
+                # reloads on the same toggle (double reload / duplicate MQTT setup).
+                self.hass.config_entries.async_update_entry(
                     self.config_entry,
-                    reason="reconfigure_successful",
                     options=user_input,
                 )
+                await self.hass.config_entries.async_reload(
+                    self.config_entry.entry_id
+                )
+                return self.async_abort(reason="reconfigure_successful")
             return self.async_create_entry(title="", data=user_input)
 
-        opts = self.options
         schema = vol.Schema(
             {
                 vol.Optional(
