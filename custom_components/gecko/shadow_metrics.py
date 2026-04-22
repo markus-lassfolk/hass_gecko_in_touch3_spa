@@ -771,7 +771,7 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
         return False
     if lower == "cloud.rest.actions.count":
         return False
-    if lower.endswith("disc_elements.temp_c") or lower.endswith(".disc_elements.temp_c"):
+    if lower.endswith("disc_elements.temp_c"):
         return False
     if lower.startswith("cloud.rest.readings."):
         reading_key = path.split(".")[-1].lower()

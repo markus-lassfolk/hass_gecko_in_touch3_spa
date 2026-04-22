@@ -201,7 +201,7 @@ def test_chemistry_metric_enabled_by_default() -> None:
     assert not shadow_metrics.chemistry_metric_enabled_by_default(
         "features.waterlab.sensor.ph.offsetMv"
     )
-    assert shadow_metrics.chemistry_metric_enabled_by_default("cloud.rest.summary.ph")
+    assert not shadow_metrics.chemistry_metric_enabled_by_default("cloud.rest.summary.ph")
 
 
 def test_parse_unknown_zone_setpoint_path() -> None:
@@ -383,13 +383,14 @@ def test_humanize_shadow_path(path: str, expected: str) -> None:
         ("cloud.rest.readings.ph", True),
         ("cloud.rest.readings.orp", True),
         ("cloud.rest.readings.waterTemp", True),
-        ("cloud.rest.readings.totalAlkalinity", True),
+        ("cloud.rest.readings.totalAlkalinity", False),
         ("cloud.rest.readings.freeChlorine", True),
-        ("cloud.rest.readings.lsi", True),
+        ("cloud.rest.readings.lsi", False),
         ("cloud.rest.readings.wifiRssi", False),
-        ("cloud.rest.summary.ph", True),
-        ("cloud.rest.summary.orp_mv", True),
-        ("cloud.rest.actions.count", True),
+        ("cloud.rest.summary.ph", False),
+        ("cloud.rest.summary.orp_mv", False),
+        ("cloud.rest.actions.count", False),
+        ("cloud.rest.disc_elements.temp_c", False),
     ],
 )
 def test_chemistry_metric_enabled_readings(path: str, expected: bool) -> None:
