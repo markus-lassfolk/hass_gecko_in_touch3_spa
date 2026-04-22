@@ -390,6 +390,7 @@ def infer_sensor_metadata(
     elif any(_segment_is_orp(s) for s in segs) or re.search(
         r"\b(oxidation|redox|eh)\b", lower
     ):
+        device_class = SensorDeviceClass.VOLTAGE
         unit = "mV"
     elif (
         "temperature" in lower

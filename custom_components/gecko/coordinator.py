@@ -110,6 +110,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._registered_number_paths: Set[str] = set()
         self._pending_number_paths: Set[str] = set()
 
+        # Track if initial setup has been completed to avoid redundant refresh during platform setup
+        self._initial_setup_done = False
+
         # Optional REST tile metrics (merged under ``cloud.rest.*``; shadow wins on overlap)
         self._cloud_tile_metrics: Dict[str, float | int] = {}
         self._cloud_string_metrics: Dict[str, str] = {}
@@ -300,8 +303,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.warning("Connection lost for %s, attempting reconnect", self.vessel_name)
                     await self._simple_reconnect()
                     self._consecutive_failures = 0
-            else:
-                self._consecutive_failures = 0
+                return {"status": "disconnected", "vessel_id": self.vessel_id}
+            
+            self._consecutive_failures = 0
 
             await self._async_poll_cloud_tiles_if_due(connection)
             await self._async_poll_alerts_if_due()
@@ -396,6 +400,16 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if path not in self._shadow_string_values:
             return None
         return self._shadow_string_values[path]
+
+    async def async_ensure_initial_setup(self) -> None:
+        """Ensure initial async refresh and shadow metrics refresh happen only once."""
+        if self._initial_setup_done:
+            return
+        self._initial_setup_done = True
+        await self.async_refresh()
+        await self.async_wait_for_initial_zone_data(timeout=15.0)
+        client = await self.get_gecko_client()
+        self.sync_refresh_shadow_metrics(client)
 
     async def _simple_reconnect(self) -> None:
         """Simple reconnection - let geckoIotClient handle token refresh."""

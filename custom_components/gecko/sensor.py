@@ -56,10 +56,7 @@ async def async_setup_entry(
     initial_entities: list[SensorEntity] = []
 
     for coordinator in coordinators:
-        await coordinator.async_refresh()
-        await coordinator.async_wait_for_initial_zone_data(timeout=15.0)
-        client = await coordinator.get_gecko_client()
-        coordinator.sync_refresh_shadow_metrics(client)
+        await coordinator.async_ensure_initial_setup()
         pending = coordinator.take_pending_new_metric_paths()
         if pending:
             initial_entities.extend(
