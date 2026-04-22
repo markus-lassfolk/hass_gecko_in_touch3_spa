@@ -12,7 +12,6 @@ from custom_components.gecko import services as gecko_services
 from custom_components.gecko.const import (
     CONF_ALERTS_POLL_INTERVAL,
     DEFAULT_ALERTS_POLL_INTERVAL,
-    DOMAIN,
 )
 
 
@@ -21,7 +20,7 @@ def test_humanize_metric_name() -> None:
     assert gecko_sensor._humanize_metric_name("") == ""
 
 
-def test_rest_alerts_entities_enabled_and_toggle_key() -> None:
+def test_rest_alerts_entities_enabled() -> None:
     entry = SimpleNamespace(
         entry_id="abc",
         options={CONF_ALERTS_POLL_INTERVAL: DEFAULT_ALERTS_POLL_INTERVAL},
@@ -29,9 +28,6 @@ def test_rest_alerts_entities_enabled_and_toggle_key() -> None:
     assert gecko_pkg._rest_alerts_entities_enabled(entry) is False
     entry.options = {CONF_ALERTS_POLL_INTERVAL: 120}
     assert gecko_pkg._rest_alerts_entities_enabled(entry) is True
-    key = gecko_pkg._rest_alerts_toggle_state_key("abc")
-    assert DOMAIN in key
-    assert "abc" in key
 
 
 def test_services_as_dict_raises() -> None:
