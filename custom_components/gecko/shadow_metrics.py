@@ -8,18 +8,36 @@ leaves for Home Assistant sensors, without hard-coding unpublished field names.
 
 from __future__ import annotations
 
+import hashlib
 import math
 import re
 from typing import Any
 
+from homeassistant.const import UnitOfTemperature
+
 # Zone families handled by gecko-iot-client (avoid duplicating climate/pumps/lights).
 KNOWN_ZONE_TYPES = frozenset({"flow", "lighting", "temperatureControl"})
 
-# Keys at reported root that are not walked for extension metrics (noise / non-chemistry).
-SKIP_REPORTED_ROOT = frozenset({"connectivity_"})
-
 _MAX_DEPTH = 12
 _MAX_SENSORS = 64
+
+
+def _path_segments(path: str) -> list[str]:
+    """Lowercased path segments (split on ``.``, ``_``, ``-``)."""
+    return [s for s in re.split(r"[._-]+", path.lower()) if s]
+
+
+def _segment_is_ph(seg: str) -> bool:
+    """True if segment denotes pH (not ``phase``, ``graph``, or ``alpha`` substrings)."""
+    return seg == "ph" or seg.startswith("ph_")
+
+
+def _skip_extension_reported_root_key(key: str) -> bool:
+    """Skip connectivity-style noise that can crowd out chemistry metrics."""
+    if key in ("zones", "features"):
+        return True
+    lk = key.lower()
+    return lk == "connectivity_" or lk.startswith("connectivity")
 
 
 def _get_reported(state_data: dict[str, Any] | None) -> dict[str, Any]:
@@ -95,7 +113,7 @@ def extract_extension_metrics(
             _flatten_numeric(feat_val, f"features.{feat_key}", out, 0)
 
     for root_key, root_val in reported.items():
-        if root_key in SKIP_REPORTED_ROOT or root_key in ("zones", "features"):
+        if _skip_extension_reported_root_key(root_key):
             continue
         if not isinstance(root_key, str):
             continue
@@ -108,7 +126,7 @@ def shadow_topology_summary(state_data: dict[str, Any] | None) -> dict[str, Any]
     """Redacted structural summary for diagnostics (no large leaf values)."""
     reported = _get_reported(state_data)
     if not reported:
-        return {"reported_keys": []}
+        return {"reported_top_level_keys": []}
 
     summary: dict[str, Any] = {
         "reported_top_level_keys": sorted(reported.keys()),
@@ -134,11 +152,21 @@ def shadow_topology_summary(state_data: dict[str, Any] | None) -> dict[str, Any]
 
 
 def metric_path_to_entity_slug(path: str, max_len: int = 48) -> str:
-    """Turn a metric path into a safe unique entity name suffix."""
+    """Turn a metric path into a safe unique entity name suffix.
+
+    When truncated, append a short hash of the full path so long paths that
+    share a prefix do not collide on ``entity_id``.
+    """
     slug = re.sub(r"[^a-zA-Z0-9]+", "_", path).strip("_").lower()
+    if not slug:
+        slug = "metric"
     if len(slug) > max_len:
-        slug = slug[:max_len].rstrip("_")
-    return slug or "metric"
+        digest = hashlib.sha256(path.encode("utf-8")).hexdigest()[:8]
+        keep = max_len - len(digest) - 1
+        if keep < 1:
+            keep = 1
+        slug = f"{slug[:keep]}_{digest}"
+    return slug
 
 
 def infer_sensor_metadata(path: str) -> tuple[str | None, str | None]:
@@ -147,17 +175,44 @@ def infer_sensor_metadata(path: str) -> tuple[str | None, str | None]:
     device_class: str | None = None
     unit: str | None = None
 
-    if re.search(r"(^|\.|_)ph($|\.|_)", lower) or lower.endswith("ph"):
+    if any(_segment_is_ph(s) for s in _path_segments(path)):
         device_class = "ph"
-    elif "orp" in lower or "oxidation" in lower:
+    elif any(s == "orp" or s.startswith("orp_") for s in _path_segments(path)) or re.search(
+        r"\boxidation\b", lower
+    ):
         # Millivolts are not HA ``SensorDeviceClass.VOLTAGE`` (SI volts).
         unit = "mV"
-    elif "temperature" in lower or lower.endswith("_temp") or "temp_" in lower:
+    elif (
+        "temperature" in lower
+        or lower.endswith("_temp")
+        or "temp_" in lower
+        or re.search(r"\btemp\b", lower)
+    ):
         device_class = "temperature"
-        unit = "°C"
-    elif "chlorine" in lower or "bromine" in lower or "sanitizer" in lower:
+        unit = UnitOfTemperature.CELSIUS
+    elif re.search(r"\b(chlorine|bromine|sanitizer)\b", lower):
         unit = "ppm"
-    elif "tds" in lower or "salinity" in lower:
+    elif re.search(r"\b(tds|salinity)\b", lower):
         unit = "ppm"
 
     return device_class, unit
+
+
+def chemistry_metric_enabled_by_default(path: str) -> bool:
+    """Whether a shadow path is likely water chemistry and safe to enable by default."""
+    lower = path.lower()
+    segs = _path_segments(path)
+    if any(_segment_is_ph(s) for s in segs):
+        return True
+    if any(s == "orp" or s.startswith("orp_") for s in segs) or re.search(
+        r"\boxidation\b", lower
+    ):
+        return True
+    chem_tokens = frozenset(
+        {"chlorine", "bromine", "salinity", "tds", "sanitizer", "waterlab"}
+    )
+    if chem_tokens.intersection(segs):
+        return True
+    if "waterlab" in lower:
+        return True
+    return False

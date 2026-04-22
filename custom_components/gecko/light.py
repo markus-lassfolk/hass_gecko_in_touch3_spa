@@ -101,8 +101,13 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
             identifiers={(DOMAIN, str(coordinator.vessel_id))},
         )
         
-        self._attr_supported_color_modes = {ColorMode.RGB}
-        self._attr_color_mode = ColorMode.ONOFF
+        # HA does not allow ONOFF together with RGB; RGB implies on/off control.
+        if callable(getattr(zone, "set_color", None)):
+            self._attr_supported_color_modes = {ColorMode.RGB}
+            self._attr_color_mode = ColorMode.RGB
+        else:
+            self._attr_supported_color_modes = {ColorMode.ONOFF}
+            self._attr_color_mode = ColorMode.ONOFF
         
         # Initialize state and availability (will be set by async_added_to_hass event registration)
         self._attr_available = False
@@ -130,7 +135,11 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
             else:
                 self._attr_rgb_color = None
                 self._attr_brightness = None
-                self._attr_color_mode = ColorMode.ONOFF
+                # Supported modes are RGB-only when set_color exists; do not use ONOFF then.
+                if callable(getattr(zone, "set_color", None)):
+                    self._attr_color_mode = ColorMode.RGB
+                else:
+                    self._attr_color_mode = ColorMode.ONOFF
         else:
             self._attr_is_on = None
 

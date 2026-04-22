@@ -73,9 +73,10 @@ def _get_gecko_client_info(gecko_client: GeckoIotClient) -> dict[str, Any]:
                     client_info["configuration_zones_keys"] = sorted(zc.keys())
 
         return client_info
-    except Exception:
+    except Exception as err:
         _LOGGER.exception("Error getting gecko client info")
-        return {"error": "exception"}
+        msg = str(err).replace("\n", " ")[:200]
+        return {"error": type(err).__name__, "message": msg}
 
 
 def _get_connection_diagnostics(connection_manager: Any) -> dict[str, Any]:
