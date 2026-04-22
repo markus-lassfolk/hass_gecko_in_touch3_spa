@@ -317,35 +317,8 @@ class GeckoConnectionManager:
                     mid, transporter, config_timeout=CONFIG_TIMEOUT
                 )
 
-                # Set up zone update handler to distribute to all callbacks
-                def on_zone_update(updated_zones):
-                    for callback in connection.update_callbacks:
-                        try:
-                            callback(updated_zones)
-                        except Exception as e:
-                            _LOGGER.error(
-                                "Error in zone update callback for monitor %s: %s",
-                                monitor_id,
-                                e,
-                            )
-
-                # Set up connectivity update handler
-                def on_connectivity_update(connectivity_status):
-                    connection.connectivity_status = connectivity_status
-                    if hasattr(connectivity_status, "vessel_status"):
-                        vessel_running = (
-                            str(connectivity_status.vessel_status) == "RUNNING"
-                        )
-                        if vessel_running and not connection.is_connected:
-                            _LOGGER.warning(
-                                "Vessel running but connection not established for %s",
-                                monitor_id,
-                            )
-
-                gecko_client.on_zone_update(on_zone_update)
-                gecko_client.on(
-                    EventChannel.CONNECTIVITY_UPDATE, on_connectivity_update
-                )
+                # Set up handlers using the helper method (DRY principle)
+                self._setup_client_handlers(gecko_client, connection, mid)
 
                 # Update connection object with new client and URL
                 connection.gecko_client = gecko_client

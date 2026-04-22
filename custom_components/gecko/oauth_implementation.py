@@ -30,7 +30,7 @@ class GeckoPKCEOAuth2Implementation(config_entry_oauth2_flow.LocalOAuth2Implemen
         authorize_url: str,
         token_url: str,
         *,
-        client_secret: str = "",
+        client_secret: str | None = None,
         code_verifier_length: int = 128,
     ) -> None:
         """Initialize Gecko OAuth with PKCE."""
