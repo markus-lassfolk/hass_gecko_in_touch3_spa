@@ -113,5 +113,6 @@ class GeckoPKCEOAuth2Implementation(config_entry_oauth2_flow.LocalOAuth2Implemen
                 "code": external_data["code"],
                 "redirect_uri": external_data["state"]["redirect_uri"],
                 "code_verifier": verifier,
+                "client_id": self.client_id,
             }
         )
