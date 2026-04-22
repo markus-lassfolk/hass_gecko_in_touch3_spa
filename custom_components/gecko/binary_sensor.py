@@ -26,7 +26,6 @@ from .shadow_metrics import (
     classify_gecko_shadow_metric,
     humanize_shadow_path,
     infer_binary_sensor_device_class,
-    metric_path_to_entity_slug,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,31 +33,31 @@ _LOGGER = logging.getLogger(__name__)
 BINARY_SENSOR_DESCRIPTIONS: tuple[BinarySensorEntityDescription, ...] = (
     BinarySensorEntityDescription(
         key="gateway_status",
-        name="Gateway Status",
+        translation_key="gateway_status",
         icon="mdi:router-wireless",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
     ),
     BinarySensorEntityDescription(
         key="vessel_status",
-        name="Spa Status",
+        translation_key="vessel_status",
         icon="mdi:hot-tub",
         device_class=BinarySensorDeviceClass.RUNNING,
     ),
     BinarySensorEntityDescription(
         key="transport_connection",
-        name="Transport Connection",
+        translation_key="transport_connection",
         icon="mdi:cloud-check",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
     ),
     BinarySensorEntityDescription(
         key="overall_connection",
-        name="Overall Connection",
+        translation_key="overall_connection",
         icon="mdi:connection",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
     ),
     BinarySensorEntityDescription(
         key="is_energy_saving",
-        name="Energy Saving Mode",
+        translation_key="is_energy_saving",
         icon="mdi:leaf",
     ),
 )
@@ -154,7 +153,6 @@ class GeckoBinarySensorEntity(
         self._vessel_name = coordinator.vessel_name
         self._vessel_id = coordinator.vessel_id
 
-        self._attr_name = description.name
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.vessel_id}_{description.key}"
         )
@@ -162,6 +160,7 @@ class GeckoBinarySensorEntity(
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, str(coordinator.vessel_id))},
         )
+        self._attr_is_on: bool | None = None
 
     async def async_added_to_hass(self) -> None:
         """Called when entity is added to hass."""
@@ -171,7 +170,7 @@ class GeckoBinarySensorEntity(
         self._update_state()
         _LOGGER.debug(
             "Binary sensor %s added to hass with initial state: %s",
-            self._attr_name,
+            self.entity_description.key,
             self._attr_is_on,
         )
 
@@ -217,7 +216,9 @@ class GeckoBinarySensorEntity(
 
         except Exception as e:
             _LOGGER.debug(
-                "Error updating binary sensor state for %s: %s", self._attr_name, e
+                "Error updating binary sensor state for %s: %s",
+                self.entity_description.key,
+                e,
             )
             self._attr_is_on = False
 
@@ -244,7 +245,9 @@ class GeckoBinarySensorEntity(
 
         except Exception as e:
             _LOGGER.warning(
-                "Error updating connectivity binary sensor %s: %s", self._attr_name, e
+                "Error updating connectivity binary sensor %s: %s",
+                self.entity_description.key,
+                e,
             )
             self._attr_is_on = False
 
@@ -325,7 +328,7 @@ class GeckoRestActiveAlertsBinarySensor(
     ) -> None:
         super().__init__(coordinator)
         self._config_entry = config_entry
-        self._attr_name = "Active alerts"
+        self._attr_translation_key = "active_alerts"
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_rest_active_alerts_bin"
         )

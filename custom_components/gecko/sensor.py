@@ -24,7 +24,6 @@ from .shadow_metrics import (
     chemistry_metric_enabled_by_default,
     classify_gecko_shadow_metric,
     humanize_shadow_path,
-    metric_path_to_entity_slug,
     shadow_extension_diagnostic_disables_registry_default,
     shadow_metric_icon,
     string_extension_enabled_by_default,
@@ -248,7 +247,7 @@ class GeckoRestActiveAlertsSensor(CoordinatorEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator)
         self._config_entry = config_entry
-        self._attr_name = "Active alerts (REST)"
+        self._attr_translation_key = "active_alerts_rest"
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_rest_active_alerts"
         )

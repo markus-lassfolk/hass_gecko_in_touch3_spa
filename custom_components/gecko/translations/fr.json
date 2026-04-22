@@ -1,0 +1,101 @@
+{
+  "config": {
+    "step": {
+      "pick_implementation": {
+        "title": "Choisir la méthode d'authentification"
+      }
+    },
+    "abort": {
+      "already_configured": "Compte déjà configuré",
+      "already_in_progress": "Configuration déjà en cours",
+      "oauth_error": "Erreur inattendue lors de l'OAuth2",
+      "oauth_failed": "Impossible de s'authentifier auprès du cloud Gecko",
+      "oauth_timeout": "Délai dépassé lors de la résolution OAuth2",
+      "oauth_unauthorized": "OAuth2 non autorisé",
+      "missing_configuration": "Les identifiants de l'application ne sont pas configurés",
+      "authorize_url_timeout": "Délai dépassé lors de la génération de l'URL d'autorisation",
+      "no_url_available": "Aucune URL disponible",
+      "user_rejected_authorize": "La connexion a été refusée"
+    },
+    "create_entry": {
+      "default": "Authentification réussie"
+    }
+  },
+  "options": {
+    "abort": {
+      "reconfigure_successful": "Options enregistrées ; intégration rechargée pour que les entités d'alerte correspondent au nouveau paramètre."
+    },
+    "step": {
+      "init": {
+        "title": "Cloud REST & alertes",
+        "description": "Interrogation REST optionnelle du cloud Gecko : tuiles récapitulatives du spa (chiffres/chaînes fusionnés en cloud.rest.* quand MQTT est intermittent ou déconnecté) et une interrogation séparée des alertes (messages non lus + actions du spa). Utilise uniquement les identifiants de cette entrée de configuration.",
+        "data": {
+          "cloud_rest_poll_interval": "Intervalle d'interrogation REST cloud (secondes)",
+          "cloud_rest_only_when_mqtt_down": "Interroger REST uniquement quand MQTT est déconnecté",
+          "alerts_poll_interval": "Intervalle d'interrogation des alertes (secondes)"
+        },
+        "data_description": {
+          "cloud_rest_poll_interval": "Fréquence de récupération des analyses chimiques (pH, ORP, température de l'eau, alcalinité, chlore, etc.) depuis le cloud Gecko. Par défaut : 300 secondes (5 minutes). Mettre à 0 pour désactiver.",
+          "cloud_rest_only_when_mqtt_down": "Quand activé, l'interrogation REST ne s'exécute que lorsque MQTT est déconnecté. Par défaut : désactivé — maintient l'interrogation REST active pour que les valeurs chimiques se mettent toujours à jour.",
+          "alerts_poll_interval": "Fréquence de récupération des messages non lus et des alertes d'action du spa. Par défaut : 0 (désactivé). Recommandé : 300 secondes (5 minutes) si vous souhaitez des notifications d'alerte."
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "gateway_status": {
+        "name": "État de la passerelle"
+      },
+      "vessel_status": {
+        "name": "État du spa"
+      },
+      "transport_connection": {
+        "name": "Connexion de transport"
+      },
+      "overall_connection": {
+        "name": "Connexion globale"
+      },
+      "is_energy_saving": {
+        "name": "Mode économie d'énergie"
+      },
+      "active_alerts": {
+        "name": "Alertes actives"
+      }
+    },
+    "sensor": {
+      "rf_strength": {
+        "name": "Intensité du signal RF"
+      },
+      "rf_channel": {
+        "name": "Canal RF"
+      },
+      "active_alerts_rest": {
+        "name": "Alertes actives"
+      }
+    },
+    "select": {
+      "watercare_mode": {
+        "name": "Mode de traitement de l'eau",
+        "state": {
+          "away": "Absent",
+          "standard": "Standard",
+          "savings": "Économies",
+          "super_savings": "Super économies",
+          "weekender": "Week-end",
+          "other": "Autre"
+        }
+      }
+    },
+    "climate": {
+      "thermostat": {
+        "name": "Thermostat {zone_id}"
+      }
+    }
+  },
+  "exceptions": {
+    "unsupported_hvac_mode": {
+      "message": "Mode HVAC non pris en charge : {hvac_mode}. Seul le mode CHAUFFAGE est supporté."
+    }
+  }
+}

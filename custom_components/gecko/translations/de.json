@@ -1,0 +1,101 @@
+{
+  "config": {
+    "step": {
+      "pick_implementation": {
+        "title": "Authentifizierungsmethode auswählen"
+      }
+    },
+    "abort": {
+      "already_configured": "Konto bereits konfiguriert",
+      "already_in_progress": "Konfiguration läuft bereits",
+      "oauth_error": "Unerwarteter Fehler bei der OAuth2-Authentifizierung",
+      "oauth_failed": "Authentifizierung bei der Gecko-Cloud fehlgeschlagen",
+      "oauth_timeout": "Zeitüberschreitung bei der OAuth2-Auflösung",
+      "oauth_unauthorized": "OAuth2 nicht autorisiert",
+      "missing_configuration": "Die Anmeldedaten für die Anwendung sind nicht konfiguriert",
+      "authorize_url_timeout": "Zeitüberschreitung beim Erstellen der Autorisierungs-URL",
+      "no_url_available": "Keine URL verfügbar",
+      "user_rejected_authorize": "Anmeldung wurde abgelehnt"
+    },
+    "create_entry": {
+      "default": "Erfolgreich authentifiziert"
+    }
+  },
+  "options": {
+    "abort": {
+      "reconfigure_successful": "Optionen gespeichert; Integration neu geladen, damit die Alarm-Entitäten der neuen Einstellung entsprechen."
+    },
+    "step": {
+      "init": {
+        "title": "Cloud REST & Alarme",
+        "description": "Optionales Gecko Cloud REST-Polling: Schiffs-Zusammenfassungskacheln (Zahlen/Strings werden als cloud.rest.* zusammengeführt, wenn MQTT schwach oder getrennt ist) und ein separates Alarm-Polling (Bereich ungelesener Nachrichten + Schiffsaktionen). Verwendet nur IDs aus diesem Konfigurationseintrag.",
+        "data": {
+          "cloud_rest_poll_interval": "Cloud REST-Abrufintervall (Sekunden)",
+          "cloud_rest_only_when_mqtt_down": "REST nur abrufen, wenn MQTT getrennt ist",
+          "alerts_poll_interval": "Alarm-Abrufintervall (Sekunden)"
+        },
+        "data_description": {
+          "cloud_rest_poll_interval": "Wie oft Chemiewerte (pH, ORP, Wassertemperatur, Alkalinität, Chlor, usw.) von der Gecko-Cloud abgerufen werden. Standard: 300 Sekunden (5 Minuten). Auf 0 setzen, um zu deaktivieren.",
+          "cloud_rest_only_when_mqtt_down": "Wenn aktiviert, läuft das REST-Polling nur, während MQTT getrennt ist. Standard: aus — hält REST-Polling aktiv, damit Chemiewerte immer aktualisiert werden.",
+          "alerts_poll_interval": "Wie oft ungelesene Nachrichten und Schiffsaktion-Alarme abgerufen werden. Standard: 0 (deaktiviert). Empfohlen: 300 Sekunden (5 Minuten), wenn Alarmbenachrichtigungen gewünscht sind."
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "gateway_status": {
+        "name": "Gateway-Status"
+      },
+      "vessel_status": {
+        "name": "Whirlpool-Status"
+      },
+      "transport_connection": {
+        "name": "Transportverbindung"
+      },
+      "overall_connection": {
+        "name": "Gesamtverbindung"
+      },
+      "is_energy_saving": {
+        "name": "Energiesparmodus"
+      },
+      "active_alerts": {
+        "name": "Aktive Alarme"
+      }
+    },
+    "sensor": {
+      "rf_strength": {
+        "name": "HF-Signalstärke"
+      },
+      "rf_channel": {
+        "name": "HF-Kanal"
+      },
+      "active_alerts_rest": {
+        "name": "Aktive Alarme"
+      }
+    },
+    "select": {
+      "watercare_mode": {
+        "name": "Wasserpflege-Modus",
+        "state": {
+          "away": "Abwesend",
+          "standard": "Standard",
+          "savings": "Sparmodus",
+          "super_savings": "Supersparmodus",
+          "weekender": "Wochenende",
+          "other": "Sonstige"
+        }
+      }
+    },
+    "climate": {
+      "thermostat": {
+        "name": "Thermostat {zone_id}"
+      }
+    }
+  },
+  "exceptions": {
+    "unsupported_hvac_mode": {
+      "message": "Nicht unterstützter HVAC-Modus: {hvac_mode}. Nur der HEIZ-Modus wird unterstützt."
+    }
+  }
+}

@@ -21,15 +21,27 @@ from .entity import GeckoEntityAvailabilityMixin
 
 _LOGGER = logging.getLogger(__name__)
 
-# Map operation modes to user-friendly names (matches OperationModeController.mode_name)
+# Internal HA option keys (snake_case, match entity.select.watercare_mode.state in strings.json).
+# These are the values stored in HA state and passed to async_select_option.
 WATERCARE_MODE_OPTIONS = [
-    "Away",
-    "Standard",
-    "Savings",
-    "Super Savings",
-    "Weekender",
-    "Other",
+    "away",
+    "standard",
+    "savings",
+    "super_savings",
+    "weekender",
+    "other",
 ]
+
+# Bidirectional mapping between HA option keys and library mode names.
+_MODE_KEY_TO_LIBRARY: dict[str, str] = {
+    "away": "Away",
+    "standard": "Standard",
+    "savings": "Savings",
+    "super_savings": "Super Savings",
+    "weekender": "Weekender",
+    "other": "Other",
+}
+_LIBRARY_TO_MODE_KEY: dict[str, str] = {v: k for k, v in _MODE_KEY_TO_LIBRARY.items()}
 
 
 async def async_setup_entry(
@@ -93,7 +105,7 @@ class GeckoWatercareSelectEntity(
         self._vessel_id = vessel_id
 
         # Set up entity attributes
-        self._attr_name = "Watercare mode"
+        self._attr_translation_key = "watercare_mode"
         self._attr_unique_id = f"{vessel_id}_watercare_mode"
         self._attr_icon = "mdi:hot-tub"
         self._attr_entity_category = EntityCategory.CONFIG
@@ -166,7 +178,10 @@ class GeckoWatercareSelectEntity(
     def _on_operation_mode_update(self, operation_mode_controller) -> None:
         """Handle operation mode updates (may run on library background thread)."""
         try:
-            new_option = operation_mode_controller.mode_name
+            new_option = _LIBRARY_TO_MODE_KEY.get(
+                operation_mode_controller.mode_name,
+                operation_mode_controller.mode_name.lower().replace(" ", "_"),
+            )
 
             def _update_and_write() -> None:
                 self._attr_current_option = new_option
@@ -201,9 +216,10 @@ class GeckoWatercareSelectEntity(
             gecko_client = await self.coordinator.get_gecko_client()
 
             if gecko_client and gecko_client.operation_mode_controller:
-                # Use the clean API to get current mode name
-                self._attr_current_option = (
-                    gecko_client.operation_mode_controller.mode_name
+                library_name = gecko_client.operation_mode_controller.mode_name
+                self._attr_current_option = _LIBRARY_TO_MODE_KEY.get(
+                    library_name,
+                    library_name.lower().replace(" ", "_"),
                 )
                 _LOGGER.debug(
                     "Updated watercare mode for %s: %s",
@@ -234,10 +250,15 @@ class GeckoWatercareSelectEntity(
             _LOGGER.error("Invalid watercare mode option: %s", option)
             return
 
-        _LOGGER.debug("Setting watercare mode for %s to %s", self._attr_name, option)
+        library_name = _MODE_KEY_TO_LIBRARY.get(option, option)
+        _LOGGER.debug(
+            "Setting watercare mode for vessel %s to %s (library: %s)",
+            self._vessel_name,
+            option,
+            library_name,
+        )
 
         try:
-            # Get the gecko client for this vessel
             gecko_client = await self.coordinator.get_gecko_client()
 
             if not gecko_client:
@@ -253,18 +274,17 @@ class GeckoWatercareSelectEntity(
                 )
                 return
 
+            gecko_client.operation_mode_controller.set_mode_by_name(library_name)
+
             _LOGGER.debug(
-                "Setting operation mode to %s for vessel %s", option, self._vessel_name
+                "Sent watercare mode command (%s) for vessel %s",
+                library_name,
+                self._vessel_name,
             )
 
-            # Use the clean API to set the mode by name
-            gecko_client.operation_mode_controller.set_mode_by_name(option)
-
-            # Let the coordinator update handle state changes
-            _LOGGER.debug("Sent watercare mode command for %s", self._attr_name)
-
-            # Request coordinator refresh to get updated state from the device
             await self.coordinator.async_request_refresh()
 
         except Exception as e:
-            _LOGGER.error("Error setting watercare mode for %s: %s", self._attr_name, e)
+            _LOGGER.error(
+                "Error setting watercare mode for vessel %s: %s", self._vessel_name, e
+            )

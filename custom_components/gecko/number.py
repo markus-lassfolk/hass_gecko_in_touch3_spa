@@ -20,7 +20,6 @@ from .entity import GeckoEntityAvailabilityMixin
 from .shadow_metrics import (
     humanize_shadow_path,
     infer_number_setpoint_limits,
-    metric_path_to_entity_slug,
     parse_unknown_zone_setpoint_path,
 )
 

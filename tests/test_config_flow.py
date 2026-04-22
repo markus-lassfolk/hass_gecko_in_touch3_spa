@@ -9,12 +9,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
-from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-
 from custom_components.gecko.config_flow import ConfigFlow, GeckoOptionsFlow
 from custom_components.gecko.const import (
     CONF_ALERTS_POLL_INTERVAL,
@@ -25,7 +19,10 @@ from custom_components.gecko.const import (
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
     DOMAIN,
 )
-
+from homeassistant import config_entries
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 # ---------------------------------------------------------------------------
 # Helpers
