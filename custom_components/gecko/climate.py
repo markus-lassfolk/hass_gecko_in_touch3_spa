@@ -130,11 +130,18 @@ class GeckoClimate(GeckoEntityAvailabilityMixin, CoordinatorEntity[GeckoVesselCo
     
     def _update_from_zone(self) -> None:
         """Update state attributes from zone data."""
-        if self._zone.status is not None:
-            self._attr_hvac_action = _HVAC_ACTION_MAP.get(
-                self._zone.status, HVACAction.IDLE
-            )
+        status = self._zone.status
+        if status is None:
+            self._attr_hvac_action = HVACAction.IDLE
+        elif isinstance(status, TemperatureControlZoneStatus):
+            self._attr_hvac_action = _HVAC_ACTION_MAP.get(status, HVACAction.IDLE)
         else:
+            _LOGGER.warning(
+                "Unexpected temperature zone status type %s (value=%r); expected %s",
+                type(status).__name__,
+                status,
+                TemperatureControlZoneStatus.__name__,
+            )
             self._attr_hvac_action = HVACAction.IDLE
 
         self._attr_current_temperature = self._zone.temperature
@@ -153,8 +160,9 @@ class GeckoClimate(GeckoEntityAvailabilityMixin, CoordinatorEntity[GeckoVesselCo
     def extra_state_attributes(self) -> dict[str, Any]:
         """Expose detailed spa-pack status and eco mode for automations."""
         attrs: dict[str, Any] = {}
-        if self._zone.status is not None:
-            attrs["detailed_status"] = self._zone.status.name
+        st = self._zone.status
+        if isinstance(st, TemperatureControlZoneStatus):
+            attrs["detailed_status"] = st.name
         mode = self._zone.mode
         if mode is not None and hasattr(mode, "eco"):
             attrs["eco_mode"] = mode.eco

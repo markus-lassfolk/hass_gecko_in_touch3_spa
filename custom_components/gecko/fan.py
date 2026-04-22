@@ -56,7 +56,9 @@ async def async_setup_entry(
 class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
     """Representation of a Gecko pump fan (multi-speed or variable speed)."""
     coordinator: GeckoVesselCoordinator
-    
+
+    _attr_has_entity_name = True
+
     def __init__(
         self,
         coordinator: GeckoVesselCoordinator,
@@ -69,7 +71,7 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
         self._coordinator: GeckoVesselCoordinator = coordinator
         self._zone = zone
         self.entity_id = f"fan.{coordinator.vessel_name}_pump_{zone.id}".lower()
-        self._attr_name = f"{coordinator.vessel_name} {zone.name}"
+        self._attr_name = zone.name
         self._attr_unique_id = f"{config_entry.entry_id}_{coordinator.vessel_name}_pump_{zone.id}"
 
         self._attr_device_info = dr.DeviceInfo(

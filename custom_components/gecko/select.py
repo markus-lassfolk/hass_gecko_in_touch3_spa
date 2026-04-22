@@ -70,6 +70,8 @@ async def async_setup_entry(
 class GeckoWatercareSelectEntity(GeckoEntityAvailabilityMixin, CoordinatorEntity, SelectEntity):
     """Representation of a Gecko watercare mode select."""
 
+    _attr_has_entity_name = True
+
     def __init__(
         self,
         coordinator: GeckoVesselCoordinator,
@@ -84,7 +86,7 @@ class GeckoWatercareSelectEntity(GeckoEntityAvailabilityMixin, CoordinatorEntity
         self._vessel_id = vessel_id
         
         # Set up entity attributes
-        self._attr_name = f"{vessel_name} Watercare Mode"
+        self._attr_name = "Watercare mode"
         self._attr_unique_id = f"{vessel_id}_watercare_mode"
         self._attr_icon = "mdi:hot-tub"
         self._attr_entity_category = EntityCategory.CONFIG

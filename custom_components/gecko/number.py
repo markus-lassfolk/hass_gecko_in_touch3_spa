@@ -73,7 +73,7 @@ class GeckoUnknownZoneSetpointNumber(
     """Write single-leaf unknown-zone setpoints via shadow desired (same wire shape as app)."""
 
     _attr_should_poll = False
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
     _attr_mode = NumberMode.BOX
 
     def __init__(
@@ -98,7 +98,9 @@ class GeckoUnknownZoneSetpointNumber(
             "-", "_"
         )
         slug = metric_path_to_entity_slug(path)
-        self._attr_name = f"{coordinator.vessel_name} setpoint {path.split('.')[-1]}"
+        leaf = path.split(".")[-1]
+        leaf_h = leaf.replace("_", " ").strip().title() or leaf
+        self._attr_name = f"Setpoint {leaf_h}"
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_num_{slug}"
         )

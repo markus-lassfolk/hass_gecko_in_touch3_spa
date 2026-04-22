@@ -134,6 +134,8 @@ async def async_setup_entry(
 class GeckoBinarySensorEntity(CoordinatorEntity[GeckoVesselCoordinator], BinarySensorEntity):
     """Representation of a Gecko binary sensor."""
 
+    _attr_has_entity_name = True
+
     def __init__(
         self,
         coordinator: GeckoVesselCoordinator,
@@ -150,7 +152,7 @@ class GeckoBinarySensorEntity(CoordinatorEntity[GeckoVesselCoordinator], BinaryS
         
         # Set up entity attributes
         vessel_id_name = coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
-        self._attr_name = f"{coordinator.vessel_name} {description.name}"
+        self._attr_name = description.name
         self._attr_unique_id = f"{config_entry.entry_id}_{coordinator.vessel_id}_{description.key}"
         self.entity_id = f"binary_sensor.{vessel_id_name}_{description.key}"
         
@@ -241,7 +243,7 @@ class GeckoShadowBoolBinarySensor(
     """Boolean leaves from shadow (alarms, flags, etc.)."""
 
     _attr_should_poll = False
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -256,7 +258,8 @@ class GeckoShadowBoolBinarySensor(
             "-", "_"
         )
         slug = metric_path_to_entity_slug(path)
-        self._attr_name = f"{coordinator.vessel_name} {path.split('.')[-1].replace('_', ' ')}"
+        tail = path.split(".")[-1]
+        self._attr_name = tail.replace("_", " ").strip().title() or tail
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_bool_{slug}"
         )
@@ -298,7 +301,7 @@ class GeckoRestActiveAlertsBinarySensor(
     """True when REST reports active vessel actions or scoped unread messages."""
 
     _attr_should_poll = False
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -310,7 +313,7 @@ class GeckoRestActiveAlertsBinarySensor(
         vessel_slug = coordinator.vessel_name.lower().replace(" ", "_").replace(
             "-", "_"
         )
-        self._attr_name = f"{coordinator.vessel_name} Active alerts"
+        self._attr_name = "Active alerts"
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_rest_active_alerts_bin"
         )

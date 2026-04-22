@@ -114,7 +114,7 @@ class GeckoShadowMetricSensor(
     """Numeric metric parsed from device shadow outside modeled zone types."""
 
     _attr_should_poll = False
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
 
     @property
     def available(self) -> bool:
@@ -137,9 +137,7 @@ class GeckoShadowMetricSensor(
             "-", "_"
         )
         path_slug = metric_path_to_entity_slug(metric_path)
-        self._attr_name = (
-            f"{coordinator.vessel_name} {_humanize_metric_name(metric_path)}"
-        )
+        self._attr_name = _humanize_metric_name(metric_path)
         self._attr_extra_state_attributes = {
             "shadow_path": metric_path,
             "gecko_diagnostic_group": classify_gecko_shadow_metric(metric_path),
@@ -194,7 +192,7 @@ class GeckoShadowStringSensor(
     """String leaves from shadow / REST (status text, messages)."""
 
     _attr_should_poll = False
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
 
     @property
     def available(self) -> bool:
@@ -215,7 +213,7 @@ class GeckoShadowStringSensor(
             "-", "_"
         )
         path_slug = metric_path_to_entity_slug(path)
-        self._attr_name = f"{coordinator.vessel_name} {_humanize_metric_name(path)}"
+        self._attr_name = _humanize_metric_name(path)
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_str_{path_slug}"
         )
@@ -251,7 +249,7 @@ class GeckoRestActiveAlertsSensor(CoordinatorEntity, SensorEntity):
     """Count of active REST alerts (unread messages scoped to vessel + open actions)."""
 
     _attr_should_poll = False
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
     _attr_native_unit_of_measurement = None
     _attr_state_class = SensorStateClass.MEASUREMENT
 
@@ -265,7 +263,7 @@ class GeckoRestActiveAlertsSensor(CoordinatorEntity, SensorEntity):
         vessel_slug = coordinator.vessel_name.lower().replace(" ", "_").replace(
             "-", "_"
         )
-        self._attr_name = f"{coordinator.vessel_name} Active alerts (REST)"
+        self._attr_name = "Active alerts (REST)"
         self._attr_unique_id = (
             f"{config_entry.entry_id}_{coordinator.monitor_id}_rest_active_alerts"
         )

@@ -30,9 +30,11 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if entry.version > 2:
         return False
 
-    if entry.version == 1:
+    if entry.version < 2:
         _LOGGER.info(
-            "Migrating Gecko config entry %s from version 1 to 2", entry.entry_id
+            "Migrating Gecko config entry %s from version %s to 2",
+            entry.entry_id,
+            entry.version,
         )
         hass.config_entries.async_update_entry(entry, version=2)
 
