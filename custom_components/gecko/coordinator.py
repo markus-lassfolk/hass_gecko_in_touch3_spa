@@ -7,19 +7,22 @@ import inspect
 import logging
 import time
 from datetime import timedelta
-from typing import Any, Dict, List, Set
-
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from typing import Any
 
 # Import from geckoIotClient
-from gecko_iot_client.models.zone_types import ZoneType, AbstractZone
+from gecko_iot_client.models.zone_types import AbstractZone, ZoneType
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .cloud_tiles import (
     extract_cloud_tile_booleans,
     extract_cloud_tile_metrics,
     extract_cloud_tile_strings,
     find_vessel_record,
+)
+from .connection_manager import (
+    GeckoMonitorConnection,
+    async_get_connection_manager,
 )
 from .const import (
     CONF_ALERTS_POLL_INTERVAL,
@@ -36,10 +39,6 @@ from .shadow_metrics import (
     extract_extension_metrics,
     extract_extension_strings,
     path_reserved_for_number_control,
-)
-from .connection_manager import (
-    async_get_connection_manager,
-    GeckoMonitorConnection,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -75,55 +74,55 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.vessel_id = vessel_id
         self.monitor_id = monitor_id
         self.vessel_name = vessel_name
-        
+
         # Store zones for this vessel only (no monitor_id dictionary needed)
-        self._zones: Dict[ZoneType, List[AbstractZone]] = {}
-        
+        self._zones: dict[ZoneType, list[AbstractZone]] = {}
+
         # Store real-time state data for this vessel
-        self._spa_state: Dict[str, Any] = {}
-        
+        self._spa_state: dict[str, Any] = {}
+
         # Track if this vessel has received initial zone data
         self._has_initial_zones = False
-        
+
         # Event to signal when initial zone data is loaded
         self._initial_zones_loaded_event = asyncio.Event()
-        
+
         # Callbacks for zone updates (for dynamic entity creation)
         self._zone_update_callbacks: list = []
-        
+
         # Callbacks for shadow metric discovery (for dynamic entity creation)
         self._shadow_metric_callbacks: list = []
-        
+
         # Simple connection tracking
         self._consecutive_failures = 0
 
         # Extension metrics from device shadow (Waterlab, unknown zone types, extra features)
-        self._shadow_metric_values: Dict[str, float | int] = {}
-        self._registered_shadow_metric_paths: Set[str] = set()
-        self._pending_new_metric_paths: Set[str] = set()
+        self._shadow_metric_values: dict[str, float | int] = {}
+        self._registered_shadow_metric_paths: set[str] = set()
+        self._pending_new_metric_paths: set[str] = set()
 
-        self._shadow_bool_values: Dict[str, bool] = {}
-        self._registered_bool_paths: Set[str] = set()
-        self._pending_bool_paths: Set[str] = set()
+        self._shadow_bool_values: dict[str, bool] = {}
+        self._registered_bool_paths: set[str] = set()
+        self._pending_bool_paths: set[str] = set()
 
-        self._shadow_string_values: Dict[str, str] = {}
-        self._registered_string_paths: Set[str] = set()
-        self._pending_string_paths: Set[str] = set()
+        self._shadow_string_values: dict[str, str] = {}
+        self._registered_string_paths: set[str] = set()
+        self._pending_string_paths: set[str] = set()
 
-        self._registered_number_paths: Set[str] = set()
-        self._pending_number_paths: Set[str] = set()
+        self._registered_number_paths: set[str] = set()
+        self._pending_number_paths: set[str] = set()
 
         # Track if initial setup has been completed to avoid redundant refresh during platform setup
         self._initial_setup_done = False
         self._initial_setup_lock = asyncio.Lock()
         # Optional REST tile metrics (merged under ``cloud.rest.*``; shadow wins on overlap)
-        self._cloud_tile_metrics: Dict[str, float | int] = {}
-        self._cloud_string_metrics: Dict[str, str] = {}
-        self._cloud_bool_metrics: Dict[str, bool] = {}
+        self._cloud_tile_metrics: dict[str, float | int] = {}
+        self._cloud_string_metrics: dict[str, str] = {}
+        self._cloud_bool_metrics: dict[str, bool] = {}
         self._last_cloud_poll_monotonic: float | None = None
 
         # REST: unread messages (scoped) + vessel actions — not history.
-        self._rest_alerts_snapshot: Dict[str, Any] = {
+        self._rest_alerts_snapshot: dict[str, Any] = {
             "total": 0,
             "messages": [],
             "actions": [],
@@ -136,7 +135,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def register_zone_update_callback(self, callback):
         """Register a callback to be called when zone data updates."""
         self._zone_update_callbacks.append(callback)
-    
+
     def register_shadow_metric_callback(self, callback):
         """Register a callback to be called when new shadow metrics are discovered."""
         self._shadow_metric_callbacks.append(callback)
@@ -167,7 +166,12 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if inspect.iscoroutine(result):
                         await result
             except Exception as ex:
-                _LOGGER.error("Error in zone update callback for vessel %s: %s", self.vessel_name, ex, exc_info=True)
+                _LOGGER.error(
+                    "Error in zone update callback for vessel %s: %s",
+                    self.vessel_name,
+                    ex,
+                    exc_info=True,
+                )
 
     def _entry_options(self) -> dict[str, Any]:
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
@@ -189,9 +193,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Optionally refresh app-style tile metrics from Gecko REST (account/vessel IDs from config)."""
         opts = self._entry_options()
         interval = int(
-            opts.get(
-                CONF_CLOUD_REST_POLL_INTERVAL, DEFAULT_CLOUD_REST_POLL_INTERVAL
-            )
+            opts.get(CONF_CLOUD_REST_POLL_INTERVAL, DEFAULT_CLOUD_REST_POLL_INTERVAL)
         )
         account_id = self._config_account_id()
         if interval <= 0 or not account_id:
@@ -220,7 +222,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_cloud_poll_monotonic = now
         api = entry.runtime_data.api_client
         rd = entry.runtime_data
-        vessels: List[Any] | None = None
+        vessels: list[Any] | None = None
         try:
             if (
                 rd.rest_vessels_response_cache is not None
@@ -350,16 +352,18 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Check if connection exists and is active
             connection_manager = await async_get_connection_manager(self.hass)
             connection = connection_manager.get_connection(self.monitor_id)
-            
+
             await self._async_poll_cloud_tiles_if_due(connection)
             await self._async_poll_alerts_if_due()
-            
+
             if not connection or not connection.is_connected:
                 self._consecutive_failures += 1
-                
+
                 # After 2 consecutive failures (1 minute), try to reconnect with fresh token
                 if self._consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                    _LOGGER.warning("Connection lost for %s, attempting reconnect", self.vessel_name)
+                    _LOGGER.warning(
+                        "Connection lost for %s, attempting reconnect", self.vessel_name
+                    )
                     await self._simple_reconnect()
                     self._consecutive_failures = 0
                     # Re-check connection after reconnect attempt
@@ -369,12 +373,12 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         client = await self.get_gecko_client()
                         self.sync_refresh_shadow_metrics(client)
                         return {"status": "active", "vessel_id": self.vessel_id}
-                
+
                 # MQTT shadow is unavailable; still merge REST tile metrics into shadow
                 # caches so cloud.rest.* entities update while disconnected.
                 self.sync_refresh_shadow_metrics(None)
                 return {"status": "disconnected", "vessel_id": self.vessel_id}
-            
+
             self._consecutive_failures = 0
 
             client = await self.get_gecko_client()
@@ -383,13 +387,15 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Data will be updated by geckoIotClient callbacks
             return {"status": "active", "vessel_id": self.vessel_id}
         except Exception as exception:
-            raise UpdateFailed(f"Error communicating with Gecko API for vessel {self.vessel_name}: {exception}") from exception
+            raise UpdateFailed(
+                f"Error communicating with Gecko API for vessel {self.vessel_name}: {exception}"
+            ) from exception
 
-    def get_zones_by_type(self, zone_type: ZoneType) -> List[AbstractZone]:
+    def get_zones_by_type(self, zone_type: ZoneType) -> list[AbstractZone]:
         """Get zones of a specific type for this vessel (no monitor_id needed)."""
         return self._zones.get(zone_type, [])
 
-    def get_all_zones(self) -> Dict[ZoneType, List[AbstractZone]]:
+    def get_all_zones(self) -> dict[ZoneType, list[AbstractZone]]:
         """Get all zones for this vessel."""
         return self._zones
 
@@ -397,10 +403,12 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Parse extension metrics from shadow; merge optional REST tile metrics (MQTT wins)."""
         # Ensure we're running on the event loop since callbacks may call async_add_entities
         if self.hass.loop != asyncio.get_running_loop():
-            raise RuntimeError("sync_refresh_shadow_metrics must be called from the event loop")
+            raise RuntimeError(
+                "sync_refresh_shadow_metrics must be called from the event loop"
+            )
         state = getattr(gecko_client, "_state", None) if gecko_client else None
         mqtt_metrics = extract_extension_metrics(state) if state else {}
-        merged: Dict[str, float | int] = dict(self._cloud_tile_metrics)
+        merged: dict[str, float | int] = dict(self._cloud_tile_metrics)
         merged.update(mqtt_metrics)
         self._shadow_metric_values = merged
 
@@ -417,19 +425,21 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._pending_number_paths |= new_number_paths
 
         mqtt_bools = extract_extension_booleans(state) if state else {}
-        merged_bools: Dict[str, bool] = dict(self._cloud_bool_metrics)
+        merged_bools: dict[str, bool] = dict(self._cloud_bool_metrics)
         merged_bools.update(mqtt_bools)
         self._shadow_bool_values = merged_bools
         new_bool_paths = set(self._shadow_bool_values) - self._registered_bool_paths
         self._pending_bool_paths |= new_bool_paths
 
         mqtt_strings = extract_extension_strings(state) if state else {}
-        merged_strings: Dict[str, str] = dict(self._cloud_string_metrics)
+        merged_strings: dict[str, str] = dict(self._cloud_string_metrics)
         merged_strings.update(mqtt_strings)
         self._shadow_string_values = merged_strings
-        new_string_paths = set(self._shadow_string_values) - self._registered_string_paths
+        new_string_paths = (
+            set(self._shadow_string_values) - self._registered_string_paths
+        )
         self._pending_string_paths |= new_string_paths
-        
+
         if new_metric_paths or new_number_paths or new_bool_paths or new_string_paths:
             for callback in self._shadow_metric_callbacks:
                 try:
@@ -507,16 +517,16 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Simple reconnection - let geckoIotClient handle token refresh."""
         try:
             connection_manager = await async_get_connection_manager(self.hass)
-            
+
             # Reconnect - the geckoIotClient will automatically call the token
             # refresh callback to get a fresh URL with new tokens
             success = await connection_manager.async_reconnect_monitor(self.monitor_id)
-            
+
             if success:
                 _LOGGER.info("Reconnected %s", self.vessel_name)
             else:
                 _LOGGER.error("Failed to reconnect %s", self.vessel_name)
-                
+
         except Exception as e:
             _LOGGER.error("Failed to reconnect %s: %s", self.vessel_name, e)
 
@@ -525,82 +535,110 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             connection_manager = await async_get_connection_manager(self.hass)
             connection = connection_manager.get_connection(self.monitor_id)
-            
+
             if connection and connection.is_connected:
                 return connection.gecko_client
             else:
-                _LOGGER.warning("No active connection found for vessel %s (monitor %s)", self.vessel_name, self.monitor_id)
+                _LOGGER.warning(
+                    "No active connection found for vessel %s (monitor %s)",
+                    self.vessel_name,
+                    self.monitor_id,
+                )
                 return None
-                
+
         except Exception as e:
-            _LOGGER.error("Failed to get gecko client for vessel %s: %s", self.vessel_name, e)
+            _LOGGER.error(
+                "Failed to get gecko client for vessel %s: %s", self.vessel_name, e
+            )
             return None
 
     def _create_refresh_token_callback(self, websocket_url: str):
         """Create a refresh token callback for this vessel's monitor.
-        
+
         This callback is invoked by the geckoIotClient when websocket tokens expire
         or are about to expire. It fetches a fresh websocket URL with new JWT tokens
         from the Gecko API using the OAuth2-managed access token.
         """
+
         def refresh_token_callback(monitor_id: str | None = None) -> str:
             """Handle token refresh by getting a new websocket URL.
-            
+
             This is a synchronous callback invoked from background threads by the
             geckoIotClient library. We use run_coroutine_threadsafe to safely
             execute the async API call on Home Assistant's event loop.
-            
+
             Args:
                 monitor_id: The monitor ID that needs token refresh (optional, uses self.monitor_id if not provided)
-                
+
             Returns:
                 New websocket URL with fresh JWT token, or original URL on failure
             """
             # Use provided monitor_id or fall back to coordinator's monitor_id
             target_monitor_id = monitor_id or self.monitor_id
-            
+
             try:
                 # Get the config entry
                 entry = self.hass.config_entries.async_get_entry(self.entry_id)
                 if not entry:
-                    _LOGGER.error("Config entry %s not found for vessel %s - cannot refresh token", self.entry_id, self.vessel_name)
+                    _LOGGER.error(
+                        "Config entry %s not found for vessel %s - cannot refresh token",
+                        self.entry_id,
+                        self.vessel_name,
+                    )
                     return websocket_url
-                
+
                 # Get API client from runtime data
-                if not hasattr(entry, 'runtime_data') or not entry.runtime_data:
-                    _LOGGER.error("No runtime_data found for vessel %s - cannot refresh token", self.vessel_name)
+                if not hasattr(entry, "runtime_data") or not entry.runtime_data:
+                    _LOGGER.error(
+                        "No runtime_data found for vessel %s - cannot refresh token",
+                        self.vessel_name,
+                    )
                     return websocket_url
-                
+
                 api_client = entry.runtime_data.api_client
                 if not api_client:
-                    _LOGGER.error("No API client found for vessel %s - cannot refresh token", self.vessel_name)
+                    _LOGGER.error(
+                        "No API client found for vessel %s - cannot refresh token",
+                        self.vessel_name,
+                    )
                     return websocket_url
-                
+
                 # Fetch new livestream URL with fresh JWT token
                 # This is a sync callback from background thread, so use run_coroutine_threadsafe
                 future = asyncio.run_coroutine_threadsafe(
                     api_client.async_get_monitor_livestream(target_monitor_id),
-                    self.hass.loop
+                    self.hass.loop,
                 )
-                
+
                 # Wait for the API call to complete (with timeout)
                 livestream_data = future.result(timeout=30.0)
-                
+
                 # Extract the new websocket URL
                 new_url = livestream_data.get("brokerUrl")
                 if new_url:
                     return new_url
                 else:
-                    _LOGGER.error("No brokerUrl in livestream response for vessel %s", self.vessel_name)
+                    _LOGGER.error(
+                        "No brokerUrl in livestream response for vessel %s",
+                        self.vessel_name,
+                    )
                     return websocket_url
-                    
+
             except TimeoutError:
-                _LOGGER.error("Timeout fetching new websocket URL for vessel %s - API call took too long", self.vessel_name)
+                _LOGGER.error(
+                    "Timeout fetching new websocket URL for vessel %s - API call took too long",
+                    self.vessel_name,
+                )
                 return websocket_url
             except Exception as e:
-                _LOGGER.error("Failed to refresh token for vessel %s: %s", self.vessel_name, e, exc_info=True)
+                _LOGGER.error(
+                    "Failed to refresh token for vessel %s: %s",
+                    self.vessel_name,
+                    e,
+                    exc_info=True,
+                )
                 return websocket_url
-        
+
         return refresh_token_callback
 
     async def async_setup_monitor_connection(self, websocket_url: str) -> bool:
@@ -608,27 +646,27 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             # Get the singleton connection manager
             connection_manager = await async_get_connection_manager(self.hass)
-            
+
             # Create update callback for this vessel's coordinator
             def on_zone_update(updated_zones):
                 # Store the updated zones from GeckoIotClient (these have state managers!)
                 self._zones = updated_zones
-                
+
                 # Mark this vessel as having received zones
                 if not self._has_initial_zones:
                     self._has_initial_zones = True
                     if not self._initial_zones_loaded_event.is_set():
                         self._initial_zones_loaded_event.set()
-                
+
                 # Schedule the async call to run on the event loop from background thread
                 asyncio.run_coroutine_threadsafe(
                     self._async_handle_zone_update({"last_update": "zone_update"}),
-                    self.hass.loop
+                    self.hass.loop,
                 )
-            
+
             # Create refresh token callback
             refresh_token_callback = self._create_refresh_token_callback(websocket_url)
-                
+
             # Get or create connection with refresh token callback
             await connection_manager.async_get_or_create_connection(
                 monitor_id=self.monitor_id,
@@ -637,11 +675,16 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 update_callback=on_zone_update,
                 refresh_token_callback=refresh_token_callback,
             )
-            
+
             return True
-            
+
         except Exception as e:
-            _LOGGER.error("Failed to set up connection for vessel %s: %s", self.vessel_name, e, exc_info=True)
+            _LOGGER.error(
+                "Failed to set up connection for vessel %s: %s",
+                self.vessel_name,
+                e,
+                exc_info=True,
+            )
             return False
 
     async def async_get_operation_mode_status(self):
@@ -651,42 +694,62 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return gecko_client.operation_mode_status
         return None
 
-    def update_spa_state(self, state_data: Dict[str, Any]) -> None:
+    def update_spa_state(self, state_data: dict[str, Any]) -> None:
         """Update spa state data and trigger coordinator update."""
         self._spa_state = state_data
-        
+
         # Schedule the async call to run on the event loop from background thread
         asyncio.run_coroutine_threadsafe(
-            self._async_handle_zone_update({"last_update": state_data}),
-            self.hass.loop
+            self._async_handle_zone_update({"last_update": state_data}), self.hass.loop
         )
 
-    async def async_wait_for_initial_zone_data(self, timeout: float = INITIAL_ZONE_TIMEOUT) -> bool:
+    async def async_wait_for_initial_zone_data(
+        self, timeout: float = INITIAL_ZONE_TIMEOUT
+    ) -> bool:
         """Wait for this vessel to receive its initial zone data."""
         try:
-            await asyncio.wait_for(self._initial_zones_loaded_event.wait(), timeout=timeout)
-            _LOGGER.debug("Initial zone data loaded for vessel %s within timeout", self.vessel_name)
+            await asyncio.wait_for(
+                self._initial_zones_loaded_event.wait(), timeout=timeout
+            )
+            _LOGGER.debug(
+                "Initial zone data loaded for vessel %s within timeout",
+                self.vessel_name,
+            )
             return True
-        except asyncio.TimeoutError:
-            _LOGGER.warning("Timeout waiting for initial zone data for vessel %s", self.vessel_name)
+        except TimeoutError:
+            _LOGGER.warning(
+                "Timeout waiting for initial zone data for vessel %s", self.vessel_name
+            )
             return False
 
-    def get_spa_state(self) -> Dict[str, Any] | None:
+    def get_spa_state(self) -> dict[str, Any] | None:
         """Get spa state data for this vessel."""
         return self._spa_state
 
     async def async_shutdown(self) -> None:
         """Shutdown coordinator and cleanup resources."""
-        _LOGGER.debug("Shutting down coordinator for vessel %s (entry %s)", self.vessel_name, self.entry_id)
-        
+        _LOGGER.debug(
+            "Shutting down coordinator for vessel %s (entry %s)",
+            self.vessel_name,
+            self.entry_id,
+        )
+
         try:
             # Connection manager will handle cleanup during Home Assistant shutdown
             # We don't disconnect here as the connection may be shared
-            _LOGGER.debug("Coordinator releasing vessel %s (monitor %s)", self.vessel_name, self.monitor_id)
-            
+            _LOGGER.debug(
+                "Coordinator releasing vessel %s (monitor %s)",
+                self.vessel_name,
+                self.monitor_id,
+            )
+
         except Exception as ex:
-            _LOGGER.warning("Error during coordinator shutdown for vessel %s: %s", self.vessel_name, ex)
-        
+            _LOGGER.warning(
+                "Error during coordinator shutdown for vessel %s: %s",
+                self.vessel_name,
+                ex,
+            )
+
         self._zones.clear()
         self._spa_state.clear()
         self._zone_update_callbacks.clear()

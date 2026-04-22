@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
+
 from homeassistant.components.sensor import (
-    SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
@@ -60,8 +60,7 @@ async def async_setup_entry(
         pending = coordinator.take_pending_new_metric_paths()
         if pending:
             initial_entities.extend(
-                GeckoShadowMetricSensor(coordinator, config_entry, p)
-                for p in pending
+                GeckoShadowMetricSensor(coordinator, config_entry, p) for p in pending
             )
         pending_str = coordinator.take_pending_string_paths()
         if pending_str:
@@ -96,11 +95,14 @@ async def async_setup_entry(
     if initial_entities:
         async_add_entities(initial_entities)
 
-    if int(
-        config_entry.options.get(
-            CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL
+    if (
+        int(
+            config_entry.options.get(
+                CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL
+            )
         )
-    ) > 0:
+        > 0
+    ):
         async_add_entities(
             [
                 GeckoRestActiveAlertsSensor(coordinator, config_entry)
@@ -121,7 +123,9 @@ class GeckoShadowMetricSensor(
     def available(self) -> bool:
         """REST tile metrics stay available with a value even when MQTT is down."""
         if self._metric_path.startswith("cloud.rest."):
-            return self.coordinator.get_shadow_metric_value(self._metric_path) is not None
+            return (
+                self.coordinator.get_shadow_metric_value(self._metric_path) is not None
+            )
         return GeckoEntityAvailabilityMixin.available.fget(self)
 
     def __init__(
@@ -134,8 +138,8 @@ class GeckoShadowMetricSensor(
         self._metric_path = metric_path
         self._config_entry = config_entry
 
-        vessel_slug = coordinator.vessel_name.lower().replace(" ", "_").replace(
-            "-", "_"
+        vessel_slug = (
+            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
         )
         path_slug = metric_path_to_entity_slug(metric_path)
         self._attr_name = _humanize_metric_name(metric_path)
@@ -208,8 +212,8 @@ class GeckoShadowStringSensor(
         super().__init__(coordinator)
         self._path = path
         self._config_entry = config_entry
-        vessel_slug = coordinator.vessel_name.lower().replace(" ", "_").replace(
-            "-", "_"
+        vessel_slug = (
+            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
         )
         path_slug = metric_path_to_entity_slug(path)
         self._attr_name = _humanize_metric_name(path)
@@ -261,8 +265,8 @@ class GeckoRestActiveAlertsSensor(CoordinatorEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator)
         self._config_entry = config_entry
-        vessel_slug = coordinator.vessel_name.lower().replace(" ", "_").replace(
-            "-", "_"
+        vessel_slug = (
+            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
         )
         self._attr_name = "Active alerts (REST)"
         self._attr_unique_id = (

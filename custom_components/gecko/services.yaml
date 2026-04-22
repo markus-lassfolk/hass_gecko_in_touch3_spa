@@ -2,7 +2,7 @@
 
 publish_zone_desired:
   name: Publish zone desired state
-  description: Publishes {"zones": {zone_type: {zone_id: updates}}} over the active MQTT connection, matching the library zone callback.
+  description: 'Publishes {"zones": {zone_type: {zone_id: updates}}} over the active MQTT connection, matching the library zone callback.'
   fields:
     config_entry_id:
       name: Config entry
@@ -41,7 +41,7 @@ publish_zone_desired:
 
 publish_feature_desired:
   name: Publish feature desired state
-  description: Publishes {"features": updates} over MQTT, matching the library feature callback.
+  description: 'Publishes {"features": updates} over MQTT, matching the library feature callback.'
   fields:
     config_entry_id:
       name: Config entry

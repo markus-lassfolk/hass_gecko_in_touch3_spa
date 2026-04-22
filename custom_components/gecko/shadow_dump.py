@@ -171,14 +171,12 @@ def _segment_key_is_sensitive(key: str) -> bool:
     segs = _key_segments(key)
     if _SENSITIVE_SEGMENTS.intersection(segs):
         return True
-    return any(
-        (a, b) in _SENSITIVE_SEGMENT_PAIRS for a, b in zip(segs, segs[1:])
-    )
+    return any((a, b) in _SENSITIVE_SEGMENT_PAIRS for a, b in zip(segs, segs[1:]))
 
 
 def _opaque_fingerprint(label: str, raw: str) -> str:
     digest = hashlib.sha256(
-        _PUBLIC_EXPORT_SALT + f"|{label}|{raw}".encode("utf-8")
+        _PUBLIC_EXPORT_SALT + f"|{label}|{raw}".encode()
     ).hexdigest()[:16]
     return f"anon_{label}_{digest}"
 
@@ -189,8 +187,7 @@ def _is_private_ipv4(text: str) -> bool:
     except ValueError:
         return False
     return bool(
-        ip.version == 4
-        and (ip.is_private or ip.is_loopback or ip.is_link_local)
+        ip.version == 4 and (ip.is_private or ip.is_loopback or ip.is_link_local)
     )
 
 
@@ -293,7 +290,9 @@ def safe_export_filename(
     if not base.lower().endswith(".json"):
         base = f"{base}.json"
     if ".." in base or "/" in base or "\\" in base:
-        sanitized_monitor_id = re.sub(r"[^a-zA-Z0-9_.-]+", "_", monitor_id).strip("._-")[:40]
+        sanitized_monitor_id = re.sub(r"[^a-zA-Z0-9_.-]+", "_", monitor_id).strip(
+            "._-"
+        )[:40]
         base = (
             "gecko_shadow_export.json"
             if anonymous
@@ -320,9 +319,7 @@ def build_shadow_export_payload(
     """
     state = getattr(gecko_client, "_state", None)
     configuration = (
-        getattr(gecko_client, "_configuration", None)
-        if include_configuration
-        else None
+        getattr(gecko_client, "_configuration", None) if include_configuration else None
     )
     transporter = getattr(gecko_client, "transporter", None)
     transporter_info: dict[str, Any] = {}

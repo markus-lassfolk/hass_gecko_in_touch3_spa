@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from collections.abc import Awaitable, Callable
-from typing import Any
-
-import json
 from pathlib import Path
+from typing import Any
 
 import voluptuous as vol
 from homeassistant.components import persistent_notification
@@ -16,8 +15,8 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 
-from .const import DOMAIN
 from .connection_manager import async_get_connection_manager
+from .const import DOMAIN
 from .shadow_dump import (
     build_shadow_export_payload,
     safe_export_filename,
@@ -185,7 +184,9 @@ async def async_handle_publish_desired_state(
     _validate_config_entry(hass, call)
     client = await _async_client_for_monitor_from_call(hass, call)
     fragment = call.data[ATTR_DESIRED_FRAGMENT]
-    await hass.async_add_executor_job(client.transporter.publish_desired_state, fragment)
+    await hass.async_add_executor_job(
+        client.transporter.publish_desired_state, fragment
+    )
 
 
 DUMP_SHADOW_SCHEMA = vol.Schema(
@@ -302,7 +303,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             vol.Schema,
         ]
     ] = [
-        (SERVICE_PUBLISH_ZONE_DESIRED, async_handle_publish_zone_desired, PUBLISH_ZONE_SCHEMA),
+        (
+            SERVICE_PUBLISH_ZONE_DESIRED,
+            async_handle_publish_zone_desired,
+            PUBLISH_ZONE_SCHEMA,
+        ),
         (
             SERVICE_PUBLISH_FEATURE_DESIRED,
             async_handle_publish_feature_desired,

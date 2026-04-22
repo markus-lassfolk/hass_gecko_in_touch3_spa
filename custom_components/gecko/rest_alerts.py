@@ -26,7 +26,9 @@ def _as_list(val: Any) -> list[Any]:
     return []
 
 
-def _message_targets_vessel(msg: dict[str, Any], vessel_id: str, monitor_id: str) -> bool:
+def _message_targets_vessel(
+    msg: dict[str, Any], vessel_id: str, monitor_id: str
+) -> bool:
     vid = str(vessel_id)
     mid = str(monitor_id)
     candidates: list[str] = []
@@ -81,10 +83,7 @@ def _summarize_action(act: dict[str, Any]) -> dict[str, Any]:
 def _action_is_active(act: dict[str, Any]) -> bool:
     """Heuristic: treat missing status as active; exclude obvious completed."""
     st = str(
-        act.get("status")
-        or act.get("state")
-        or act.get("completionStatus")
-        or ""
+        act.get("status") or act.get("state") or act.get("completionStatus") or ""
     ).lower()
     if not st:
         return True

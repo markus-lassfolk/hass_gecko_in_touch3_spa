@@ -4,23 +4,22 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any
 
 from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
     BinarySensorEntity,
     BinarySensorEntityDescription,
-    BinarySensorDeviceClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .connection_manager import GECKO_CONNECTION_MANAGER_KEY
 from .const import CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL, DOMAIN
 from .coordinator import GeckoVesselCoordinator
-from .connection_manager import GECKO_CONNECTION_MANAGER_KEY
 from .entity import GeckoEntityAvailabilityMixin
 from .shadow_metrics import (
     binary_extension_enabled_by_default,
@@ -40,7 +39,7 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[BinarySensorEntityDescription, ...] = (
     ),
     BinarySensorEntityDescription(
         key="vessel_status",
-        name="Spa Status", 
+        name="Spa Status",
         icon="mdi:hot-tub",
         device_class=BinarySensorDeviceClass.RUNNING,
     ),
@@ -70,17 +69,17 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Gecko binary sensor entities from a config entry."""
-    
+
     # Get the vessel coordinators from runtime_data
-    if not hasattr(config_entry, 'runtime_data') or not config_entry.runtime_data:
+    if not hasattr(config_entry, "runtime_data") or not config_entry.runtime_data:
         _LOGGER.error("No runtime_data found for config entry")
         return
-    
+
     coordinators = config_entry.runtime_data.coordinators
     if not coordinators:
         _LOGGER.warning("No vessel coordinators found")
         return
-    
+
     entities: list[BinarySensorEntity] = []
     for coordinator in coordinators:
         for description in BINARY_SENSOR_DESCRIPTIONS:
@@ -96,11 +95,14 @@ async def async_setup_entry(
                 coordinator.vessel_name,
             )
 
-        if int(
-            config_entry.options.get(
-                CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL
+        if (
+            int(
+                config_entry.options.get(
+                    CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL
+                )
             )
-        ) > 0:
+            > 0
+        ):
             entities.append(
                 GeckoRestActiveAlertsBinarySensor(coordinator, config_entry)
             )
@@ -112,15 +114,14 @@ async def async_setup_entry(
             )
 
         @callback
-        def _on_shadow_metric_discovery(coord: GeckoVesselCoordinator = coordinator) -> None:
+        def _on_shadow_metric_discovery(
+            coord: GeckoVesselCoordinator = coordinator,
+        ) -> None:
             added = coord.take_pending_bool_paths()
             if not added:
                 return
             async_add_entities(
-                [
-                    GeckoShadowBoolBinarySensor(coord, config_entry, p)
-                    for p in added
-                ]
+                [GeckoShadowBoolBinarySensor(coord, config_entry, p) for p in added]
             )
 
         coordinator.register_shadow_metric_callback(_on_shadow_metric_discovery)
@@ -132,7 +133,9 @@ async def async_setup_entry(
         _LOGGER.debug("No binary sensor entities created")
 
 
-class GeckoBinarySensorEntity(CoordinatorEntity[GeckoVesselCoordinator], BinarySensorEntity):
+class GeckoBinarySensorEntity(
+    CoordinatorEntity[GeckoVesselCoordinator], BinarySensorEntity
+):
     """Representation of a Gecko binary sensor."""
 
     _attr_has_entity_name = True
@@ -145,18 +148,22 @@ class GeckoBinarySensorEntity(CoordinatorEntity[GeckoVesselCoordinator], BinaryS
     ) -> None:
         """Initialize the binary sensor."""
         super().__init__(coordinator)
-        
+
         self.entity_description = description
         self._monitor_id = coordinator.monitor_id
         self._vessel_name = coordinator.vessel_name
         self._vessel_id = coordinator.vessel_id
-        
+
         # Set up entity attributes
-        vessel_id_name = coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
+        vessel_id_name = (
+            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
+        )
         self._attr_name = description.name
-        self._attr_unique_id = f"{config_entry.entry_id}_{coordinator.vessel_id}_{description.key}"
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{coordinator.vessel_id}_{description.key}"
+        )
         self.entity_id = f"binary_sensor.{vessel_id_name}_{description.key}"
-        
+
         # Device info for grouping entities
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, str(coordinator.vessel_id))},
@@ -165,10 +172,14 @@ class GeckoBinarySensorEntity(CoordinatorEntity[GeckoVesselCoordinator], BinaryS
     async def async_added_to_hass(self) -> None:
         """Called when entity is added to hass."""
         await super().async_added_to_hass()
-        
+
         # Update state immediately when added to hass
         self._update_state()
-        _LOGGER.debug("Binary sensor %s added to hass with initial state: %s", self._attr_name, self._attr_is_on)
+        _LOGGER.debug(
+            "Binary sensor %s added to hass with initial state: %s",
+            self._attr_name,
+            self._attr_is_on,
+        )
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -193,7 +204,9 @@ class GeckoBinarySensorEntity(CoordinatorEntity[GeckoVesselCoordinator], BinaryS
             if self.entity_description.key == "is_energy_saving":
                 gecko_client = connection.gecko_client
                 if gecko_client and gecko_client.operation_mode_controller:
-                    self._attr_is_on = gecko_client.operation_mode_controller.is_energy_saving
+                    self._attr_is_on = (
+                        gecko_client.operation_mode_controller.is_energy_saving
+                    )
                 else:
                     self._attr_is_on = False
                 return
@@ -209,7 +222,9 @@ class GeckoBinarySensorEntity(CoordinatorEntity[GeckoVesselCoordinator], BinaryS
             self._update_connectivity_from_status(connectivity_status)
 
         except Exception as e:
-            _LOGGER.debug("Error updating binary sensor state for %s: %s", self._attr_name, e)
+            _LOGGER.debug(
+                "Error updating binary sensor state for %s: %s", self._attr_name, e
+            )
             self._attr_is_on = False
 
     def _update_connectivity_from_status(self, connectivity_status) -> None:
@@ -219,22 +234,24 @@ class GeckoBinarySensorEntity(CoordinatorEntity[GeckoVesselCoordinator], BinaryS
                 # Gateway status is "connected" when connected
                 status = str(connectivity_status.gateway_status).lower()
                 self._attr_is_on = status == "connected"
-                
+
             elif self.entity_description.key == "vessel_status":
                 # Vessel status is "running" when running
                 status = str(connectivity_status.vessel_status).lower()
                 self._attr_is_on = status == "running"
-                
+
             elif self.entity_description.key == "transport_connection":
                 # Transport connection is a boolean
                 self._attr_is_on = bool(connectivity_status.transport_connected)
-                
+
             elif self.entity_description.key == "overall_connection":
                 # Overall connection is fully connected or not
                 self._attr_is_on = bool(connectivity_status.is_fully_connected)
-                
+
         except Exception as e:
-            _LOGGER.warning("Error updating connectivity binary sensor %s: %s", self._attr_name, e)
+            _LOGGER.warning(
+                "Error updating connectivity binary sensor %s: %s", self._attr_name, e
+            )
             self._attr_is_on = False
 
 
@@ -261,8 +278,8 @@ class GeckoShadowBoolBinarySensor(
     ) -> None:
         super().__init__(coordinator)
         self._path = path
-        vessel_slug = coordinator.vessel_name.lower().replace(" ", "_").replace(
-            "-", "_"
+        vessel_slug = (
+            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
         )
         slug = metric_path_to_entity_slug(path)
         tail = path.split(".")[-1]
@@ -320,8 +337,8 @@ class GeckoRestActiveAlertsBinarySensor(
     ) -> None:
         super().__init__(coordinator)
         self._config_entry = config_entry
-        vessel_slug = coordinator.vessel_name.lower().replace(" ", "_").replace(
-            "-", "_"
+        vessel_slug = (
+            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
         )
         self._attr_name = "Active alerts"
         self._attr_unique_id = (

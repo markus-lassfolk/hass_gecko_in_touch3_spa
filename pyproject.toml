@@ -1,0 +1,43 @@
+[project]
+name = "hass-gecko-integration"
+version = "0"
+description = "Home Assistant custom integration: Gecko (HACS)"
+readme = "README.md"
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.ruff]
+target-version = "py313"
+src = ["custom_components/gecko", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+ignore = [
+    "E501",  # line length
+    "B904",  # raise-without-from-inside-except (common in HA integrations)
+    "B905",  # zip(strict=) not used consistently across codebase
+    "UP038",  # isinstance(x, (int, float)) is clearer than int | float for some cases
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B008"]  # pytest fixtures in args
+
+# Pylance / pyright: homeassistant is a dev dependency (see requirements_test.txt).
+[tool.pyright]
+include = ["custom_components", "tests"]
+pythonVersion = "3.13"
+typeCheckingMode = "basic"

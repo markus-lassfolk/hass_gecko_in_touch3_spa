@@ -117,7 +117,14 @@ def extract_cloud_tile_strings(vessel: dict[str, Any]) -> dict[str, str]:
         ):
             raw = root.get(key)
             if isinstance(raw, dict):
-                for leaf in ("text", "message", "value", "name", "label", "description"):
+                for leaf in (
+                    "text",
+                    "message",
+                    "value",
+                    "name",
+                    "label",
+                    "description",
+                ):
                     s = _string_leaf(raw.get(leaf))
                     if s:
                         out[f"cloud.rest.{label}.{key}.{leaf}"] = s

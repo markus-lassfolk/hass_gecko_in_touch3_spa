@@ -1,13 +1,12 @@
-
 import logging
+from typing import Any
 
-from homeassistant.helpers import config_entry_oauth2_flow
+from gecko_iot_client import GeckoApiClient
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import API_BASE_URL, AUTH0_URL_BASE
-from gecko_iot_client import GeckoApiClient
-from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,9 +30,7 @@ class GeckoSpaApiMixin:
             f"/v1/accounts/{account_id}/messages/unread",
         )
 
-    async def async_get_vessel_actions_v2(
-        self, account_id: str, vessel_id: str
-    ) -> Any:
+    async def async_get_vessel_actions_v2(self, account_id: str, vessel_id: str) -> Any:
         """Vessel-scoped actions (often used for prompts / alerts in the app)."""
         return await self.async_request(
             "GET",
@@ -51,16 +48,15 @@ class OAuthGeckoApi(GeckoSpaApiMixin, GeckoApiClient):
     ) -> None:
         """Initialize OAuthGeckoApi."""
         websession = async_get_clientsession(hass)
-        super().__init__(websession,
-                         api_url=API_BASE_URL,
-                         auth0_url=AUTH0_URL_BASE)
+        super().__init__(websession, api_url=API_BASE_URL, auth0_url=AUTH0_URL_BASE)
         self._oauth_session = oauth_session
 
     async def async_get_access_token(self) -> str:
         """Return a valid access token for the Gecko API."""
         await self._oauth_session.async_ensure_token_valid()
         return self._oauth_session.token["access_token"]
-    
+
+
 class ConfigFlowGeckoApi(GeckoSpaApiMixin, GeckoApiClient):
     """Profile gecko authentication before a ConfigEntry exists.
 
@@ -74,9 +70,7 @@ class ConfigFlowGeckoApi(GeckoSpaApiMixin, GeckoApiClient):
     ) -> None:
         """Initialize ConfigFlowGeckoApi."""
         websession = async_get_clientsession(hass)
-        super().__init__(websession,
-                         api_url=API_BASE_URL,
-                         auth0_url=AUTH0_URL_BASE)
+        super().__init__(websession, api_url=API_BASE_URL, auth0_url=AUTH0_URL_BASE)
         self._token = token
 
     async def async_get_access_token(self) -> str:

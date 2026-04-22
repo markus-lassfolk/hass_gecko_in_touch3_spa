@@ -7,7 +7,6 @@ from typing import Any
 
 from gecko_iot_client import GeckoIotClient
 from gecko_iot_client.models.connectivity import ConnectivityStatus
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
@@ -110,7 +109,9 @@ def _get_connection_diagnostics(connection_manager: Any) -> dict[str, Any]:
     return connections
 
 
-def _get_vessel_coordinators_diagnostics(config_entry: ConfigEntry) -> list[dict[str, Any]]:
+def _get_vessel_coordinators_diagnostics(
+    config_entry: ConfigEntry,
+) -> list[dict[str, Any]]:
     """Summarize per-vessel coordinators from config entry runtime data."""
     out: list[dict[str, Any]] = []
     if not hasattr(config_entry, "runtime_data") or not config_entry.runtime_data:

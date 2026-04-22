@@ -129,7 +129,12 @@ def _is_calibration_or_model_param_path(path: str) -> bool:
     """
     lower = path.lower()
     # Millivolt offsets and slopes (Waterlab pH/ORP sensor calibration).
-    if "offsetmv" in lower or "slopemv" in lower or "mvperph" in lower or "mvatph" in lower:
+    if (
+        "offsetmv" in lower
+        or "slopemv" in lower
+        or "mvperph" in lower
+        or "mvatph" in lower
+    ):
         return True
     # Thermistor / NTC model parameters (not spa water temperature).
     if re.search(r"\.therm\.(r0|t0|beta)(\.|$)", lower):
@@ -612,17 +617,9 @@ def infer_number_setpoint_limits(path: str, leaf: str) -> tuple[float, float, fl
     lower = path.lower()
     lk = leaf.lower()
     segs = _path_segments(path)
-    if (
-        any(_segment_is_ph(s) for s in segs)
-        or lk == "ph"
-        or _segment_is_ph(lk)
-    ):
+    if any(_segment_is_ph(s) for s in segs) or lk == "ph" or _segment_is_ph(lk):
         return 0.0, 14.0, 0.1
-    if (
-        any(_segment_is_orp(s) for s in segs)
-        or lk == "orp"
-        or _segment_is_orp(lk)
-    ):
+    if any(_segment_is_orp(s) for s in segs) or lk == "orp" or _segment_is_orp(lk):
         return 0.0, 1000.0, 1.0
     if any(t in lower for t in ("temp", "temperature")) or any(
         t in lk for t in ("temp", "temperature")
@@ -662,9 +659,7 @@ def binary_extension_enabled_by_default(path: str) -> bool:
     # ``\b`` does not treat ``_`` as a separator; normalize dotted paths so
     # snake_case keys like ``leak_alarm`` / ``pump_fault`` match token boundaries.
     spaced = re.sub(r"[._\-]+", " ", path.lower())
-    return bool(
-        re.search(r"\b(alarm|error|fault|leak|warning|trip|problem)\b", spaced)
-    )
+    return bool(re.search(r"\b(alarm|error|fault|leak|warning|trip|problem)\b", spaced))
 
 
 def string_extension_enabled_by_default(path: str) -> bool:
@@ -677,6 +672,4 @@ def string_extension_enabled_by_default(path: str) -> bool:
             tok in lower
             for tok in ("water", "status", "message", "text", "mode", "tile", "summary")
         )
-    return bool(
-        re.search(r"\b(alarm|message|status|text|reason|fault)\b", lower)
-    )
+    return bool(re.search(r"\b(alarm|message|status|text|reason|fault)\b", lower))

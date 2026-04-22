@@ -48,15 +48,14 @@ async def async_setup_entry(
             )
 
         @callback
-        def _on_shadow_metric_discovery(coord: GeckoVesselCoordinator = coordinator) -> None:
+        def _on_shadow_metric_discovery(
+            coord: GeckoVesselCoordinator = coordinator,
+        ) -> None:
             added = coord.take_pending_number_paths()
             if not added:
                 return
             async_add_entities(
-                [
-                    GeckoUnknownZoneSetpointNumber(coord, config_entry, p)
-                    for p in added
-                ]
+                [GeckoUnknownZoneSetpointNumber(coord, config_entry, p) for p in added]
             )
 
         coordinator.register_shadow_metric_callback(_on_shadow_metric_discovery)
@@ -91,8 +90,8 @@ class GeckoUnknownZoneSetpointNumber(
         self._attr_native_max_value = nmax
         self._attr_native_step = step
 
-        vessel_slug = coordinator.vessel_name.lower().replace(" ", "_").replace(
-            "-", "_"
+        vessel_slug = (
+            coordinator.vessel_name.lower().replace(" ", "_").replace("-", "_")
         )
         slug = metric_path_to_entity_slug(path)
         leaf = path.split(".")[-1]
