@@ -132,14 +132,6 @@ def _is_calibration_or_model_param_path(path: str) -> bool:
     return False
 
 
-def _skip_extension_reported_root_key(key: str) -> bool:
-    """Skip connectivity-style noise that can crowd out chemistry metrics."""
-    if key in ("zones", "features"):
-        return True
-    lk = key.lower()
-    return lk == "connectivity_" or lk.startswith("connectivity")
-
-
 def _get_reported(state_data: dict[str, Any] | None) -> dict[str, Any]:
     """Normalize shadow payload to the ``reported`` object."""
     if not state_data or not isinstance(state_data, dict):
