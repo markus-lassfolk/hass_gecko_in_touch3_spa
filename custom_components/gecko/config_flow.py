@@ -204,6 +204,11 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
         opts = dict(self.config_entry.options)
 
         if user_input is not None:
+            # Merge onto existing options so internal keys (e.g. one-time migration
+            # stamps from ``_migrate_options_defaults``) are not dropped.
+            merged_options = dict(self.config_entry.options)
+            merged_options.update(user_input)
+
             old_alerts = int(
                 opts.get(CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL)
             )
@@ -216,11 +221,11 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                 # reloads on the same toggle (double reload / duplicate MQTT setup).
                 self.hass.config_entries.async_update_entry(
                     self.config_entry,
-                    options=user_input,
+                    options=merged_options,
                 )
                 await self.hass.config_entries.async_reload(self.config_entry.entry_id)
                 return self.async_abort(reason="reconfigure_successful")
-            return self.async_create_entry(title="", data=user_input)
+            return self.async_create_entry(title="", data=merged_options)
 
         schema = vol.Schema(
             {

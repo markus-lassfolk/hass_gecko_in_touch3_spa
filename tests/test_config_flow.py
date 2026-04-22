@@ -133,6 +133,33 @@ async def test_options_flow_save_without_reload(hass: HomeAssistant) -> None:
     assert result["data"][CONF_ALERTS_POLL_INTERVAL] == 0
 
 
+async def test_options_flow_preserves_internal_migration_marker(
+    hass: HomeAssistant,
+) -> None:
+    """Saving options must keep ``_options_defaults_migrated`` so setup does not re-run migration."""
+    entry = _mock_config_entry(
+        options={
+            CONF_CLOUD_REST_POLL_INTERVAL: 0,
+            CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN: True,
+            CONF_ALERTS_POLL_INTERVAL: 0,
+            "_options_defaults_migrated": True,
+        }
+    )
+    flow = _create_options_flow(hass, entry)
+
+    result = await flow.async_step_init(
+        user_input={
+            CONF_CLOUD_REST_POLL_INTERVAL: 120,
+            CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN: False,
+            CONF_ALERTS_POLL_INTERVAL: 0,
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"].get("_options_defaults_migrated") is True
+    assert result["data"][CONF_CLOUD_REST_POLL_INTERVAL] == 120
+
+
 async def test_options_flow_save_nonzero_to_nonzero_no_reload(
     hass: HomeAssistant,
 ) -> None:
@@ -174,6 +201,28 @@ async def test_options_flow_reload_when_enabling_alerts(
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     mock_reload.assert_awaited_once_with(entry.entry_id)
+    assert entry.options[CONF_ALERTS_POLL_INTERVAL] == 300
+
+
+async def test_options_flow_reload_preserves_internal_migration_marker(
+    hass: HomeAssistant,
+) -> None:
+    """Reload path (alerts crossing zero) must still persist internal options keys."""
+    entry = _mock_config_entry(
+        options={
+            CONF_ALERTS_POLL_INTERVAL: 0,
+            "_options_defaults_migrated": True,
+        }
+    )
+    flow = _create_options_flow(hass, entry)
+
+    with patch.object(hass.config_entries, "async_reload", new_callable=AsyncMock):
+        result = await flow.async_step_init(
+            user_input=_default_user_input(**{CONF_ALERTS_POLL_INTERVAL: 300}),
+        )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert entry.options.get("_options_defaults_migrated") is True
     assert entry.options[CONF_ALERTS_POLL_INTERVAL] == 300
 
 
