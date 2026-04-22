@@ -190,10 +190,28 @@ def extract_cloud_tile_metrics(vessel: dict[str, Any]) -> dict[str, float | int]
 _WIFI_DIAGNOSTIC_READINGS = frozenset({"wifiRssi", "wifi_rssi"})
 
 
+def _iter_readings_dicts(vessel: dict[str, Any]):
+    """Yield (key, readings_dict) from both top-level and status-nested locations."""
+    _KEYS = ("readings", "monitorReadings", "reportReadings", "computedReadings")
+    for rk in _KEYS:
+        rd = vessel.get(rk)
+        if isinstance(rd, dict):
+            yield rk, rd
+    status = vessel.get("status")
+    if isinstance(status, dict):
+        for rk in _KEYS:
+            rd = status.get(rk)
+            if isinstance(rd, dict):
+                yield rk, rd
+
+
 def extract_vessel_readings_metrics(
     vessel: dict[str, Any],
 ) -> dict[str, float | int]:
     """Numeric values from the v6 ``readings`` / ``monitorReadings`` objects.
+
+    Looks both at the top level and inside ``status`` (the v6 vessel detail
+    nests readings under ``status.readings``).
 
     Produces paths like ``cloud.rest.readings.ph``, ``cloud.rest.readings.orp``,
     ``cloud.rest.readings.waterTemp``, etc.
@@ -201,10 +219,7 @@ def extract_vessel_readings_metrics(
     out: dict[str, float | int] = {}
     if not isinstance(vessel, dict):
         return out
-    for readings_key in ("readings", "monitorReadings", "reportReadings"):
-        readings = vessel.get(readings_key)
-        if not isinstance(readings, dict):
-            continue
+    for _rk, readings in _iter_readings_dicts(vessel):
         for key, entry in readings.items():
             if not isinstance(key, str) or not isinstance(entry, dict):
                 continue
@@ -228,16 +243,17 @@ def extract_vessel_readings_strings(
     out: dict[str, str] = {}
     if not isinstance(vessel, dict):
         return out
-    readings = vessel.get("readings")
-    if not isinstance(readings, dict):
-        return out
-    for key, entry in readings.items():
-        if not isinstance(key, str) or not isinstance(entry, dict):
-            continue
-        for leaf in ("status", "title", "unit", "abbreviation", "source"):
-            s = _string_leaf(entry.get(leaf))
-            if s:
-                out[f"cloud.rest.readings.{key}.{leaf}"] = s
+    for _rk, readings in _iter_readings_dicts(vessel):
+        for key, entry in readings.items():
+            if not isinstance(key, str) or not isinstance(entry, dict):
+                continue
+            for leaf in ("status", "title", "unit", "abbreviation", "source"):
+                full_path = f"cloud.rest.readings.{key}.{leaf}"
+                if full_path in out:
+                    continue
+                s = _string_leaf(entry.get(leaf))
+                if s:
+                    out[full_path] = s
     return out
 
 

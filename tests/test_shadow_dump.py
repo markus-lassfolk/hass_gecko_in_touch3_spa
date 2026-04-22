@@ -12,7 +12,7 @@ from custom_components.gecko import shadow_dump
 
 def test_integration_version_reads_manifest() -> None:
     v = shadow_dump.integration_version()
-    assert v == "2.2.3"
+    assert v == "2.2.4"
 
 
 def test_key_segments_splits_camel_and_separators() -> None:
