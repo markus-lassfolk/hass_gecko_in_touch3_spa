@@ -1,7 +1,9 @@
-"""Normalize Gecko REST payloads for active alerts (no PII in this module).
+"""Normalize Gecko REST payloads for active alerts.
 
-Uses account/vessel/monitor identifiers passed at runtime only. Response shapes
-vary by API version; parsing is defensive.
+Uses account/vessel/monitor identifiers passed at runtime only and avoids
+introducing additional identifiers. Some returned message summaries include
+server-provided text, which may contain sensitive or location-specific content.
+Response shapes vary by API version; parsing is defensive.
 """
 
 from __future__ import annotations

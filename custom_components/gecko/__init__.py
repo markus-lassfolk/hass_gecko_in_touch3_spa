@@ -196,17 +196,8 @@ class GeckoRuntimeData:
     rest_alerts_actions_lock: asyncio.Lock = field(
         default_factory=asyncio.Lock, repr=False, compare=False
     )
-    rest_alerts_actions_payload: Any | None = field(
-        default=None, repr=False, compare=False
-    )
-    rest_alerts_actions_mono: float | None = field(
-        default=None, repr=False, compare=False
-    )
-    rest_alerts_actions_account_id: str | None = field(
-        default=None, repr=False, compare=False
-    )
-    rest_alerts_actions_vessel_id: str | None = field(
-        default=None, repr=False, compare=False
+    rest_alerts_actions_cache: dict[tuple[str, str], dict[str, Any]] = field(
+        default_factory=dict, repr=False, compare=False
     )
 
 

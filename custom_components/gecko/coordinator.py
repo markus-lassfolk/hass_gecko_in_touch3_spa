@@ -49,6 +49,8 @@ UPDATE_INTERVAL_SECONDS = 30  # seconds between coordinator updates
 MAX_CONSECUTIVE_FAILURES = 2  # max failures before attempting reconnect
 RECONNECT_DELAY = 1  # seconds to wait before reconnecting
 INITIAL_ZONE_TIMEOUT = 60.0  # seconds to wait for initial zone data
+# Rate-limit shadow metric extraction on noisy zone MQTT updates
+_ZONE_SHADOW_REFRESH_MIN_INTERVAL = 1.5
 
 
 class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -129,6 +131,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "error": None,
         }
         self._last_alerts_poll_monotonic: float | None = None
+        self._last_zone_shadow_refresh_mono: float | None = None
 
     def register_zone_update_callback(self, callback):
         """Register a callback to be called when zone data updates."""
@@ -140,9 +143,19 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_handle_zone_update(self, data: dict[str, Any]) -> None:
         """Handle zone update in the event loop."""
+        now = time.monotonic()
+        if (
+            self._last_zone_shadow_refresh_mono is None
+            or (now - self._last_zone_shadow_refresh_mono)
+            >= _ZONE_SHADOW_REFRESH_MIN_INTERVAL
+        ):
+            self._last_zone_shadow_refresh_mono = now
+            client = await self.get_gecko_client()
+            self.sync_refresh_shadow_metrics(client)
+
         # Trigger entity discovery when zones are updated
         self.async_set_updated_data(data)
-        
+
         _LOGGER.debug("Zone data updated for vessel %s", self.vessel_name)
 
         # Call registered callbacks for dynamic entity creation
@@ -291,23 +304,23 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 exc,
             )
         try:
+            cache_key = (str(account_id), str(self.vessel_id))
             async with rd.rest_alerts_actions_lock:
+                cached = rd.rest_alerts_actions_cache.get(cache_key)
                 if (
-                    rd.rest_alerts_actions_payload is not None
-                    and rd.rest_alerts_actions_mono is not None
-                    and rd.rest_alerts_actions_account_id == account_id
-                    and rd.rest_alerts_actions_vessel_id == str(self.vessel_id)
-                    and (now - rd.rest_alerts_actions_mono) < interval
+                    cached is not None
+                    and cached.get("mono") is not None
+                    and (now - cached["mono"]) < interval
                 ):
-                    actions_payload = rd.rest_alerts_actions_payload
+                    actions_payload = cached.get("payload")
                 else:
                     actions_payload = await api.async_get_vessel_actions_v2(
                         str(account_id), str(self.vessel_id)
                     )
-                    rd.rest_alerts_actions_payload = actions_payload
-                    rd.rest_alerts_actions_mono = now
-                    rd.rest_alerts_actions_account_id = account_id
-                    rd.rest_alerts_actions_vessel_id = str(self.vessel_id)
+                    rd.rest_alerts_actions_cache[cache_key] = {
+                        "payload": actions_payload,
+                        "mono": now,
+                    }
         except Exception as exc:
             aerr = f"actions:{type(exc).__name__}"
             err = f"{err};{aerr}" if err else aerr

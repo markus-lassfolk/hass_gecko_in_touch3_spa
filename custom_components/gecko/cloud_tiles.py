@@ -1,9 +1,10 @@
-"""Parse app-style vessel summary fields from Gecko REST (no PII in this module).
+"""Parse app-style vessel summary fields from Gecko REST.
 
 Vessel list/detail payloads vary by API version; this module reads common
-numeric, string, and shallow boolean shapes used for dashboard tiles. Keys are
-written under ``cloud.rest.*`` so they merge cleanly with MQTT shadow metrics
-(shadow wins on path collision).
+numeric, string, and shallow boolean shapes used for dashboard tiles while
+avoiding identifiers where possible. Keys are written under ``cloud.rest.*``
+so they merge cleanly with MQTT shadow metrics (shadow wins on path
+collision).
 """
 
 from __future__ import annotations

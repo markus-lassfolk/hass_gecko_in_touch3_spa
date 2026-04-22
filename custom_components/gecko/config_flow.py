@@ -8,7 +8,6 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers import (
     config_entry_oauth2_flow,
-    aiohttp_client,
     config_validation as cv,
 )
 
@@ -187,10 +186,10 @@ class ConfigFlow(
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Options for optional REST enrichment."""
-        return GeckoOptionsFlow()
+        return GeckoOptionsFlow(config_entry)
 
 
-class GeckoOptionsFlow(config_entries.OptionsFlow):
+class GeckoOptionsFlow(config_entries.OptionsFlowWithConfigEntry):
     """Integration options (REST poll for app-style tiles when MQTT is quiet)."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
@@ -198,7 +197,7 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        opts = self.config_entry.options
+        opts = self.options
         schema = vol.Schema(
             {
                 vol.Optional(
