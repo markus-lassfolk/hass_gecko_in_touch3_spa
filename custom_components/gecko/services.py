@@ -106,10 +106,10 @@ async def _async_client_for_monitor(hass: HomeAssistant, monitor_id: str) -> Any
     return conn.gecko_client
 
 
-async def _async_client_for_monitor_from_call(
-    hass: HomeAssistant, call: ServiceCall
-) -> Any:
-    return await _async_client_for_monitor(hass, str(call.data[ATTR_MONITOR_ID]))
+async def _async_client_for_monitor_from_call(call: ServiceCall) -> Any:
+    return await _async_client_for_monitor(
+        call.hass, str(call.data[ATTR_MONITOR_ID])
+    )
 
 
 def _allowed_monitor_ids(entry) -> set[str]:
@@ -140,7 +140,8 @@ def _vessel_id_for_monitor(entry, monitor_id: str) -> str:
     return str(monitor_id)
 
 
-def _validate_config_entry(hass: HomeAssistant, call: ServiceCall) -> None:
+def _validate_config_entry(call: ServiceCall) -> None:
+    hass = call.hass
     entry_id = str(call.data[ATTR_CONFIG_ENTRY_ID])
     entry = hass.config_entries.async_get_entry(entry_id)
     if not entry or entry.domain != DOMAIN:
@@ -154,8 +155,8 @@ def _validate_config_entry(hass: HomeAssistant, call: ServiceCall) -> None:
 
 async def async_handle_publish_zone_desired(call: ServiceCall) -> None:
     """Publish ``{"zones": {type: {id: updates}}}`` like gecko-iot-client zone callbacks."""
-    _validate_config_entry(call.hass, call)
-    client = await _async_client_for_monitor_from_call(call.hass, call)
+    _validate_config_entry(call)
+    client = await _async_client_for_monitor_from_call(call)
     zone_type = str(call.data[ATTR_ZONE_TYPE])
     zone_id = str(call.data[ATTR_ZONE_ID])
     updates = call.data[ATTR_UPDATES]
@@ -165,8 +166,8 @@ async def async_handle_publish_zone_desired(call: ServiceCall) -> None:
 
 async def async_handle_publish_feature_desired(call: ServiceCall) -> None:
     """Publish ``{"features": updates}`` like the library feature callback."""
-    _validate_config_entry(call.hass, call)
-    client = await _async_client_for_monitor_from_call(call.hass, call)
+    _validate_config_entry(call)
+    client = await _async_client_for_monitor_from_call(call)
     updates = call.data[ATTR_UPDATES]
     desired = {"features": updates}
     await call.hass.async_add_executor_job(client.transporter.publish_desired_state, desired)
@@ -174,8 +175,8 @@ async def async_handle_publish_feature_desired(call: ServiceCall) -> None:
 
 async def async_handle_publish_desired_state(call: ServiceCall) -> None:
     """Publish a validated shadow ``desired`` fragment (``zones`` / ``features`` only)."""
-    _validate_config_entry(call.hass, call)
-    client = await _async_client_for_monitor_from_call(call.hass, call)
+    _validate_config_entry(call)
+    client = await _async_client_for_monitor_from_call(call)
     fragment = call.data[ATTR_DESIRED_FRAGMENT]
     await call.hass.async_add_executor_job(client.transporter.publish_desired_state, fragment)
 
@@ -194,7 +195,7 @@ DUMP_SHADOW_SCHEMA = vol.Schema(
 
 async def async_handle_dump_shadow_snapshot(call: ServiceCall) -> None:
     """Write device shadow + configuration JSON under ``<config>/gecko_shadow_dumps/``."""
-    _validate_config_entry(call.hass, call)
+    _validate_config_entry(call)
     entry_id = str(call.data[ATTR_CONFIG_ENTRY_ID])
     monitor_id = str(call.data[ATTR_MONITOR_ID])
     entry = call.hass.config_entries.async_get_entry(entry_id)
