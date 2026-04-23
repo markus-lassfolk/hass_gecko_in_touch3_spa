@@ -620,7 +620,7 @@ class GeckoEnergyScoreSensor(CoordinatorEntity, SensorEntity):
         unit = None
         if isinstance(raw, dict):
             unit = raw.get("unit") or raw.get("scale")
-        self._attr_native_unit_of_measurement = unit or "%"
+        self._attr_native_unit_of_measurement = unit
 
         self._attr_native_value = val
         self._attr_extra_state_attributes = (
