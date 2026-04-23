@@ -66,11 +66,9 @@ async def test_get_connection_diagnostics_with_connection() -> None:
             transporter=None,
         )
 
-    import asyncio
-
+    connections = {"m1": _Conn()}
     mgr = SimpleNamespace(
-        _connections={"m1": _Conn()},
-        _connection_lock=asyncio.Lock(),
+        get_connections_snapshot=lambda: dict(connections),
     )
     out = await gecko_diag._get_connection_diagnostics(mgr)
     assert "m1" in out
