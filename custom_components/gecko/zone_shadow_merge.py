@@ -8,6 +8,12 @@ overwrites the in-memory setpoint and Home Assistant rubberbands back.
 
 We shallow-merge ``desired.zones`` over ``reported.zones`` per zone id so fields
 present in ``desired`` (for example ``setPoint``) win until reported catches up.
+
+MQTT ``shadow/.../update/documents`` only forwards ``current.state`` to the client.
+After a publish, AWS often clears ``desired`` in ``current`` while ``reported`` is
+still stale, so we also merge ``delta.zones`` (when present) and patch the MQTT
+transporter to fold ``previous.state.desired`` into ``current`` when ``current``
+drops ``desired`` but the spa has not updated ``reported`` yet.
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ from typing import Any
 _LOGGER = logging.getLogger(__name__)
 
 _PATCH_ATTR = "_gecko_ha_zone_shadow_merge_patch"
+_DOC_PATCH_ATTR = "_gecko_ha_shadow_document_merge_patch"
 
 
 def merge_shadow_zone_trees(
@@ -70,6 +77,77 @@ def merge_shadow_zone_trees(
     return merged
 
 
+def merge_desired_shadow_layers(
+    previous_desired: Any,
+    current_desired: Any,
+) -> dict[str, Any]:
+    """Merge named-shadow ``desired`` dicts; ``current`` wins on conflicts.
+
+    When both carry a ``zones`` tree, shallow-merge per zone id so partial
+    ``current.desired`` updates do not wipe unrelated keys from ``previous``.
+    """
+    pd = previous_desired if isinstance(previous_desired, dict) else {}
+    cd = current_desired if isinstance(current_desired, dict) else {}
+    if not pd and not cd:
+        return {}
+    out: dict[str, Any] = {**pd, **cd}
+    if pd.get("zones") or cd.get("zones"):
+        out["zones"] = merge_shadow_zone_trees(pd.get("zones"), cd.get("zones"))
+    return out
+
+
+def enrich_document_current_state_with_previous_desired(
+    current_state: dict[str, Any],
+    previous_state: dict[str, Any],
+) -> dict[str, Any]:
+    """Rebuild ``current.state`` so zone merges still see a meaningful ``desired``."""
+    out = dict(current_state)
+    prev_st = previous_state if isinstance(previous_state, dict) else {}
+    merged_desired = merge_desired_shadow_layers(
+        prev_st.get("desired"),
+        out.get("desired"),
+    )
+    if merged_desired:
+        out["desired"] = merged_desired
+    return out
+
+
+def install_mqtt_shadow_document_patch() -> None:
+    """Fold ``previous.desired`` into document ``current.state`` before zone updates."""
+    from gecko_iot_client.transporters.mqtt.transporter import MqttTransporter
+    from gecko_iot_client.transporters.mqtt.utils import (
+        notify_callbacks_safely,
+        parse_json_safely,
+    )
+
+    if getattr(MqttTransporter._on_state_document_update, _DOC_PATCH_ATTR, False):
+        return
+
+    lib_logger = logging.getLogger("gecko_iot_client.transporters.mqtt.transporter")
+
+    def _on_state_document_update(self: MqttTransporter, topic: str, payload: str) -> None:
+        lib_logger.debug("State document update received")
+        document = parse_json_safely(payload)
+        if not document:
+            lib_logger.error("Failed to parse state document update")
+            return
+        current_inner = document.get("current", {}).get("state", {}) or {}
+        previous_inner = document.get("previous", {}).get("state", {}) or {}
+        enriched = enrich_document_current_state_with_previous_desired(
+            current_inner if isinstance(current_inner, dict) else {},
+            previous_inner if isinstance(previous_inner, dict) else {},
+        )
+        lib_logger.debug("Extracted state from document (HA desired carry-forward)")
+        notify_callbacks_safely(
+            self._callback_registry.get_callbacks("state_update"),
+            {"state": enriched},
+        )
+
+    setattr(_on_state_document_update, _DOC_PATCH_ATTR, True)
+    MqttTransporter._on_state_document_update = _on_state_document_update  # type: ignore[method-assign]
+    _LOGGER.debug("Installed MQTT shadow document desired carry-forward patch")
+
+
 def install_zone_parser_merge_patch() -> None:
     """Idempotently replace ``apply_state_to_zones`` on the vendored parser class."""
     from gecko_iot_client.models.zone_parser import ZoneConfigurationParser
@@ -91,9 +169,13 @@ def install_zone_parser_merge_patch() -> None:
         state = state_data.get("state") or {}
         reported_state = state.get("reported") or {}
         desired_state = state.get("desired") or {}
+        delta_state = state.get("delta") or {}
         zones_state = merge_shadow_zone_trees(
-            reported_state.get("zones"),
-            desired_state.get("zones"),
+            merge_shadow_zone_trees(
+                reported_state.get("zones"),
+                desired_state.get("zones"),
+            ),
+            delta_state.get("zones"),
         )
         if not zones_state:
             lib_logger.debug("No zones runtime state found")

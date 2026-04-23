@@ -22,11 +22,15 @@ from homeassistant.helpers.singleton import singleton
 from homeassistant.util.hass_dict import HassKey
 
 from .const import CONFIG_TIMEOUT, DOMAIN
-from .zone_shadow_merge import install_zone_parser_merge_patch
+from .zone_shadow_merge import (
+    install_mqtt_shadow_document_patch,
+    install_zone_parser_merge_patch,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 install_zone_parser_merge_patch()
+install_mqtt_shadow_document_patch()
 
 # Constants
 TOKEN_REFRESH_DELAY = 1  # seconds to wait before getting new token
