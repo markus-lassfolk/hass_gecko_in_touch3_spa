@@ -511,6 +511,7 @@ class GeckoEnergyCostSensor(
             identifiers={(DOMAIN, str(coordinator.vessel_id))},
         )
         self._attr_available = False
+        self._latched_currency: str | None = None
         self._refresh_value()
 
     def _refresh_value(self) -> None:
@@ -518,7 +519,8 @@ class GeckoEnergyCostSensor(
         raw = energy.get("cost")
         if raw is None:
             self._attr_native_value = None
-            self._attr_native_unit_of_measurement = None
+            if self._latched_currency is None:
+                self._attr_native_unit_of_measurement = None
             self._attr_extra_state_attributes = {}
             return
 
@@ -528,8 +530,13 @@ class GeckoEnergyCostSensor(
         if isinstance(raw, dict):
             currency = raw.get("currency") or raw.get("currencyCode") or raw.get("unit")
 
+        if self._latched_currency is None and currency:
+            self._latched_currency = currency
+            self._attr_native_unit_of_measurement = currency
+        elif self._latched_currency:
+            self._attr_native_unit_of_measurement = self._latched_currency
+
         self._attr_native_value = val
-        self._attr_native_unit_of_measurement = currency
         self._attr_extra_state_attributes = (
             {"raw_response": raw} if isinstance(raw, dict) else {}
         )
