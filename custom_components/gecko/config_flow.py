@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 import time
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -117,6 +118,16 @@ def _extract_code_from_callback(raw: str) -> str | None:
         codes = qs.get("code")
         if codes:
             code = codes[0]
+            if code and code.strip():
+                return code
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Fallback: search for code= in the raw string if urlparse failed
+    try:
+        match = re.search(r'[?&]code=([^&\s]+)', raw)
+        if match:
+            code = match.group(1)
             if code and code.strip():
                 return code
     except Exception:  # noqa: BLE001
