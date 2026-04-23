@@ -1,9 +1,13 @@
 """Config flow for Gecko."""
 
+import base64
+import json
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
+from aiohttp import ClientResponseError
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers import (
@@ -30,11 +34,33 @@ from .oauth_implementation import GeckoPKCEOAuth2Implementation
 _LOGGER = logging.getLogger(__name__)
 
 
+def _decode_jwt_payload(token: str) -> dict | None:
+    """Decode the payload of a JWT without signature verification.
+
+    Used only to extract claims (org_id, sub, etc.) as a fallback when the
+    /v2/user endpoint returns 404.
+    """
+    try:
+        parts = token.split(".")
+        if len(parts) < 2:
+            return None
+        payload_b64 = parts[1]
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += "=" * padding
+        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+        return json.loads(payload_bytes)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMAIN):
     """Config flow to handle Gecko OAuth2 authentication."""
 
     DOMAIN = DOMAIN
     VERSION = 2
+
+    _reauth_entry: config_entries.ConfigEntry | None = None
 
     async def async_step_user(self, user_input=None):
         """Handle a flow initialized by the user."""
@@ -61,9 +87,36 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
                 ),
             )
 
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> config_entries.ConfigFlowResult:
+        """Handle re-authentication when the token can no longer be refreshed."""
+        self._reauth_entry = self.hass.config_entries.async_get_entry(
+            self.context["entry_id"]
+        )
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Confirm re-authentication with the user."""
+        if user_input is None:
+            return self.async_show_form(step_id="reauth_confirm")
+        await self.async_register_implementation()
+        return await super().async_step_user(user_input)
+
     async def async_oauth_create_entry(self, data: dict):
-        """Create an entry after OAuth authentication."""
-        # Get available vessels from the cloud API
+        """Create an entry after OAuth authentication, or update on reauth."""
+        # Reauth path: update only the token, preserve all other stored data.
+        if self._reauth_entry is not None:
+            new_data = {**self._reauth_entry.data, "token": data["token"]}
+            self.hass.config_entries.async_update_entry(
+                self._reauth_entry, data=new_data
+            )
+            await self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
+            return self.async_abort(reason="reauth_successful")
+
+        # Normal first-time setup path.
         try:
             # Create a simple API client using just the access token for initial API calls
             from .api import ConfigFlowGeckoApi
@@ -133,54 +186,66 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
     async def _resolve_user_and_account(
         self, data: dict, api_client
     ) -> tuple[str, dict, str]:
-        """Resolve user ID and account information."""
+        """Resolve user ID and account information.
+
+        Primary path: Auth0 userinfo → /v2/user/{userId}.
+        Fallback: decode the JWT access token for org_id / account claims
+        when the user-profile endpoint returns 404 (common for newer or
+        social-login accounts that haven't been fully provisioned yet).
+        """
+        user_id: str | None = None
         try:
-            # Step 1: Get user ID from Auth0 userinfo endpoint
             user_id = await api_client.async_get_user_id()
-
-            # Step 2: Call our own API's /v2/user/:userId endpoint to get account information
-            user_data = await api_client.async_get_user_info(user_id)
-
-            account_data = user_data.get("account", {})
-            account_id = str(account_data.get("accountId", ""))
-
-            if not account_id:
-                raise ValueError("No account ID found in user data")
-
-            return user_id, account_data, account_id
-
         except Exception as err:
-            raise ConnectionError(f"Failed to resolve user and account: {err}") from err
+            _LOGGER.warning("Could not fetch Auth0 userinfo: %s", err)
 
-    async def _get_user_id_from_api(self, api_client) -> str | None:
-        """Try to get user ID from API calls."""
-        # First, try to extract user ID directly from the JWT token
-        user_id = api_client.extract_user_id_from_token()
+        # Primary: /v2/user endpoint
         if user_id:
-            return user_id
+            try:
+                user_data = await api_client.async_get_user_info(user_id)
+                account_data = user_data.get("account", {})
+                account_id = str(account_data.get("accountId", ""))
+                if account_id:
+                    return user_id, account_data, account_id
+            except ClientResponseError as err:
+                if err.status == 404:
+                    _LOGGER.warning(
+                        "Gecko /v2/user endpoint returned 404 for %s — "
+                        "trying JWT fallback",
+                        user_id,
+                    )
+                else:
+                    raise ConnectionError(
+                        f"Failed to resolve user and account: {err}"
+                    ) from err
+            except Exception as err:
+                _LOGGER.warning("User info API call failed: %s", err)
 
-        # If token extraction fails, try OAuth userinfo endpoint
-        try:
-            userinfo = await api_client.async_get_oauth_userinfo()
-            return userinfo.get("sub")
-        except Exception:
-            return None
+        # Fallback: decode JWT claims from the access token
+        access_token = data.get("token", {}).get("access_token", "")
+        jwt_claims = _decode_jwt_payload(access_token)
 
-    def _extract_user_id_from_token(self, token: dict[str, Any]) -> str | None:
-        """Extract user ID from the OAuth token."""
-        # Try direct fields in token first
-        for field in ["user_id", "userId", "uid", "id", "sub"]:
-            if field in token:
-                return str(token[field])
+        if jwt_claims:
+            org_id = jwt_claims.get("org_id", "")
+            jwt_account = (
+                jwt_claims.get("https://geckoal.com/account_id", "")
+                or jwt_claims.get("account_id", "")
+                or org_id
+            )
+            jwt_sub = jwt_claims.get("sub", "") or (user_id or "")
 
-        # Check user_info nested object
-        user_info = token.get("user_info", {})
-        if isinstance(user_info, dict):
-            for field in ["user_id", "id", "userId", "uid"]:
-                if field in user_info:
-                    return str(user_info[field])
+            if jwt_account:
+                _LOGGER.info(
+                    "Resolved account via JWT fallback (org_id=%s)", jwt_account
+                )
+                return jwt_sub, {"name": "Account"}, str(jwt_account)
 
-        return None
+        raise ConnectionError(
+            f"Could not resolve Gecko account for user {user_id}. "
+            "The Gecko API returned 404 for your user profile. This can "
+            "happen with newer accounts — please ensure you have at least "
+            "one vessel/spa linked in the Gecko mobile app, then try again."
+        )
 
     @property
     def logger(self) -> logging.Logger:
