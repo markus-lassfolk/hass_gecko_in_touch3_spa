@@ -102,6 +102,9 @@ class GeckoConnectionManager:
         self.hass = hass
         self._connections: dict[Any, GeckoMonitorConnection] = {}
         self._connection_lock = asyncio.Lock()
+        # Serialize connect() per monitor so we can release _connection_lock during
+        # blocking MQTT setup (avoids unload/reload deadlocks and spurious cancellation).
+        self._monitor_connect_locks: dict[str, asyncio.Lock] = {}
         self._shutdown_callbacks: list[Callable[[], None]] = []
 
         # Register shutdown handler
@@ -204,8 +207,23 @@ class GeckoConnectionManager:
                 return connection
 
             mid = self._canonical_monitor_id(monitor_id)
+            if mid not in self._monitor_connect_locks:
+                self._monitor_connect_locks[mid] = asyncio.Lock()
+            monitor_lock = self._monitor_connect_locks[mid]
 
-            try:
+        async with monitor_lock:
+            async with self._connection_lock:
+                existing_key = self._resolved_connection_key(monitor_id)
+                if existing_key is not None:
+                    connection = self._connections[existing_key]
+                    if (
+                        update_callback
+                        and update_callback not in connection.update_callbacks
+                    ):
+                        connection.update_callbacks.append(update_callback)
+                    return connection
+
+                mid = self._canonical_monitor_id(monitor_id)
                 _LOGGER.debug(
                     "Creating new MQTT connection for monitor %s (%s), "
                     "config_timeout=%.1fs",
@@ -239,22 +257,26 @@ class GeckoConnectionManager:
 
                 self._setup_client_handlers(gecko_client, connection, mid)
 
-                _LOGGER.debug(
-                    "Calling gecko_client.connect() for monitor %s (blocking)", mid
-                )
+            _LOGGER.debug(
+                "Calling gecko_client.connect() for monitor %s (blocking)", mid
+            )
+            try:
                 await self.hass.async_add_executor_job(gecko_client.connect)
-                connection.is_connected = True
-
-                self._connections[mid] = connection
-
+            except asyncio.CancelledError:
                 _LOGGER.info(
-                    "Connected to monitor %s (%s) in %.1fs",
+                    "Gecko MQTT connect for monitor %s (%s) was cancelled "
+                    "(integration reload, Home Assistant stopping, or concurrent setup)",
                     mid,
                     vessel_name,
-                    time.monotonic() - _t0,
                 )
-                return connection
-
+                try:
+                    await self.hass.async_add_executor_job(gecko_client.disconnect)
+                except Exception:
+                    _LOGGER.debug(
+                        "Disconnect after cancelled Gecko connect failed (ignored)",
+                        exc_info=True,
+                    )
+                raise
             except Exception as e:
                 elapsed = time.monotonic() - _t0
                 if isinstance(e, GeckoConfigurationError):
@@ -268,7 +290,26 @@ class GeckoConnectionManager:
                         elapsed,
                         e,
                     )
+                try:
+                    await self.hass.async_add_executor_job(gecko_client.disconnect)
+                except Exception:
+                    _LOGGER.debug(
+                        "Disconnect after failed Gecko connect failed (ignored)",
+                        exc_info=True,
+                    )
                 raise
+
+            async with self._connection_lock:
+                self._connections[mid] = connection
+                connection.is_connected = True
+
+            _LOGGER.info(
+                "Connected to monitor %s (%s) in %.1fs",
+                mid,
+                vessel_name,
+                time.monotonic() - _t0,
+            )
+            return connection
 
     def get_connection(self, monitor_id: str | int) -> GeckoMonitorConnection | None:
         """Get existing connection for a monitor."""
@@ -296,6 +337,17 @@ class GeckoConnectionManager:
 
     async def async_disconnect_monitor(self, monitor_id: str) -> None:
         """Disconnect and remove a monitor connection."""
+        mid = self._canonical_monitor_id(monitor_id)
+        async with self._connection_lock:
+            mlock = self._monitor_connect_locks.get(mid)
+        if mlock is not None:
+            async with mlock:
+                await self._async_disconnect_monitor_body(monitor_id)
+        else:
+            await self._async_disconnect_monitor_body(monitor_id)
+
+    async def _async_disconnect_monitor_body(self, monitor_id: str) -> None:
+        """Disconnect under ``_connection_lock`` (caller holds per-monitor lock when set)."""
         async with self._connection_lock:
             key = self._resolved_connection_key(monitor_id)
             if key is not None:
