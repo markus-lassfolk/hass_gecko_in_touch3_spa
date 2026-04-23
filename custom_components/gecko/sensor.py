@@ -679,6 +679,7 @@ class GeckoElectricityRateSensor(
             identifiers={(DOMAIN, str(coordinator.vessel_id))},
         )
         self._attr_available = False
+        self._latched_currency: str | None = None
         self._refresh_value()
 
     def _refresh_value(self) -> None:
@@ -686,13 +687,20 @@ class GeckoElectricityRateSensor(
         raw = energy.get("cost")
         if raw is None:
             self._attr_native_value = None
+            if self._latched_currency is None:
+                self._attr_native_unit_of_measurement = None
             self._attr_extra_state_attributes = {}
             return
 
         rate, currency = extract_electricity_rate(raw)
-        self._attr_native_value = rate
-        if currency:
+
+        if self._latched_currency is None and currency:
+            self._latched_currency = currency
             self._attr_native_unit_of_measurement = f"{currency}/kWh"
+        elif self._latched_currency:
+            self._attr_native_unit_of_measurement = f"{self._latched_currency}/kWh"
+
+        self._attr_native_value = rate
         self._attr_extra_state_attributes = (
             {"raw_response": raw} if isinstance(raw, dict) else {}
         )
