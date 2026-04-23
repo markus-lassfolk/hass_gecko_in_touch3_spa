@@ -127,6 +127,20 @@ class GeckoPKCEOAuth2Implementation(config_entry_oauth2_flow.LocalOAuth2Implemen
         finally:
             _active_pkce_verifier.reset(token)
 
+    async def async_refresh_token(self, token: dict) -> dict:
+        """Refresh tokens, preserving the refresh_token if Auth0 omits it.
+
+        Auth0 does not return a new refresh_token when the existing one is
+        still valid — HA's OAuth2Session replaces the stored token wholesale,
+        silently dropping the key.  On the next cycle this causes a KeyError
+        that previously surfaced as an infinite ConfigEntryNotReady retry.
+        """
+        existing_refresh_token = token.get("refresh_token")
+        new_token = await super().async_refresh_token(token)
+        if "refresh_token" not in new_token and existing_refresh_token:
+            new_token["refresh_token"] = existing_refresh_token
+        return new_token
+
     async def async_resolve_external_data(self, external_data: Any) -> dict:
         """Exchange the authorization code for tokens (includes PKCE verifier)."""
         state = external_data.get("state") or {}

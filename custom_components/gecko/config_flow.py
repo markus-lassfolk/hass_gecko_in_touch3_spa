@@ -8,6 +8,8 @@ routines, and other premium REST endpoints.
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import time
 from typing import Any
@@ -49,8 +51,28 @@ _LOGGER = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Helpers shared by the options-flow energy link step
+# Helpers
 # ---------------------------------------------------------------------------
+
+
+def _decode_jwt_payload(token: str) -> dict | None:
+    """Decode the payload of a JWT without signature verification.
+
+    Used only to extract claims (org_id, sub, etc.) as a fallback when the
+    /v2/user endpoint returns 404.
+    """
+    try:
+        parts = token.split(".")
+        if len(parts) < 2:
+            return None
+        payload_b64 = parts[1]
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += "=" * padding
+        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+        return json.loads(payload_bytes)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _extract_code_from_callback(raw: str) -> str | None:
@@ -186,21 +208,64 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
     async def _resolve_user_and_account(
         self, data: dict, api_client
     ) -> tuple[str, dict, str]:
-        """Resolve user ID and account information."""
+        """Resolve user ID and account information.
+
+        Primary path: Auth0 userinfo -> /v2/user/{userId}.
+        Fallback: decode the JWT access token for org_id / account claims
+        when the user-profile endpoint returns 404 (common for newer or
+        social-login accounts that haven't been fully provisioned yet).
+        """
+        user_id: str | None = None
         try:
             user_id = await api_client.async_get_user_id()
-            user_data = await api_client.async_get_user_info(user_id)
-
-            account_data = user_data.get("account", {})
-            account_id = str(account_data.get("accountId", ""))
-
-            if not account_id:
-                raise ValueError("No account ID found in user data")
-
-            return user_id, account_data, account_id
-
         except Exception as err:
-            raise ConnectionError(f"Failed to resolve user and account: {err}") from err
+            _LOGGER.warning("Could not fetch Auth0 userinfo: %s", err)
+
+        if user_id:
+            try:
+                user_data = await api_client.async_get_user_info(user_id)
+                account_data = user_data.get("account", {})
+                account_id = str(account_data.get("accountId", ""))
+                if account_id:
+                    return user_id, account_data, account_id
+            except ClientResponseError as err:
+                if err.status == 404:
+                    _LOGGER.warning(
+                        "Gecko /v2/user endpoint returned 404 for %s — "
+                        "trying JWT fallback",
+                        user_id,
+                    )
+                else:
+                    raise ConnectionError(
+                        f"Failed to resolve user and account: {err}"
+                    ) from err
+            except Exception as err:
+                _LOGGER.warning("User info API call failed: %s", err)
+
+        access_token = data.get("token", {}).get("access_token", "")
+        jwt_claims = _decode_jwt_payload(access_token)
+
+        if jwt_claims:
+            org_id = jwt_claims.get("org_id", "")
+            jwt_account = (
+                jwt_claims.get("https://geckoal.com/account_id", "")
+                or jwt_claims.get("account_id", "")
+                or org_id
+            )
+            jwt_sub = jwt_claims.get("sub", "") or (user_id or "")
+
+            if jwt_account:
+                _LOGGER.info(
+                    "Resolved account via JWT fallback (org_id=%s)", jwt_account
+                )
+                return jwt_sub, {"name": "Account"}, str(jwt_account)
+
+        raise ConnectionError(
+            f"Could not resolve Gecko account for user {user_id}. "
+            "The Gecko API returned 404 for your user profile. This can "
+            "happen with newer accounts — please ensure you have at least "
+            "one vessel/spa linked in the Gecko mobile app, then try again."
+        )
 
     @property
     def logger(self) -> logging.Logger:
