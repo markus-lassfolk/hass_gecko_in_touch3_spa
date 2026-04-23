@@ -423,6 +423,26 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
 
     # -- Energy link (app-client paste flow) --------------------------------
 
+    def _build_pkce_authorize_url(self) -> None:
+        """Generate a fresh PKCE verifier and store the matching authorize URL."""
+        self._code_verifier = GeckoPKCEOAuth2Implementation.generate_code_verifier()
+        challenge = GeckoPKCEOAuth2Implementation.compute_code_challenge(
+            self._code_verifier
+        )
+        self._authorize_url = str(
+            URL(OAUTH2_AUTHORIZE).with_query(
+                {
+                    "response_type": "code",
+                    "client_id": OAUTH2_APP_CLIENT_ID,
+                    "redirect_uri": OAUTH2_APP_REDIRECT_URI,
+                    "code_challenge": challenge,
+                    "code_challenge_method": "S256",
+                    "scope": "openid profile email offline_access",
+                    "audience": "https://api.geckowatermonitor.com",
+                }
+            )
+        )
+
     async def async_step_link_energy(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -430,23 +450,7 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
 
         if not hasattr(self, "_authorize_url") or self._authorize_url is None:
-            self._code_verifier = GeckoPKCEOAuth2Implementation.generate_code_verifier()
-            challenge = GeckoPKCEOAuth2Implementation.compute_code_challenge(
-                self._code_verifier
-            )
-            self._authorize_url = str(
-                URL(OAUTH2_AUTHORIZE).with_query(
-                    {
-                        "response_type": "code",
-                        "client_id": OAUTH2_APP_CLIENT_ID,
-                        "redirect_uri": OAUTH2_APP_REDIRECT_URI,
-                        "code_challenge": challenge,
-                        "code_challenge_method": "S256",
-                        "scope": "openid profile email offline_access",
-                        "audience": "https://api.geckowatermonitor.com",
-                    }
-                )
-            )
+            self._build_pkce_authorize_url()
 
         if user_input is not None:
             code = _extract_code_from_callback(user_input.get("callback_url", ""))
@@ -456,9 +460,9 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                 token = await self._async_exchange_code(code)
                 if token is None:
                     errors["base"] = "token_exchange_failed"
-                    # Force fresh PKCE URL/verifier on next render; the old code is invalid.
-                    self._authorize_url = None
-                    self._code_verifier = None
+                    # The used code is now invalid; generate a fresh PKCE pair
+                    # immediately so the error form shows a usable authorize URL.
+                    self._build_pkce_authorize_url()
                 else:
                     expires_in = int(token.get("expires_in", 3600))
                     token["expires_in"] = expires_in
