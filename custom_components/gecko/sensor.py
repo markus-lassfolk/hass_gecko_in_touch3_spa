@@ -419,6 +419,8 @@ def _safe_float(data: Any, *keys: str) -> float | None:
         current = current.get(k)
     if current is None:
         return None
+    if isinstance(current, bool):
+        return None
     try:
         return float(current)
     except (TypeError, ValueError):
