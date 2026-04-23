@@ -16,7 +16,8 @@
       "authorize_url_timeout": "Timeout generating an authorize URL",
       "no_url_available": "No URL available",
       "user_rejected_authorize": "Login was rejected",
-      "api_error": "Failed to connect to the Gecko API after authentication. Please try again."
+      "api_error": "Failed to connect to the Gecko API after authentication. Please try again.",
+      "account_resolution_failed": "{message}"
     },
     "create_entry": {
       "default": "Successfully authenticated"

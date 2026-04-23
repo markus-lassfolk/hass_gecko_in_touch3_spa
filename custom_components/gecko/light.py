@@ -194,8 +194,6 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
                 else:
                     i = 255
                 set_color_method(r, g, b, i)
-                self._attr_is_on = True
-                self.async_write_ha_state()
             elif brightness is not None and callable(set_color_method):
                 existing_rgbi = getattr(zone, "rgbi", None)
                 if existing_rgbi is not None:
@@ -204,14 +202,14 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
                     )
                 else:
                     set_color_method(255, 255, 255, brightness)
-                self._attr_is_on = True
-                self.async_write_ha_state()
             elif callable(activate_method):
                 activate_method()
-                self._attr_is_on = True
-                self.async_write_ha_state()
             else:
                 _LOGGER.warning("Zone %s has no activate or set_color method", zone.id)
+                return
+
+            self._attr_is_on = True
+            self.async_write_ha_state()
         except Exception as e:
             _LOGGER.error("Error turning on light %s: %s", self._attr_name, e)
 

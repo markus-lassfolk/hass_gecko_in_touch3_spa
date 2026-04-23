@@ -70,7 +70,10 @@ def _decode_jwt_payload(token: str) -> dict | None:
         if padding != 4:
             payload_b64 += "=" * padding
         payload_bytes = base64.urlsafe_b64decode(payload_b64)
-        return json.loads(payload_bytes)
+        parsed = json.loads(payload_bytes)
+        if isinstance(parsed, dict):
+            return parsed
+        return None
     except Exception:  # noqa: BLE001
         return None
 
@@ -201,6 +204,12 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
                     "account_info": account_data,
                 },
             )
+        except ConnectionError as err:
+            self.logger.error("Gecko account resolution failed: %s", err)
+            return self.async_abort(
+                reason="account_resolution_failed",
+                description_placeholders={"message": str(err)},
+            )
         except Exception as err:
             self.logger.error("Failed to get vessels from Gecko API: %s", err)
             return self.async_abort(reason="api_error")
@@ -245,16 +254,16 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
         access_token = data.get("token", {}).get("access_token", "")
         jwt_claims = _decode_jwt_payload(access_token)
 
-        if jwt_claims:
+        if isinstance(jwt_claims, dict):
             org_id = jwt_claims.get("org_id", "")
             jwt_account = (
                 jwt_claims.get("https://geckoal.com/account_id", "")
                 or jwt_claims.get("account_id", "")
                 or org_id
             )
-            jwt_sub = jwt_claims.get("sub", "") or (user_id or "")
+            jwt_sub = (jwt_claims.get("sub", "") or (user_id or "")).strip()
 
-            if jwt_account:
+            if jwt_account and jwt_sub:
                 _LOGGER.info(
                     "Resolved account via JWT fallback (org_id=%s)", jwt_account
                 )

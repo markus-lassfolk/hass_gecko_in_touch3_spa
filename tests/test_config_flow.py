@@ -7,12 +7,16 @@ method-resolution bugs (like calling ``async_update_reload_and_abort`` on an
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+import base64
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from aiohttp import ClientResponseError
 from custom_components.gecko.config_flow import (
     ConfigFlow,
     GeckoOptionsFlow,
+    _decode_jwt_payload,
     _extract_code_from_callback,
 )
 from custom_components.gecko.const import (
@@ -460,3 +464,83 @@ _NATIVE_CALLBACK = (
 def test_extract_code_from_callback(raw: str, expected: str | None) -> None:
     """_extract_code_from_callback must handle various paste formats."""
     assert _extract_code_from_callback(raw) == expected
+
+
+# ---------------------------------------------------------------------------
+# JWT fallback — account resolution
+# ---------------------------------------------------------------------------
+
+
+def _oauth_data_with_jwt_payload(claims: dict) -> dict:
+    """Build minimal OAuth ``data`` with a synthetic JWT access token."""
+    body = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
+    token = f"hdr.{body}.sig"
+    return {"token": {"access_token": token}}
+
+
+def test_decode_jwt_payload_rejects_non_dict_json() -> None:
+    """JSON payloads that are not objects must not be treated as claims."""
+    body = base64.urlsafe_b64encode(json.dumps(["x"]).encode()).decode().rstrip("=")
+    assert _decode_jwt_payload(f"h.{body}.s") is None
+
+
+async def test_resolve_user_jwt_fallback_after_user_profile_404(
+    hass: HomeAssistant,
+) -> None:
+    """404 on /v2/user must fall back to JWT claims when sub and account exist."""
+    flow = ConfigFlow()
+    flow.hass = hass
+    api = AsyncMock()
+    api.async_get_user_id = AsyncMock(return_value="auth0|abc")
+    api.async_get_user_info = AsyncMock(
+        side_effect=ClientResponseError(MagicMock(), (), status=404)
+    )
+    data = _oauth_data_with_jwt_payload(
+        {"sub": "auth0|abc", "org_id": "org-from-jwt"}
+    )
+
+    user_id, account_data, account_id = await flow._resolve_user_and_account(
+        data, api
+    )
+
+    assert user_id == "auth0|abc"
+    assert account_data == {"name": "Account"}
+    assert account_id == "org-from-jwt"
+
+
+async def test_resolve_user_jwt_fallback_requires_sub_when_no_user_id(
+    hass: HomeAssistant,
+) -> None:
+    """JWT fallback must not return without a usable subject when userinfo failed."""
+    flow = ConfigFlow()
+    flow.hass = hass
+    api = AsyncMock()
+    api.async_get_user_id = AsyncMock(return_value=None)
+    data = _oauth_data_with_jwt_payload({"org_id": "only-org"})
+
+    with pytest.raises(ConnectionError):
+        await flow._resolve_user_and_account(data, api)
+
+
+async def test_oauth_create_entry_aborts_on_account_resolution_failure(
+    hass: HomeAssistant,
+) -> None:
+    """ConnectionError from account resolution must surface a dedicated abort reason."""
+    flow = ConfigFlow()
+    flow.hass = hass
+    data = {"token": {"access_token": "x"}}
+    with (
+        patch(
+            "custom_components.gecko.api.ConfigFlowGeckoApi",
+            return_value=MagicMock(),
+        ),
+        patch.object(
+            flow,
+            "_resolve_user_and_account",
+            AsyncMock(side_effect=ConnectionError("No account.")),
+        ),
+    ):
+        result = await flow.async_oauth_create_entry(data)
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "account_resolution_failed"

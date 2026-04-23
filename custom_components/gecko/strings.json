@@ -16,7 +16,8 @@
       "authorize_url_timeout": "[%key:common::config_flow::abort::oauth2_authorize_url_timeout%]",
       "no_url_available": "[%key:common::config_flow::abort::oauth2_no_url_available%]",
       "user_rejected_authorize": "[%key:common::config_flow::abort::oauth2_user_rejected_authorize%]",
-      "api_error": "Failed to connect to the Gecko API after authentication. Please try again."
+      "api_error": "Failed to connect to the Gecko API after authentication. Please try again.",
+      "account_resolution_failed": "{message}"
     },
     "create_entry": {
       "default": "[%key:common::config_flow::create_entry::authenticated%]"
