@@ -294,8 +294,9 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
                 )
                 return jwt_sub, {"name": "Account"}, str(jwt_account)
 
+        uid_display = user_id if user_id else "(unknown)"
         raise AccountResolutionError(
-            f"Could not resolve Gecko account for user {user_id}. "
+            f"Could not resolve Gecko account for user {uid_display}. "
             "This can happen if your user profile is not fully provisioned, "
             "if JWT claims are missing, if the Gecko user API returned an error, "
             "or if the account lookup failed. "

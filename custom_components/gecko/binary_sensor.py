@@ -440,6 +440,8 @@ class GeckoSpaInUseBinarySensor(
         self._attr_is_on = bool(
             self._active_light_zone_ids or self._manual_flow_zone_ids
         )
+        # State is derived from coordinator zone snapshots, not MQTT connectivity alone.
+        self._attr_available = True
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -527,6 +529,7 @@ class GeckoEcoModeBinarySensor(GeckoTemperatureZoneBinarySensorBase):
         self._sync_zone_from_coordinator()
         mode = getattr(self._zone, "mode", None)
         self._attr_is_on = bool(mode and getattr(mode, "eco", False))
+        self._attr_available = True
 
 
 class GeckoTemperatureHeatingBinarySensor(GeckoTemperatureZoneBinarySensorBase):
@@ -550,6 +553,7 @@ class GeckoTemperatureHeatingBinarySensor(GeckoTemperatureZoneBinarySensorBase):
         self._sync_zone_from_coordinator()
         status = getattr(self._zone, "status", None)
         self._attr_is_on = bool(status and getattr(status, "is_heating", False))
+        self._attr_available = True
 
 
 class GeckoVesselHeatingBinarySensor(
@@ -593,6 +597,7 @@ class GeckoVesselHeatingBinarySensor(
             and getattr(zone.status, "is_heating", False)
         ]
         self._attr_is_on = bool(self._heating_zone_ids)
+        self._attr_available = True
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -634,6 +639,7 @@ class GeckoCleaningModeBinarySensor(
         self._attr_available = False
         self._mode_name: str | None = None
         self._operation_mode_raw: str | None = None
+        self._update_state()
 
     def _is_cleaning_from_status(self, status: Any) -> bool:
         for attr in ("is_cleaning", "cleaning", "cleaning_mode", "is_cleaning_mode"):
@@ -662,6 +668,7 @@ class GeckoCleaningModeBinarySensor(
         try:
             status = self.coordinator.get_cached_operation_mode_status()
             if not status:
+                self._attr_available = True
                 return
             mode_name = getattr(status, "mode_name", None)
             self._mode_name = str(mode_name) if mode_name is not None else None
@@ -675,10 +682,12 @@ class GeckoCleaningModeBinarySensor(
                     else str(operation_mode)
                 )
             self._attr_is_on = self._is_cleaning_from_status(status)
+            self._attr_available = True
         except Exception as ex:
             _LOGGER.debug(
                 "Could not update cleaning mode for %s: %s", self._attr_name, ex
             )
+            self._attr_available = True
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
