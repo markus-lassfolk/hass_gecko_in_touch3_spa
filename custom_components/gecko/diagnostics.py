@@ -271,6 +271,70 @@ async def async_get_config_entry_diagnostics(
             "energy_data_per_vessel": energy_summary,
         }
 
+    # Live premium API probe — call all premium endpoints right now so the
+    # diagnostics JSON always contains the freshest possible responses.
+    if hasattr(config_entry, "runtime_data") and config_entry.runtime_data:
+        rd = config_entry.runtime_data
+        premium_api = getattr(rd, "app_api_client", None)
+        community_api = getattr(rd, "api_client", None)
+        account_id = str(config_entry.data.get("account_id", "")).strip()
+        coordinators = getattr(rd, "coordinators", []) or []
+        live_probes: list[dict[str, Any]] = []
+
+        for coord in coordinators:
+            vid = str(getattr(coord, "vessel_id", ""))
+            probe: dict[str, Any] = {
+                "vessel_id": vid,
+                "monitor_id": getattr(coord, "monitor_id", None),
+                "vessel_name": getattr(coord, "vessel_name", None),
+            }
+
+            # Premium (app-token) endpoints
+            if premium_api and account_id:
+                for label, method in (
+                    ("energy_consumption", "async_get_energy_consumption"),
+                    ("energy_score", "async_get_energy_score"),
+                    ("energy_cost", "async_get_energy_cost"),
+                ):
+                    fn = getattr(premium_api, method, None)
+                    if not callable(fn):
+                        probe[label] = {"error": "method_not_found"}
+                        continue
+                    try:
+                        probe[label] = await fn(account_id, vid)
+                    except Exception as err:
+                        probe[label] = {
+                            "error": type(err).__name__,
+                            "status": getattr(err, "status", None),
+                            "message": str(err)[:300],
+                        }
+            else:
+                probe["premium_api_available"] = False
+
+            # Community-token endpoints
+            if community_api and account_id:
+                for label, method, args in (
+                    ("vessel_detail_v6", "async_get_vessel_detail", (account_id, vid)),
+                    ("vessel_actions_v2", "async_get_vessel_actions_v2", (account_id, vid)),
+                ):
+                    fn = getattr(community_api, method, None)
+                    if not callable(fn):
+                        probe[label] = {"error": "method_not_found"}
+                        continue
+                    try:
+                        probe[label] = await fn(*args)
+                    except Exception as err:
+                        probe[label] = {
+                            "error": type(err).__name__,
+                            "status": getattr(err, "status", None),
+                            "message": str(err)[:300],
+                        }
+
+            live_probes.append(probe)
+
+        if live_probes:
+            diagnostics_data["live_api_probe"] = live_probes
+
     # Full MQTT shadow state + flow zone runtime for debugging pump/thermostat issues.
     shadow_dumps: list[dict[str, Any]] = []
     for monitor_id, connection in (connection_manager._connections or {}).items():
