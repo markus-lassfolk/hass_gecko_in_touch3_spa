@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from gecko_iot_client.models.flow_zone import FlowZone, FlowZoneCapabilities
+from gecko_iot_client.models.flow_zone import FlowZone
 from gecko_iot_client.models.zone_types import FlowZoneType, ZoneType
 from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.config_entries import ConfigEntry
@@ -17,6 +17,13 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import GeckoVesselCoordinator
 from .entity import GeckoEntityAvailabilityMixin
+from .telemetry import (
+    derive_flow_percentage,
+    derive_flow_speed_mode,
+    get_flow_speed_mode_for_percentage,
+    get_flow_speed_value_for_mode,
+    get_supported_flow_speed_modes,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -94,11 +101,9 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
             FanEntityFeature.TURN_OFF | FanEntityFeature.TURN_ON
         )
 
-        if FlowZoneCapabilities.SUPPORTS_SPEED_PRESETS in self._zone.capabilities:
+        if get_supported_flow_speed_modes(self._zone):
             self._attr_supported_features |= FanEntityFeature.SET_SPEED
-
-            self._speed_list = [preset.name for preset in self._zone.presets]
-
+            self._speed_list = list(get_supported_flow_speed_modes(self._zone))
             self._attr_speed_list = self._speed_list
 
         # Set icon based on zone type
@@ -125,23 +130,22 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
         # per coordinator update.
         await super().async_added_to_hass()
 
+    @property
+    def speed_count(self) -> int:
+        """Return the number of supported manual speeds (used for UI slider rendering)."""
+        return max(1, len(get_supported_flow_speed_modes(self._zone)))
+
     def _update_from_zone(self) -> None:
         """Update state attributes from zone data."""
-        self._attr_is_on = self._zone.active
-        self._attr_percentage = (
-            int(self._zone.speed) if self._zone.speed is not None else 0
-        )
+        if self._attr_supported_features & FanEntityFeature.SET_SPEED:
+            self._speed_list = list(get_supported_flow_speed_modes(self._zone))
+            self._attr_speed_list = self._speed_list
 
-        if isinstance(self._zone.speed, int | float):
-            if self._zone.speed < 34:
-                self._attr_speed = "low"
-            elif self._zone.speed < 67:
-                self._attr_speed = "medium"
-            elif self._zone.speed <= 100:
-                self._attr_speed = "high"
+        self._attr_is_on = self._zone.active
+        self._attr_percentage = derive_flow_percentage(self._zone)
+        self._attr_speed = derive_flow_speed_mode(self._zone)
 
         if not self._zone.active:
-            self._attr_speed = "off"
             self._attr_is_on = False
 
     @callback
@@ -168,15 +172,15 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
     ) -> None:
         """Turn the fan on. Optionally set speed by percentage."""
         _LOGGER.debug("Turning on pump %s", self._attr_name)
-        # Map percentage to speed
-        speed = "low"
-        if percentage is not None:
-            if percentage < 34:
-                speed = "low"
-            elif percentage < 67:
-                speed = "medium"
-            else:
-                speed = "high"
+        speed = get_flow_speed_mode_for_percentage(self._zone, percentage)
+        await self.async_set_speed(speed)
+
+    async def async_set_percentage(self, percentage: int) -> None:
+        """Set the fan speed by percentage."""
+        if percentage <= 0:
+            await self.async_turn_off()
+            return
+        speed = get_flow_speed_mode_for_percentage(self._zone, percentage)
         await self.async_set_speed(speed)
 
     async def async_turn_off(self, **kwargs) -> None:
@@ -189,14 +193,10 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
         return self._attr_is_on
 
     async def async_set_speed(self, speed: str) -> None:
-        # Map string speed to integer value expected by Gecko API
-        speed_map = {
-            "off": 0,
-            "low": 1,
-            "medium": 2,
-            "high": 3,
-        }
-        speed_value = speed_map.get(speed, 0)
+        speed_value = get_flow_speed_value_for_mode(self._zone, speed)
+        if speed_value is None:
+            _LOGGER.warning("Unsupported speed %s for pump %s", speed, self._attr_name)
+            return
         try:
             gecko_client = await self._coordinator.get_gecko_client()
             if not gecko_client:
