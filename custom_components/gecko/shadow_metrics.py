@@ -825,6 +825,9 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
     ]:
         return parts[3].lower() in _CLOUD_REST_READINGS_ENABLED_BY_DEFAULT
 
+    if lower.startswith("cloud.rest."):
+        return False
+
     segs = _path_segments(path)
     if any(_segment_is_ph(s) for s in segs):
         return True
@@ -856,9 +859,6 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
     )
     if re.search(_chem_word_re, lower):
         return True
-
-    if lower.startswith("cloud.rest."):
-        return False
 
     return False
 

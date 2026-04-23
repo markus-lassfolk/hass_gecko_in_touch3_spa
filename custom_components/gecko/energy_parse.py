@@ -64,7 +64,6 @@ _ENERGY_CONSUMPTION_FLOAT_PATHS: tuple[tuple[str, ...], ...] = (
     ("data", "values", "totalKwh"),
     ("energy", "totalKwh"),
     ("energy", "totalKWh"),
-    ("consumption", "totalKwh"),
     ("aggregates", "totalKwh"),
     ("reading", "totalKwh"),
     ("readings", "totalKwh"),
