@@ -464,6 +464,9 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                     self.hass.config_entries.async_update_entry(
                         self.config_entry, data=data
                     )
+                    await self.hass.config_entries.async_reload(
+                        self.config_entry.entry_id
+                    )
                     updated = self.hass.config_entries.async_get_entry(
                         self.config_entry.entry_id
                     )
@@ -471,9 +474,6 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                         reenable_integration_disabled_energy_cost_score_entities(
                             self.hass, updated
                         )
-                    await self.hass.config_entries.async_reload(
-                        self.config_entry.entry_id
-                    )
                     return self.async_abort(reason="energy_linked")
 
         return self.async_show_form(

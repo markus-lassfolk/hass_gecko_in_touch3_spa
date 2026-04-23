@@ -455,7 +455,7 @@ class GeckoEnergyConsumptionSensor(
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_suggested_display_precision = 1
     _attr_icon = "mdi:lightning-bolt"
-    _attr_entity_registry_enabled_default = False
+    _attr_entity_registry_enabled_default = True
 
     def __init__(
         self,
