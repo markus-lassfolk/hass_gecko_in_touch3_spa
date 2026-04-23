@@ -936,6 +936,9 @@ def string_extension_enabled_by_default(path: str) -> bool:
     if lower.startswith("cloud.rest."):
         if _cloud_rest_reading_status_enabled_by_default(path):
             return True
+        parts = path.split(".")
+        if len(parts) == 5 and [p.lower() for p in parts[:3]] == ["cloud", "rest", "readings"]:
+            return False
         return bool(
             re.search(
                 r"\b(water|status|message|text|mode|tile|summary|actions)\b", spaced
