@@ -115,4 +115,4 @@ async def test_async_set_temperature_publishes_shadow_desired_like_number_entiti
     publish.assert_called_once_with(
         {"zones": {"temperatureControl": {"1": {"setPoint": 31.5}}}}
     )
-    assert zone.set_point == 31.5
+    assert ent._attr_target_temperature == 31.5
