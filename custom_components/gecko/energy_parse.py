@@ -221,8 +221,6 @@ def coerce_energy_consumption_kwh(raw: Any) -> float | None:
     if deep_wh is not None and deep_wh > 0:
         if got_wh is None or got_wh == 0.0:
             got_wh = deep_wh
-        else:
-            got_wh = max(got_wh, deep_wh)
     if got_wh is not None:
         return got_wh
     inner = raw.get("data")

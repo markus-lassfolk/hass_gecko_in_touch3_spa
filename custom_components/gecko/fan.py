@@ -201,7 +201,6 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Expose pump demand initiators when the spa reports them."""
-        self._sync_zone_from_coordinator()
         initiators = self._zone.initiators
         if initiators:
             return {"initiators": [str(i) for i in initiators]}
