@@ -201,7 +201,7 @@ def get_flow_speed_mode_for_percentage(zone: Any, percentage: int | None) -> str
         return supported_modes[0]
 
     clamped_percentage = max(1, min(100, percentage))
-    step_index = math.ceil((clamped_percentage / 100) * len(supported_modes)) - 1
+    step_index = round((clamped_percentage / 100) * len(supported_modes)) - 1
     step_index = max(0, min(len(supported_modes) - 1, step_index))
     return supported_modes[step_index]
 
