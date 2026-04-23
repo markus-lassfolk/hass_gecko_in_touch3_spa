@@ -1,9 +1,20 @@
 {
   "config": {
     "step": {
-      "pick_implementation": {
-        "title": "Pick authentication method"
+      "authorize": {
+        "title": "Authenticate with Gecko",
+        "description": "1. Open the link below in your browser:\n\n{authorize_url}\n\n2. Log in with your Gecko account.\n3. After login the browser will try to open an app link that starts with `com.geckoportal.gecko://…` — it will fail to load (that is expected).\n4. **Copy the full URL** from your browser's address bar and paste it below.",
+        "data": {
+          "callback_url": "Callback URL"
+        },
+        "data_description": {
+          "callback_url": "Paste the full URL that starts with com.geckoportal.gecko://… here."
+        }
       }
+    },
+    "error": {
+      "invalid_callback_url": "Could not find an authorization code in the URL. Make sure you copied the full callback URL.",
+      "token_exchange_failed": "Token exchange failed. The authorization code may have expired — please try again."
     },
     "abort": {
       "already_configured": "Account already configured",
@@ -15,7 +26,8 @@
       "missing_configuration": "The application credentials are not configured",
       "authorize_url_timeout": "Timeout generating an authorize URL",
       "no_url_available": "No URL available",
-      "user_rejected_authorize": "Login was rejected"
+      "user_rejected_authorize": "Login was rejected",
+      "api_error": "Failed to connect to the Gecko API after authentication. Please try again."
     },
     "create_entry": {
       "default": "Successfully authenticated"

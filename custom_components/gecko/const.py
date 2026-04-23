@@ -32,7 +32,18 @@ DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN = False
 CONF_ALERTS_POLL_INTERVAL = "alerts_poll_interval"
 DEFAULT_ALERTS_POLL_INTERVAL = 0
 
+# Legacy community client — basic access only (energy/premium endpoints return 403).
 OAUTH2_CLIENT_ID = "L81oh6hgUsvMg40TgTGoz4lxNy8eViM0"
+
+# Mobile-app client — unlocks energy, charts, activities, routines, and other premium
+# endpoints.  Auth0 only allows the Capacitor native redirect URI for this client,
+# so the config flow uses a manual paste-callback step instead of HA's OAuth popup.
+OAUTH2_APP_CLIENT_ID = "IlbhNGMeYfb8ovs0gK43CjPybltA3ogH"
+OAUTH2_APP_REDIRECT_URI = (
+    "com.geckoportal.gecko://gecko-prod.us.auth0.com"
+    "/capacitor/com.geckoportal.gecko/callback"
+)
+
 OAUTH2_AUTHORIZE = "https://gecko-prod.us.auth0.com/authorize"
 OAUTH2_TOKEN = "https://gecko-prod.us.auth0.com/oauth/token"
 AUTH0_URL_BASE = "https://gecko-prod.us.auth0.com"

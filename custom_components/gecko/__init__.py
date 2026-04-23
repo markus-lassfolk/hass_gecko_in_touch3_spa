@@ -29,8 +29,8 @@ from .const import (
     DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
     DOMAIN,
+    OAUTH2_APP_CLIENT_ID,
     OAUTH2_AUTHORIZE,
-    OAUTH2_CLIENT_ID,
     OAUTH2_TOKEN,
 )
 from .coordinator import GeckoVesselCoordinator
@@ -183,7 +183,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
         GeckoPKCEOAuth2Implementation(
             hass,
             DOMAIN,
-            client_id=OAUTH2_CLIENT_ID,
+            client_id=OAUTH2_APP_CLIENT_ID,
             authorize_url=OAUTH2_AUTHORIZE,
             token_url=OAUTH2_TOKEN,
         ),

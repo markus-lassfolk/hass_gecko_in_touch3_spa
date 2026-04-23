@@ -9,7 +9,12 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
-from custom_components.gecko.config_flow import ConfigFlow, GeckoOptionsFlow
+import pytest
+from custom_components.gecko.config_flow import (
+    ConfigFlow,
+    GeckoOptionsFlow,
+    _extract_code_from_callback,
+)
 from custom_components.gecko.const import (
     CONF_ALERTS_POLL_INTERVAL,
     CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
@@ -319,3 +324,45 @@ def test_options_flow_no_custom_constructor() -> None:
         "GeckoOptionsFlow should not define its own __init__. "
         "HA 2025.1+ passes config_entry via property, not constructor."
     )
+
+
+# ---------------------------------------------------------------------------
+# _extract_code_from_callback — URL parsing
+# ---------------------------------------------------------------------------
+
+_NATIVE_CALLBACK = (
+    "com.geckoportal.gecko://gecko-prod.us.auth0.com"
+    "/capacitor/com.geckoportal.gecko/callback"
+)
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (f"{_NATIVE_CALLBACK}?code=abc123&state=xyz", "abc123"),
+        (f"{_NATIVE_CALLBACK}?code=abc123", "abc123"),
+        ("  " + f"{_NATIVE_CALLBACK}?code=abc123&state=xyz  ", "abc123"),
+        ("code=mycode123", "mycode123"),
+        ("?code=mycode123&state=s", "mycode123"),
+        ("https://example.com/cb?code=httpsCode&state=s", "httpsCode"),
+        ("", None),
+        ("   ", None),
+        ("no-code-here", None),
+        (f"{_NATIVE_CALLBACK}?state=xyz", None),
+    ],
+    ids=[
+        "full_native_url",
+        "native_no_state",
+        "whitespace_padded",
+        "bare_code_param",
+        "bare_query_string",
+        "https_url",
+        "empty",
+        "whitespace_only",
+        "no_code_param",
+        "native_url_missing_code",
+    ],
+)
+def test_extract_code_from_callback(raw: str, expected: str | None) -> None:
+    """_extract_code_from_callback must handle various paste formats."""
+    assert _extract_code_from_callback(raw) == expected

@@ -1,17 +1,27 @@
-"""Config flow for Gecko."""
+"""Config flow for Gecko.
+
+Uses the Gecko mobile-app OAuth client which requires a native Capacitor
+redirect URI.  Because Home Assistant's standard OAuth popup cannot follow a
+``com.geckoportal.gecko://`` redirect, the flow asks the user to open the
+authorize URL manually, complete login, and paste the resulting callback URL
+back into a text field.  This is a one-time step; subsequent token refreshes
+are automatic.
+"""
+
+from __future__ import annotations
 
 import logging
+import time
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import voluptuous as vol
+from aiohttp import ClientError, ClientResponseError
 from homeassistant import config_entries
 from homeassistant.core import callback
-from homeassistant.helpers import (
-    config_entry_oauth2_flow,
-)
-from homeassistant.helpers import (
-    config_validation as cv,
-)
+from homeassistant.helpers import config_entry_oauth2_flow
+from homeassistant.helpers import config_validation as cv
+from yarl import URL
 
 from .const import (
     CONF_ALERTS_POLL_INTERVAL,
@@ -21,8 +31,9 @@ from .const import (
     DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
     DOMAIN,
+    OAUTH2_APP_CLIENT_ID,
+    OAUTH2_APP_REDIRECT_URI,
     OAUTH2_AUTHORIZE,
-    OAUTH2_CLIENT_ID,
     OAUTH2_TOKEN,
 )
 from .oauth_implementation import GeckoPKCEOAuth2Implementation
@@ -30,21 +41,55 @@ from .oauth_implementation import GeckoPKCEOAuth2Implementation
 _LOGGER = logging.getLogger(__name__)
 
 
+def _extract_code_from_callback(raw: str) -> str | None:
+    """Extract the ``code`` query parameter from a pasted callback URL.
+
+    Handles the full native-scheme URL, bare ``code=…`` fragments, and
+    various copy-paste artifacts.
+    """
+    raw = raw.strip()
+    if not raw:
+        return None
+
+    if raw.startswith("code=") or raw.startswith("?code="):
+        raw = f"https://placeholder/{raw}" if raw.startswith("?") else f"https://placeholder/?{raw}"
+
+    try:
+        parsed = urlparse(raw)
+        qs = parse_qs(parsed.query)
+        codes = qs.get("code")
+        if codes:
+            return codes[0]
+    except Exception:  # noqa: BLE001
+        pass
+
+    return None
+
+
 class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMAIN):
-    """Config flow to handle Gecko OAuth2 authentication."""
+    """Config flow to handle Gecko OAuth2 authentication.
+
+    Bypasses the standard HA OAuth external-step popup because the mobile-app
+    client requires a native redirect URI.  Instead, the user pastes the
+    callback URL manually after completing login in their browser.
+    """
 
     DOMAIN = DOMAIN
     VERSION = 2
 
+    def __init__(self) -> None:
+        """Initialize the config flow."""
+        super().__init__()
+        self._code_verifier: str | None = None
+        self._authorize_url: str | None = None
+
     async def async_step_user(self, user_input=None):
         """Handle a flow initialized by the user."""
-        # Register the hardcoded OAuth implementation if not already registered
-        await self.async_register_implementation()
-        return await super().async_step_user(user_input)
+        await self._async_ensure_implementation()
+        return await self.async_step_authorize()
 
-    async def async_register_implementation(self):
-        """Register the OAuth implementation."""
-        # Check if already registered to avoid duplicates
+    async def _async_ensure_implementation(self) -> None:
+        """Register the OAuth implementation and set ``flow_impl``."""
         implementations = await config_entry_oauth2_flow.async_get_implementations(
             self.hass, DOMAIN
         )
@@ -55,11 +100,82 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
                 GeckoPKCEOAuth2Implementation(
                     self.hass,
                     DOMAIN,
-                    client_id=OAUTH2_CLIENT_ID,
+                    client_id=OAUTH2_APP_CLIENT_ID,
                     authorize_url=OAUTH2_AUTHORIZE,
                     token_url=OAUTH2_TOKEN,
                 ),
             )
+            implementations = await config_entry_oauth2_flow.async_get_implementations(
+                self.hass, DOMAIN
+            )
+        self.flow_impl = implementations[DOMAIN]
+
+    async def async_step_authorize(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Show the authorize URL and accept the pasted callback."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            code = _extract_code_from_callback(user_input.get("callback_url", ""))
+            if code is None:
+                errors["callback_url"] = "invalid_callback_url"
+            else:
+                token = await self._async_exchange_code(code)
+                if token is None:
+                    errors["base"] = "token_exchange_failed"
+                else:
+                    token["expires_in"] = int(token["expires_in"])
+                    token["expires_at"] = time.time() + token["expires_in"]
+                    return await self.async_oauth_create_entry(
+                        {"auth_implementation": DOMAIN, "token": token}
+                    )
+
+        if self._authorize_url is None:
+            self._code_verifier = GeckoPKCEOAuth2Implementation.generate_code_verifier()
+            challenge = GeckoPKCEOAuth2Implementation.compute_code_challenge(
+                self._code_verifier
+            )
+            self._authorize_url = str(
+                URL(OAUTH2_AUTHORIZE).with_query(
+                    {
+                        "response_type": "code",
+                        "client_id": OAUTH2_APP_CLIENT_ID,
+                        "redirect_uri": OAUTH2_APP_REDIRECT_URI,
+                        "code_challenge": challenge,
+                        "code_challenge_method": "S256",
+                        "scope": "openid profile email offline_access",
+                        "audience": "https://api.geckowatermonitor.com",
+                    }
+                )
+            )
+
+        return self.async_show_form(
+            step_id="authorize",
+            data_schema=vol.Schema(
+                {vol.Required("callback_url"): str}
+            ),
+            description_placeholders={"authorize_url": self._authorize_url},
+            errors=errors,
+        )
+
+    async def _async_exchange_code(self, code: str) -> dict | None:
+        """Exchange an authorization code for tokens using the stored PKCE verifier."""
+        if self._code_verifier is None or self.flow_impl is None:
+            return None
+        try:
+            return await self.flow_impl._token_request(  # noqa: SLF001
+                {
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": OAUTH2_APP_REDIRECT_URI,
+                    "code_verifier": self._code_verifier,
+                    "client_id": OAUTH2_APP_CLIENT_ID,
+                }
+            )
+        except (ClientResponseError, ClientError) as err:
+            _LOGGER.error("Token exchange failed: %s", err)
+            return None
 
     async def async_oauth_create_entry(self, data: dict):
         """Create an entry after OAuth authentication."""

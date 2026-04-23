@@ -1,9 +1,20 @@
 {
   "config": {
     "step": {
-      "pick_implementation": {
-        "title": "[%key:common::config_flow::title::oauth2_pick_implementation%]"
+      "authorize": {
+        "title": "Authenticate with Gecko",
+        "description": "1. Open the link below in your browser:\n\n{authorize_url}\n\n2. Log in with your Gecko account.\n3. After login the browser will try to open an app link that starts with `com.geckoportal.gecko://…` — it will fail to load (that is expected).\n4. **Copy the full URL** from your browser's address bar and paste it below.",
+        "data": {
+          "callback_url": "Callback URL"
+        },
+        "data_description": {
+          "callback_url": "Paste the full URL that starts with com.geckoportal.gecko://… here."
+        }
       }
+    },
+    "error": {
+      "invalid_callback_url": "Could not find an authorization code in the URL. Make sure you copied the full callback URL.",
+      "token_exchange_failed": "Token exchange failed. The authorization code may have expired — please try again."
     },
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_account%]",
@@ -15,7 +26,8 @@
       "missing_configuration": "[%key:common::config_flow::abort::oauth2_missing_configuration%]",
       "authorize_url_timeout": "[%key:common::config_flow::abort::oauth2_authorize_url_timeout%]",
       "no_url_available": "[%key:common::config_flow::abort::oauth2_no_url_available%]",
-      "user_rejected_authorize": "[%key:common::config_flow::abort::oauth2_user_rejected_authorize%]"
+      "user_rejected_authorize": "[%key:common::config_flow::abort::oauth2_user_rejected_authorize%]",
+      "api_error": "Failed to connect to the Gecko API after authentication. Please try again."
     },
     "create_entry": {
       "default": "[%key:common::config_flow::create_entry::authenticated%]"
