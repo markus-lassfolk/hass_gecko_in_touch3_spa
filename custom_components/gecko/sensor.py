@@ -553,7 +553,7 @@ class GeckoEnergyCostSensor(
     _attr_has_entity_name = True
     _attr_translation_key = "energy_cost"
     _attr_device_class = SensorDeviceClass.MONETARY
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
     _attr_icon = "mdi:currency-usd"
     _attr_entity_registry_enabled_default = True

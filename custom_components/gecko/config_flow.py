@@ -129,7 +129,7 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
     """Config flow to handle Gecko OAuth2 authentication."""
 
     DOMAIN = DOMAIN
-    VERSION = 2
+    VERSION = 3
 
     async def async_step_user(self, user_input=None):
         """Handle a flow initialized by the user."""
