@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import Any, Protocol
 
 from gecko_iot_client import GeckoApiClient
 from homeassistant.config_entries import ConfigEntry
@@ -16,6 +16,19 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import API_BASE_URL, AUTH0_URL_BASE
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class OAuth2SessionProtocol(Protocol):
+    """Protocol for OAuth2 session objects (OAuth2Session and AppTokenSession)."""
+
+    @property
+    def token(self) -> dict:
+        """Return the token dict."""
+        ...
+
+    async def async_ensure_token_valid(self) -> None:
+        """Ensure the token is valid, refreshing if needed."""
+        ...
 
 CLOCK_OUT_OF_SYNC_MAX_SEC = 20
 
@@ -128,7 +141,7 @@ class OAuthGeckoApi(GeckoSpaApiMixin, GeckoApiClient):
     def __init__(
         self,
         hass: HomeAssistant,
-        oauth_session: config_entry_oauth2_flow.OAuth2Session,
+        oauth_session: OAuth2SessionProtocol,
     ) -> None:
         """Initialize OAuthGeckoApi."""
         websession = async_get_clientsession(hass)

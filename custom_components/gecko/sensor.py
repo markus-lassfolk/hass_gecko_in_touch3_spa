@@ -582,7 +582,7 @@ class GeckoEnergyCostSensor(
             ("cost",),
             ("value",),
         )
-        if val is None and isinstance(raw, int | float):
+        if val is None and not isinstance(raw, bool) and isinstance(raw, int | float):
             val = float(raw)
 
         currency = None
@@ -651,7 +651,7 @@ class GeckoEnergyScoreSensor(
             ("value",),
             ("rating",),
         )
-        if val is None and isinstance(raw, int | float):
+        if val is None and not isinstance(raw, bool) and isinstance(raw, int | float):
             val = float(raw)
 
         unit: str | None = None
