@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from enum import Enum
 from typing import Any
 
@@ -136,12 +135,14 @@ def _get_mode_label_for_step_index(step_index: int, step_count: int) -> str:
 
 
 def zone_supports_speed_control(zone: Any) -> bool:
-    """Return True if the zone has actual speed control capability."""
+    """Return True when the hardware exposes a real speed ladder or binary low/high.
+
+    Do not treat ``set_speed`` alone as capability: many on/off pumps still expose
+    that API while only supporting a single effective speed level.
+    """
     if get_flow_speed_step_values(zone):
         return True
     if _uses_binary_near_max_speed_encoding(zone):
-        return True
-    if hasattr(zone, "set_speed") and callable(getattr(zone, "set_speed", None)):
         return True
     return False
 

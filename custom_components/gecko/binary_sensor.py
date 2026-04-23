@@ -24,7 +24,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .connection_manager import GECKO_CONNECTION_MANAGER_KEY
 from .const import CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL, DOMAIN
 from .coordinator import GeckoVesselCoordinator
-from .entity import GeckoEntityAvailabilityMixin
+from .entity import GeckoEntityAvailabilityMixin, gecko_zone_ids_equal
 from .shadow_metrics import (
     binary_extension_enabled_by_default,
     classify_gecko_shadow_metric,
@@ -485,7 +485,17 @@ class GeckoEcoModeBinarySensor(
         self._attr_available = False
         self._update_state()
 
+    def _sync_zone_from_coordinator(self) -> None:
+        """Re-bind ``self._zone`` to the live model after each coordinator refresh."""
+        zones = self.coordinator.get_zones_by_type(ZoneType.TEMPERATURE_CONTROL_ZONE)
+        my_id = getattr(self._zone, "id", None)
+        for z in zones:
+            if gecko_zone_ids_equal(getattr(z, "id", None), my_id):
+                self._zone = z
+                return
+
     def _update_state(self) -> None:
+        self._sync_zone_from_coordinator()
         mode = getattr(self._zone, "mode", None)
         self._attr_is_on = bool(mode and getattr(mode, "eco", False))
 
@@ -530,7 +540,17 @@ class GeckoTemperatureHeatingBinarySensor(
         self._attr_available = False
         self._update_state()
 
+    def _sync_zone_from_coordinator(self) -> None:
+        """Re-bind ``self._zone`` to the live model after each coordinator refresh."""
+        zones = self.coordinator.get_zones_by_type(ZoneType.TEMPERATURE_CONTROL_ZONE)
+        my_id = getattr(self._zone, "id", None)
+        for z in zones:
+            if gecko_zone_ids_equal(getattr(z, "id", None), my_id):
+                self._zone = z
+                return
+
     def _update_state(self) -> None:
+        self._sync_zone_from_coordinator()
         status = getattr(self._zone, "status", None)
         self._attr_is_on = bool(status and getattr(status, "is_heating", False))
 

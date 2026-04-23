@@ -495,13 +495,9 @@ async def test_resolve_user_jwt_fallback_after_user_profile_404(
     api.async_get_user_info = AsyncMock(
         side_effect=ClientResponseError(MagicMock(), (), status=404)
     )
-    data = _oauth_data_with_jwt_payload(
-        {"sub": "auth0|abc", "org_id": "org-from-jwt"}
-    )
+    data = _oauth_data_with_jwt_payload({"sub": "auth0|abc", "org_id": "org-from-jwt"})
 
-    user_id, account_data, account_id = await flow._resolve_user_and_account(
-        data, api
-    )
+    user_id, account_data, account_id = await flow._resolve_user_and_account(data, api)
 
     assert user_id == "auth0|abc"
     assert account_data == {"name": "Account"}

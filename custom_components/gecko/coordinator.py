@@ -501,6 +501,8 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         account_id = self._config_account_id()
         if not account_id:
+            account_id = await self._async_lazy_resolve_account_id()
+        if not account_id:
             return
 
         opts = self._entry_options()
