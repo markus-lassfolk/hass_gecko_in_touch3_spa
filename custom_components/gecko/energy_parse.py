@@ -178,6 +178,22 @@ def _best_positive_wh_kwh_deep(obj: Any, depth: int = 0) -> float | None:
     return best
 
 
+_ENERGY_NO_DATA_STATUSES = frozenset({
+    "insufficient_data",
+    "no_data",
+    "unavailable",
+    "pending",
+})
+
+
+def _energy_status_means_no_data(raw: dict[str, Any]) -> bool:
+    """True when the API explicitly declares the response has no usable readings."""
+    status = raw.get("status")
+    if isinstance(status, str) and status.strip().lower().replace(" ", "_") in _ENERGY_NO_DATA_STATUSES:
+        return True
+    return False
+
+
 def coerce_energy_consumption_kwh(raw: Any) -> float | None:
     """Parse ``/energy-consumption`` payloads into kWh (vendor shapes vary)."""
     if raw is None:
@@ -197,6 +213,8 @@ def coerce_energy_consumption_kwh(raw: Any) -> float | None:
         if got is not None:
             return got
     if not isinstance(raw, dict):
+        return None
+    if _energy_status_means_no_data(raw):
         return None
     got_wh = _kwh_from_wh_dict(raw)
     deep_wh = _best_positive_wh_kwh_deep(raw)
@@ -363,6 +381,8 @@ def coerce_energy_cost_amount(raw: Any) -> float | None:
         return coerce_energy_cost_amount(raw[0])
     if not isinstance(raw, dict):
         return None
+    if _energy_status_means_no_data(raw):
+        return None
     # Wrapper shape: ``{"energyCost": {...}}`` or ``{"energyCost": 12.34}``.
     if "energyCost" in raw:
         ec = raw.get("energyCost")
@@ -426,6 +446,8 @@ def coerce_energy_score_value(raw: Any) -> float | None:
         except ValueError:
             return None
     if not isinstance(raw, dict):
+        return None
+    if _energy_status_means_no_data(raw):
         return None
     score_obj = raw.get("score")
     if isinstance(score_obj, dict):

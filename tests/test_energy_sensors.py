@@ -187,6 +187,37 @@ def test_energy_cost_sensor_latches_currency_from_nested_energy_cost() -> None:
     assert sensor.native_unit_of_measurement == "SEK"
 
 
+def test_insufficient_data_status_yields_none_for_all_parsers() -> None:
+    """Gecko API returns ``status: insufficient_data`` with zeroed Wh — sensors must show unknown."""
+    raw_consumption = {
+        "energyConsumptionWh": 0,
+        "worstCaseConsumptionWh": 0,
+        "formattedEnergyCost": "",
+        "formattedWorstCaseEnergyCost": "",
+        "formattedSavings": "",
+        "period": {"from": "2026-03-01T00:00:00.000Z", "to": "2026-03-31T23:59:59.999Z"},
+        "generatedAt": "2026-04-23T15:32:13.242Z",
+        "status": "insufficient_data",
+        "isPremium": True,
+    }
+    assert _coerce_energy_consumption_kwh(raw_consumption) is None
+    assert _coerce_energy_cost_amount(raw_consumption) is None
+    assert _coerce_energy_score_value(raw_consumption) is None
+    assert not premium_energy_poll_has_usable_values(
+        {"consumption": raw_consumption, "cost": raw_consumption, "score": raw_consumption}
+    )
+
+
+def test_insufficient_data_does_not_suppress_positive_values() -> None:
+    """A payload with status okay and real data must still parse normally."""
+    raw = {
+        "energyConsumptionWh": 50000,
+        "status": "ok",
+        "isPremium": True,
+    }
+    assert _coerce_energy_consumption_kwh(raw) == 50.0
+
+
 def test_energy_score_dict_unit_is_preserved() -> None:
     coordinator = MagicMock()
     coordinator.get_energy_data = MagicMock(
