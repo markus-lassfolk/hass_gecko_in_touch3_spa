@@ -84,6 +84,11 @@ def test_coerce_gecko_app_energy_wh_and_wrapped_cost() -> None:
     """Live Gecko API uses Wh fields and nests monetary amount under ``energyCost``."""
     assert _coerce_energy_consumption_kwh({"energyConsumptionWh": 12500}) == 12.5
     assert _coerce_energy_consumption_kwh({"worstCaseConsumptionWh": 1000}) == 1.0
+    assert (
+        _coerce_energy_cost_amount({"energyCost": {"amount": 42.5, "currency": "SEK"}})
+        == 42.5
+    )
+    assert _coerce_energy_cost_amount({"energyCost": 9.99}) == 9.99
 
 
 def test_coerce_energy_prefers_total_wh_over_period_wh() -> None:
@@ -94,11 +99,23 @@ def test_coerce_energy_prefers_total_wh_over_period_wh() -> None:
         "period": "month",
     }
     assert _coerce_energy_consumption_kwh(raw) == 500.0
+
+
+def test_coerce_energy_cost_total_and_formatted_variants() -> None:
+    """Gecko often omits ``amount``; use ``total`` / formatted strings / deep scan."""
+    assert _coerce_energy_cost_amount(
+        {"energyCost": {"currency": "SEK", "total": 19.95}}
+    ) == 19.95
+    assert _coerce_energy_cost_amount(
+        {"energyCost": {"formattedEnergyCost": "12,50 kr"}}
+    ) == 12.5
+    assert _coerce_energy_cost_amount({"formattedEnergyCost": "3.25 SEK"}) == 3.25
     assert (
-        _coerce_energy_cost_amount({"energyCost": {"amount": 42.5, "currency": "SEK"}})
-        == 42.5
+        _coerce_energy_cost_amount(
+            {"energyCost": {"currency": "SEK", "lineItems": [{"netPrice": 7.5}]}}
+        )
+        == 7.5
     )
-    assert _coerce_energy_cost_amount({"energyCost": 9.99}) == 9.99
 
 
 def test_coerce_gecko_app_score_scalar_and_object() -> None:

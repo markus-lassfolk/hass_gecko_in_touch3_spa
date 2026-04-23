@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -180,9 +181,111 @@ _ENERGY_COST_PATHS: tuple[tuple[str, ...], ...] = (
     ("data", "cost"),
     ("energyCost", "amount"),
     ("energyCost", "totalCost"),
+    ("energyCost", "total"),
+    ("energyCost", "price"),
+    ("energyCost", "estimatedCost"),
+    ("energyCost", "netAmount"),
+    ("energyCost", "grossAmount"),
     ("energyCost", "value"),
     ("energyCost", "cost"),
+    ("data", "amount"),
+    ("data", "totalCost"),
 )
+
+
+def _parse_money_display_string(value: str) -> float | None:
+    """Best-effort parse for API ``formatted*Cost`` strings (e.g. ``12,50 kr``)."""
+    s = value.strip()
+    if not s:
+        return None
+    # Strip common currency tokens / spaces (ASCII and NBSP).
+    cleaned = (
+        s.replace("\xa0", " ")
+        .replace(" ", "")
+        .replace("kr", "")
+        .replace("SEK", "")
+        .replace("EUR", "")
+        .replace("USD", "")
+        .replace("€", "")
+        .replace("$", "")
+    )
+    # Prefer a simple decimal: optional digits, comma or dot, digits.
+    m = re.search(r"-?\d+(?:[.,]\d+)?", cleaned)
+    if not m:
+        return None
+    num = m.group(0)
+    if "," in num and "." in num:
+        # Assume thousands with dot, decimal with comma (e.g. 1.234,56).
+        num = num.replace(".", "").replace(",", ".")
+    elif "," in num:
+        num = num.replace(",", ".")
+    try:
+        return float(num)
+    except ValueError:
+        return None
+
+
+def _scan_dict_for_cost_number(obj: Any, depth: int = 0) -> float | None:
+    """Find a plausible monetary scalar when vendor keys do not match fixed paths."""
+    if depth > 8 or not isinstance(obj, dict):
+        return None
+
+    priority_keys = (
+        "amount",
+        "totalCost",
+        "total_cost",
+        "estimatedCost",
+        "grandTotal",
+        "totalAmount",
+        "netAmount",
+        "grossAmount",
+        "price",
+        "total",
+        "value",
+        "cost",
+    )
+    for pk in priority_keys:
+        if pk not in obj:
+            continue
+        val = obj[pk]
+        if isinstance(val, bool):
+            continue
+        if isinstance(val, int | float):
+            return float(val)
+        if isinstance(val, dict):
+            got = _scan_dict_for_cost_number(val, depth + 1)
+            if got is not None:
+                return got
+
+    skip_tokens = (
+        "currency",
+        "formatted",
+        "period",
+        "status",
+        "generated",
+        "ispremium",
+    )
+    for key, val in obj.items():
+        kl = str(key).lower()
+        if any(tok in kl for tok in skip_tokens):
+            continue
+        if isinstance(val, bool):
+            continue
+        if isinstance(val, int | float):
+            if any(tok in kl for tok in ("amount", "cost", "price", "total", "sum")):
+                fv = float(val)
+                if -1e9 < fv < 1e9:
+                    return fv
+        elif isinstance(val, dict):
+            got = _scan_dict_for_cost_number(val, depth + 1)
+            if got is not None:
+                return got
+        elif isinstance(val, list):
+            for item in val:
+                got = _scan_dict_for_cost_number(item, depth + 1)
+                if got is not None:
+                    return got
+    return None
 
 
 def _coerce_energy_cost_amount(raw: Any) -> float | None:
@@ -195,7 +298,12 @@ def _coerce_energy_cost_amount(raw: Any) -> float | None:
         try:
             return float(raw.strip())
         except ValueError:
+            parsed = _parse_money_display_string(raw)
+            if parsed is not None:
+                return parsed
             return None
+    if isinstance(raw, list) and raw:
+        return _coerce_energy_cost_amount(raw[0])
     if not isinstance(raw, dict):
         return None
     # Wrapper shape: ``{"energyCost": {...}}`` or ``{"energyCost": 12.34}``.
@@ -205,14 +313,32 @@ def _coerce_energy_cost_amount(raw: Any) -> float | None:
             nested = _coerce_energy_cost_amount(ec)
             if nested is not None:
                 return nested
+    for fmt_key in (
+        "formattedEnergyCost",
+        "formattedWorstCaseEnergyCost",
+        "formattedSavings",
+    ):
+        fv = raw.get(fmt_key)
+        if isinstance(fv, str):
+            parsed = _parse_money_display_string(fv)
+            if parsed is not None:
+                return parsed
     inner = raw.get("data")
+    if isinstance(inner, list) and inner:
+        inner = inner[0] if isinstance(inner[0], dict) else None
     if isinstance(inner, dict):
         v = _first_valid_float(inner, *_ENERGY_COST_PATHS)
         if v is not None:
             return v
+        nested_inner = _coerce_energy_cost_amount(inner)
+        if nested_inner is not None:
+            return nested_inner
     v = _first_valid_float(raw, *_ENERGY_COST_PATHS)
     if v is not None:
         return v
+    scanned = _scan_dict_for_cost_number(raw)
+    if scanned is not None:
+        return scanned
     return None
 
 
