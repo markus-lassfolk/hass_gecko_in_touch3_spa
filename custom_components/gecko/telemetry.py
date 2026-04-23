@@ -130,7 +130,7 @@ def _get_mode_label_for_step_index(step_index: int, step_count: int) -> str:
     if step_count == 3:
         return ("low", "medium", "high")[step_index]
 
-    normalized_index = round((step_index * 3) / (step_count - 1))
+    normalized_index = int((step_index * 3) / (step_count - 1) + 0.5)
     return ("low", "medium", "high", "max")[normalized_index]
 
 

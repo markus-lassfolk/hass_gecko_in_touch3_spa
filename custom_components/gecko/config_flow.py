@@ -328,9 +328,6 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
 class GeckoOptionsFlow(config_entries.OptionsFlow):
     """Integration options (REST poll settings and optional energy-data link)."""
 
-    _code_verifier: str | None = None
-    _authorize_url: str | None = None
-
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         """Show a menu with settings and energy link actions."""
         return self.async_show_menu(
@@ -437,7 +434,7 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                     )
                     return self.async_abort(reason="energy_linked")
 
-        if self._authorize_url is None:
+        if not hasattr(self, "_authorize_url") or self._authorize_url is None:
             self._code_verifier = GeckoPKCEOAuth2Implementation.generate_code_verifier()
             challenge = GeckoPKCEOAuth2Implementation.compute_code_challenge(
                 self._code_verifier
@@ -465,7 +462,7 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
 
     async def _async_exchange_code(self, code: str) -> dict | None:
         """Exchange an authorization code for app-client tokens."""
-        if self._code_verifier is None:
+        if not hasattr(self, "_code_verifier") or self._code_verifier is None:
             return None
         impl = GeckoPKCEOAuth2Implementation(
             self.hass,
