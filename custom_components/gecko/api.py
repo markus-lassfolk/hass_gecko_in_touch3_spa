@@ -73,6 +73,11 @@ class AppTokenSession:
                 return
             new_token = await self._implementation.async_refresh_token(self.token)
             if not isinstance(new_token, dict):
+                _LOGGER.warning(
+                    "App token refresh failed: async_refresh_token returned non-dict value (%s); "
+                    "premium energy API calls will fail until token is refreshed successfully",
+                    type(new_token).__name__,
+                )
                 return
             if (
                 "expires_at" not in new_token

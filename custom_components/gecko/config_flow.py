@@ -125,7 +125,7 @@ def _extract_code_from_callback(raw: str) -> str | None:
 
     # Fallback: search for code= in the raw string if urlparse failed
     try:
-        match = re.search(r'[?&]code=([^&\s]+)', raw)
+        match = re.search(r'[?&]?code=([^&\s]+)', raw)
         if match:
             code = match.group(1)
             if code and code.strip():
