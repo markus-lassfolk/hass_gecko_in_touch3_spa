@@ -30,7 +30,7 @@ from .energy_parse import (
     coerce_energy_score_value,
     extract_electricity_rate,
 )
-from .shadow_metrics import shadow_topology_summary
+from .shadow_metrics import infer_sensor_metadata, shadow_topology_summary
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -287,6 +287,111 @@ def _get_vessel_coordinators_diagnostics(
     return out
 
 
+def _sensor_values_snapshot(coord: Any) -> dict[str, Any]:
+    """Current numeric and string sensor values with their inferred HA type hints.
+
+    Groups values into ``numeric`` and ``string`` sub-dicts so it's easy to see
+    at a glance what every sensor is reading right now and whether the device_class
+    and unit are set correctly.
+    """
+    numeric: dict[str, Any] = {}
+    for path, val in sorted(
+        getattr(coord, "_shadow_metric_values", {}).items()
+    ):
+        dc, unit = infer_sensor_metadata(path)
+        numeric[path] = {
+            "value": val,
+            "device_class": dc.value if dc else None,
+            "unit": unit,
+        }
+
+    string: dict[str, str] = dict(
+        sorted(getattr(coord, "_shadow_string_values", {}).items())
+    )
+
+    return {"numeric": numeric, "string": string}
+
+
+def _energy_parse_trace(ed: dict[str, Any]) -> dict[str, Any]:
+    """Run all energy coerce functions and show results alongside raw payloads."""
+    consumption_raw = ed.get("consumption")
+    cost_raw = ed.get("cost")
+    score_raw = ed.get("score")
+    rate, rate_currency = extract_electricity_rate(cost_raw)
+    return {
+        "consumption": {
+            "raw_status": (
+                consumption_raw.get("status")
+                if isinstance(consumption_raw, dict)
+                else None
+            ),
+            "coerced_kwh": coerce_energy_consumption_kwh(consumption_raw),
+        },
+        "cost": {
+            "coerced_amount": coerce_energy_cost_amount(cost_raw),
+            "electricity_rate_per_kwh": rate,
+            "electricity_rate_currency": rate_currency,
+        },
+        "score": {
+            "coerced_value": coerce_energy_score_value(score_raw),
+            "maximum": (
+                score_raw.get("score", {}).get("maximum")
+                if isinstance(score_raw, dict)
+                else None
+            ),
+            "period_remaining_days": (
+                score_raw.get("period", {}).get("remainingDays")
+                if isinstance(score_raw, dict)
+                else None
+            ),
+        },
+    }
+
+
+def _platform_entities_snapshot(
+    hass: HomeAssistant, config_entry: ConfigEntry
+) -> list[dict[str, Any]]:
+    """Snapshot of live HA entity state, availability, and enabled status.
+
+    Covers all sensor and binary_sensor platforms for this config entry so it's
+    easy to see which sensors are showing Unknown/unavailable and why.
+    """
+    rows: list[dict[str, Any]] = []
+    for platform in async_get_platforms(hass, "gecko"):
+        if platform.domain not in ("sensor", "binary_sensor"):
+            continue
+        for ent in platform.entities.values():
+            re = getattr(ent, "registry_entry", None)
+            if re and re.config_entry_id != config_entry.entry_id:
+                continue
+            state_obj = hass.states.get(ent.entity_id) if ent.entity_id else None
+            rows.append(
+                {
+                    "entity_id": ent.entity_id,
+                    "platform": platform.domain,
+                    "name": getattr(ent, "_attr_name", None)
+                    or getattr(ent, "name", None),
+                    "translation_key": getattr(ent, "_attr_translation_key", None),
+                    "state": state_obj.state if state_obj else None,
+                    "available": getattr(ent, "available", None),
+                    "enabled": re.disabled_by is None if re else True,
+                    "device_class": (
+                        dc.value
+                        if (dc := getattr(ent, "_attr_device_class", None))
+                        else None
+                    ),
+                    "unit": getattr(ent, "_attr_native_unit_of_measurement", None),
+                    "state_class": (
+                        sc.value
+                        if (sc := getattr(ent, "_attr_state_class", None))
+                        else None
+                    ),
+                }
+            )
+    rows.sort(key=lambda r: (r["platform"], r["entity_id"] or ""))
+    return rows
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, config_entry: ConfigEntry
 ) -> dict[str, Any]:
@@ -350,6 +455,8 @@ async def async_get_config_entry_diagnostics(
             if rate is not None:
                 vessel_energy["electricity_rate_per_kwh"] = rate
                 vessel_energy["electricity_rate_currency"] = rate_currency
+            vessel_energy["energy_parse_trace"] = _energy_parse_trace(ed)
+            vessel_energy["sensor_values"] = _sensor_values_snapshot(coord)
             energy_summary.append(vessel_energy)
         diagnostics_data["runtime_data"] = {
             "api_client_type": type(getattr(rd, "api_client", None)).__name__,
@@ -515,5 +622,9 @@ async def async_get_config_entry_diagnostics(
             )
     if climate_state:
         diagnostics_data["climate_entities"] = climate_state
+
+    entity_snapshot = _platform_entities_snapshot(hass, config_entry)
+    if entity_snapshot:
+        diagnostics_data["platform_entities_snapshot"] = entity_snapshot
 
     return diagnostics_data
