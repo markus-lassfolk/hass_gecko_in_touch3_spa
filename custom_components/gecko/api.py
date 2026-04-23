@@ -43,7 +43,7 @@ class AppTokenSession:
     @property
     def token(self) -> dict:
         """Return the app token dict."""
-        return self.config_entry.data.get("app_token") or {}
+        return self.config_entry.data["app_token"]
 
     @property
     def valid_token(self) -> bool:
@@ -138,7 +138,7 @@ class OAuthGeckoApi(GeckoSpaApiMixin, GeckoApiClient):
     async def async_get_access_token(self) -> str:
         """Return a valid access token for the Gecko API."""
         await self._oauth_session.async_ensure_token_valid()
-        return self._oauth_session.token.get("access_token", "")
+        return self._oauth_session.token["access_token"]
 
 
 class ConfigFlowGeckoApi(GeckoSpaApiMixin, GeckoApiClient):
