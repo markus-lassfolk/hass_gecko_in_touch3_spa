@@ -47,7 +47,7 @@ from .const import (
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
     DEFAULT_ENERGY_POLL_INTERVAL,
     DOMAIN,
-    clamp_sensor_native_str,
+    sanitize_sensor_native_str,
 )
 from .energy_parse import premium_energy_poll_has_usable_values
 from .rest_alerts import build_alerts_snapshot
@@ -787,7 +787,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         merged_strings: dict[str, str] = dict(self._cloud_string_metrics)
         merged_strings.update(mqtt_strings)
         self._shadow_string_values = {
-            k: clamp_sensor_native_str(v) for k, v in merged_strings.items()
+            k: sanitize_sensor_native_str(v) for k, v in merged_strings.items()
         }
         new_string_paths = (
             set(self._shadow_string_values) - self._registered_string_paths

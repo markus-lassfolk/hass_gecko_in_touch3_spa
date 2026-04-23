@@ -15,6 +15,7 @@ from custom_components.gecko.const import (
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
     MAX_SENSOR_STATE_LENGTH,
     clamp_sensor_native_str,
+    sanitize_sensor_native_str,
 )
 
 
@@ -29,6 +30,18 @@ def test_clamp_sensor_native_str_respects_ha_limit() -> None:
     assert len(clamp_sensor_native_str("a" * 400)) == MAX_SENSOR_STATE_LENGTH
     assert clamp_sensor_native_str("a" * 400).endswith("...")
     assert clamp_sensor_native_str("short") == "short"
+
+
+def test_sanitize_sensor_native_str_remaps_reserved_ha_states() -> None:
+    """HA treats 'unknown' and 'unavailable' as special states, not text."""
+    assert sanitize_sensor_native_str("unknown") == "no levels"
+    assert sanitize_sensor_native_str("Unknown") == "no levels"
+    assert sanitize_sensor_native_str("UNKNOWN") == "no levels"
+    assert sanitize_sensor_native_str("unavailable") == "offline"
+    assert sanitize_sensor_native_str("ok") == "ok"
+    assert sanitize_sensor_native_str("high") == "high"
+    assert sanitize_sensor_native_str("really_low") == "really_low"
+    assert sanitize_sensor_native_str("a" * 400) == clamp_sensor_native_str("a" * 400)
 
 
 def test_humanize_metric_name() -> None:

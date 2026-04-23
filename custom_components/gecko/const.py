@@ -96,6 +96,27 @@ CONFIG_TIMEOUT = (
 MAX_SENSOR_STATE_LENGTH = 255
 
 
+_HA_RESERVED_STATE_REMAPS: dict[str, str] = {
+    "unknown": "no levels",
+    "unavailable": "offline",
+}
+
+
+def sanitize_sensor_native_str(value: str) -> str:
+    """Remap HA reserved state strings and clamp length.
+
+    Home Assistant treats the literal strings ``"unknown"`` and ``"unavailable"``
+    as special entity states (STATE_UNKNOWN / STATE_UNAVAILABLE) rather than
+    displaying them as text.  Gecko API ``readings.*.status`` often returns
+    ``"unknown"`` with ``statusReason: "no-levels"``; remapping avoids the
+    collision so the sensor shows a real value.
+    """
+    replacement = _HA_RESERVED_STATE_REMAPS.get(value.lower().strip())
+    if replacement is not None:
+        value = replacement
+    return clamp_sensor_native_str(value)
+
+
 def clamp_sensor_native_str(value: str, max_len: int = MAX_SENSOR_STATE_LENGTH) -> str:
     """Clamp string sensor state to a length Home Assistant accepts."""
     if len(value) <= max_len:
