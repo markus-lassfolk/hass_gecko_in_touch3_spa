@@ -1,6 +1,12 @@
 """Tests for premium energy sensor payload parsing."""
 
-from custom_components.gecko.sensor import _first_valid_float, _safe_float
+from unittest.mock import MagicMock
+
+from custom_components.gecko.sensor import (
+    GeckoEnergyScoreSensor,
+    _first_valid_float,
+    _safe_float,
+)
 
 
 def test_first_valid_float_preserves_zero() -> None:
@@ -20,3 +26,28 @@ def test_safe_float_nested() -> None:
     data = {"a": {"b": 3.14}}
     assert _safe_float(data, "a", "b") == 3.14
     assert _safe_float(data, "a", "missing") is None
+
+
+def test_energy_score_scalar_payload_has_no_default_percent_unit() -> None:
+    """Plain numeric score payloads must not assume a percentage unit."""
+    coordinator = MagicMock()
+    coordinator.get_energy_data = MagicMock(return_value={"score": 7.5})
+    coordinator.vessel_id = "v1"
+    entry = MagicMock()
+    entry.entry_id = "e1"
+    sensor = GeckoEnergyScoreSensor(coordinator, entry)
+    assert sensor.native_value == 7.5
+    assert sensor.native_unit_of_measurement is None
+
+
+def test_energy_score_dict_unit_is_preserved() -> None:
+    coordinator = MagicMock()
+    coordinator.get_energy_data = MagicMock(
+        return_value={"score": {"value": 82.0, "unit": "%"}}
+    )
+    coordinator.vessel_id = "v1"
+    entry = MagicMock()
+    entry.entry_id = "e1"
+    sensor = GeckoEnergyScoreSensor(coordinator, entry)
+    assert sensor.native_value == 82.0
+    assert sensor.native_unit_of_measurement == "%"

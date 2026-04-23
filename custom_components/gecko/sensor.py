@@ -605,6 +605,7 @@ class GeckoEnergyScoreSensor(CoordinatorEntity, SensorEntity):
         raw = energy.get("score")
         if raw is None:
             self._attr_native_value = None
+            self._attr_native_unit_of_measurement = None
             self._attr_extra_state_attributes = {}
             return
 
@@ -617,9 +618,12 @@ class GeckoEnergyScoreSensor(CoordinatorEntity, SensorEntity):
         if val is None and isinstance(raw, int | float):
             val = float(raw)
 
-        unit = None
+        unit: str | None = None
         if isinstance(raw, dict):
-            unit = raw.get("unit") or raw.get("scale")
+            u = raw.get("unit") or raw.get("scale")
+            if u is not None and str(u).strip():
+                unit = str(u).strip()
+        # Do not assume "%" for scalar payloads — wrong long-term statistics semantics.
         self._attr_native_unit_of_measurement = unit
 
         self._attr_native_value = val

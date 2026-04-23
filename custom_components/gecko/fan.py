@@ -176,29 +176,33 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
         if zone_supports_speed_control(self._zone):
             speed = get_flow_speed_mode_for_percentage(self._zone, percentage)
             await self.async_set_speed(speed)
-        else:
-            try:
-                gecko_client = await self._coordinator.get_gecko_client()
-                if not gecko_client:
-                    _LOGGER.error("No gecko client available for %s", self._attr_name)
-                    return
-                pump_zones = self._coordinator.get_zones_by_type(ZoneType.FLOW_ZONE)
-                zone = next((z for z in pump_zones if z.id == self._zone.id), None)
-                if zone:
-                    activate_method = getattr(zone, "activate", None)
-                    if activate_method and callable(activate_method):
-                        activate_method()
-                    else:
-                        _LOGGER.warning("Zone %s does not have activate method", zone.id)
+            return
+
+        try:
+            gecko_client = await self._coordinator.get_gecko_client()
+            if not gecko_client:
+                _LOGGER.error("No gecko client available for %s", self._attr_name)
+                return
+            pump_zones = self._coordinator.get_zones_by_type(ZoneType.FLOW_ZONE)
+            zone = next((z for z in pump_zones if z.id == self._zone.id), None)
+            if zone:
+                activate_method = getattr(zone, "activate", None)
+                if activate_method and callable(activate_method):
+                    activate_method()
                 else:
-                    _LOGGER.warning("Could not find pump zone %s", self._zone.id)
-            except Exception as e:
-                _LOGGER.error("Error turning on pump %s: %s", self._attr_name, e)
+                    _LOGGER.warning("Zone %s does not have activate method", zone.id)
+            else:
+                _LOGGER.warning("Could not find pump zone %s", self._zone.id)
+        except Exception as e:
+            _LOGGER.error("Error turning on pump %s: %s", self._attr_name, e)
 
     async def async_set_percentage(self, percentage: int) -> None:
         """Set the fan speed by percentage."""
         if percentage <= 0:
             await self.async_turn_off()
+            return
+        if not zone_supports_speed_control(self._zone):
+            await self.async_turn_on()
             return
         speed = get_flow_speed_mode_for_percentage(self._zone, percentage)
         await self.async_set_speed(speed)
