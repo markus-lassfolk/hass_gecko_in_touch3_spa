@@ -328,9 +328,9 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
 class GeckoOptionsFlow(config_entries.OptionsFlow):
     """Integration options (REST poll settings and optional energy-data link)."""
 
-    def __init__(self) -> None:
-        """Initialize the options flow."""
-        super().__init__()
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize the options flow (forwards HA ``OptionsFlow`` constructor args)."""
+        super().__init__(*args, **kwargs)
         self._code_verifier: str | None = None
         self._authorize_url: str | None = None
 
