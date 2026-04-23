@@ -18,6 +18,8 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity_registry import RegistryEntryDisabler
 
 from .api import AppTokenSession, OAuthGeckoApi
 from .connection_manager import async_get_connection_manager
@@ -42,7 +44,7 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 _LOGGER = logging.getLogger(__name__)
 
-_TARGET_ENTRY_VERSION = 2
+_TARGET_ENTRY_VERSION = 3
 
 
 def _rest_alerts_entities_enabled(entry: ConfigEntry) -> bool:
@@ -117,12 +119,34 @@ async def _async_resolve_missing_account_id(
     return account_id
 
 
+def _migrate_v3_enable_premium_energy_cost_score(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Turn on energy cost/score sensors that were integration-disabled by default.
+
+    Older releases registered these with ``entity_registry_enabled_default=False``.
+    Re-enable only ``disabled_by=INTEGRATION`` so users who turned them off stay off.
+    """
+    if not entry.data.get("app_token"):
+        return
+    registry = er.async_get(hass)
+    for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if reg_entry.domain != "sensor":
+            continue
+        uid = reg_entry.unique_id or ""
+        if not (uid.endswith("_energy_cost") or uid.endswith("_energy_score")):
+            continue
+        if reg_entry.disabled_by != RegistryEntryDisabler.INTEGRATION:
+            continue
+        registry.async_update_entity(reg_entry.entity_id, disabled_by=None)
+
+
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate config entry to latest version."""
     if entry.version > _TARGET_ENTRY_VERSION:
         return False
 
-    need_version_bump = entry.version < _TARGET_ENTRY_VERSION
+    need_account_migrate = entry.version < 2
     existing_account = str(entry.data.get("account_id", "")).strip()
 
     resolved_account = existing_account
@@ -155,15 +179,14 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if current is None:
         return False
 
-    if need_version_bump:
+    if need_account_migrate:
         data = dict(current.data)
         if resolved_account:
             data["account_id"] = resolved_account
-        hass.config_entries.async_update_entry(
-            current,
-            data=data,
-            version=_TARGET_ENTRY_VERSION,
-        )
+        hass.config_entries.async_update_entry(current, data=data, version=2)
+        current = hass.config_entries.async_get_entry(entry.entry_id)
+        if current is None:
+            return False
     elif (
         resolved_account
         and str(current.data.get("account_id", "")).strip() != resolved_account
@@ -171,6 +194,10 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         data = dict(current.data)
         data["account_id"] = resolved_account
         hass.config_entries.async_update_entry(current, data=data)
+
+    if current.version < 3:
+        _migrate_v3_enable_premium_energy_cost_score(hass, current)
+        hass.config_entries.async_update_entry(current, version=3)
 
     return True
 
@@ -318,14 +345,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _migrate_options_defaults(hass, entry)
 
-    # Fallback: resolve missing account_id for version-2 entries (recovery path)
+    # Fallback: resolve missing account_id for current-version entries (recovery path)
     if (
         entry.version == _TARGET_ENTRY_VERSION
         and not str(entry.data.get("account_id", "")).strip()
     ):
         _LOGGER.info(
-            "Gecko setup: version-2 entry %s missing account_id, attempting resolution",
+            "Gecko setup: entry %s (v%s) missing account_id, attempting resolution",
             entry.entry_id,
+            entry.version,
         )
         resolved = await _async_resolve_missing_account_id(hass, entry)
         if resolved:

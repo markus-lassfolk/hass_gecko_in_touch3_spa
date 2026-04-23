@@ -158,8 +158,8 @@ This integration lets you optionally link that second client to unlock additiona
 | Entity | Device class | Enabled by default | HA Energy Dashboard |
 |--------|-------------|-------------------|-------------------|
 | **Energy consumption** | `energy` (kWh, total increasing) | Yes | Yes — add it as an individual device consumption source |
-| **Energy cost** | `monetary` (total increasing) | No (enable in entity settings) | Yes — can track alongside consumption |
-| **Energy score** | measurement (%) | No (enable in entity settings) | No |
+| **Energy cost** | `monetary` (total) | Yes | Yes — can track alongside consumption |
+| **Energy score** | measurement (unit from API) | Yes | No |
 
 #### How to link
 
@@ -299,8 +299,8 @@ These use `device_class: temperature` and `state_class: measurement` so pool/spa
 | Entity | Device class | State class | Unit | Default |
 |--------|-------------|------------|------|---------|
 | **Energy consumption** | `energy` | `total_increasing` | kWh | **Enabled** — eligible for HA Energy Dashboard |
-| **Energy cost** | `monetary` | `total_increasing` | auto-detected from API | **Disabled** (diagnostic) |
-| **Energy score** | _(none)_ | `measurement` | % | **Disabled** (diagnostic) |
+| **Energy cost** | `monetary` | `total` | currency from API | **Enabled** |
+| **Energy score** | _(none)_ | `measurement` | from API (often %) | **Enabled** |
 
 The **energy consumption** sensor reports total kWh consumed by the spa. Because it uses `total_increasing`, Home Assistant automatically calculates hourly/daily/monthly usage — no template sensors or utility meters needed. Add it to the Energy Dashboard under **Individual devices**.
 

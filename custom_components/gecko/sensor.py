@@ -546,7 +546,6 @@ class GeckoEnergyCostSensor(
 ):
     """Estimated energy cost for the spa.
 
-    Disabled by default — power users can enable it in Settings > Entities.
     Uses MONETARY device class so HA can track it alongside consumption.
     """
 
@@ -557,8 +556,7 @@ class GeckoEnergyCostSensor(
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_suggested_display_precision = 2
     _attr_icon = "mdi:currency-usd"
-    _attr_entity_registry_enabled_default = False
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = True
 
     def __init__(
         self,
@@ -624,18 +622,14 @@ class GeckoEnergyCostSensor(
 class GeckoEnergyScoreSensor(
     GeckoEntityAvailabilityMixin, CoordinatorEntity, SensorEntity
 ):
-    """Energy efficiency score from the Gecko app.
-
-    Disabled by default — informational metric for power users.
-    """
+    """Energy efficiency score from the Gecko app."""
 
     _attr_should_poll = False
     _attr_has_entity_name = True
     _attr_translation_key = "energy_score"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:leaf"
-    _attr_entity_registry_enabled_default = False
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = True
 
     def __init__(
         self,
