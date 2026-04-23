@@ -206,25 +206,29 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
                 activate_method()
             else:
                 _LOGGER.warning("Zone %s has no activate or set_color method", zone.id)
+                return
+
+            self._attr_is_on = True
+            self.async_write_ha_state()
         except Exception as e:
             _LOGGER.error("Error turning on light %s: %s", self._attr_name, e)
 
-    async def async_turn_off(self, **kwargs) -> None:
+    async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the light off."""
         try:
-            # Check if gecko client is connected
             gecko_client = await self.coordinator.get_gecko_client()
             if not gecko_client:
                 _LOGGER.error("No gecko client available for %s", self._attr_name)
                 return
 
-            # Get the light zone from coordinator and deactivate it
             light_zones = self.coordinator.get_zones_by_type(ZoneType.LIGHTING_ZONE)
             zone = next((z for z in light_zones if z.id == self._zone.id), None)
             if zone:
                 deactivate_method = getattr(zone, "deactivate", None)
                 if deactivate_method and callable(deactivate_method):
                     deactivate_method()
+                    self._attr_is_on = False
+                    self.async_write_ha_state()
                 else:
                     _LOGGER.warning("Zone %s does not have deactivate method", zone.id)
             else:

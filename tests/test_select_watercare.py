@@ -32,3 +32,9 @@ def test_coerce_library_mode_to_option_unknown_maps_to_other() -> None:
 def test_coerce_library_mode_to_option_snake_in_options() -> None:
     assert sel._coerce_library_mode_to_option("custom_weekender") == "other"
     assert sel._coerce_library_mode_to_option("Weekender") == "weekender"
+
+
+def test_mode_key_maps_to_library_display_name() -> None:
+    """``async_select_option`` must send library display names, not ALL_CAPS keys."""
+    assert sel._MODE_KEY_TO_LIBRARY["super_savings"] == "Super Savings"
+    assert sel._MODE_KEY_TO_LIBRARY["away"] == "Away"

@@ -278,12 +278,17 @@ class GeckoWatercareSelectEntity(
             _LOGGER.error("Invalid watercare mode option: %s", option)
             return
 
-        library_name = _MODE_KEY_TO_LIBRARY.get(normalized, normalized)
+        # Library expects display-style names (see ``_MODE_KEY_TO_LIBRARY``),
+        # not HA snake_case keys or ALL_CAPS tokens.
+        library_cmd = _MODE_KEY_TO_LIBRARY.get(normalized)
+        if library_cmd is None:
+            _LOGGER.error("No library mapping for watercare mode key: %s", normalized)
+            return
         _LOGGER.debug(
-            "Setting watercare mode for vessel %s to %s (library: %s)",
+            "Setting watercare mode for vessel %s to %s (cmd: %s)",
             self._vessel_name,
             option,
-            library_name,
+            library_cmd,
         )
 
         try:
@@ -302,11 +307,11 @@ class GeckoWatercareSelectEntity(
                 )
                 return
 
-            gecko_client.operation_mode_controller.set_mode_by_name(library_name)
+            gecko_client.operation_mode_controller.set_mode_by_name(library_cmd)
 
             _LOGGER.debug(
                 "Sent watercare mode command (%s) for vessel %s",
-                library_name,
+                library_cmd,
                 self._vessel_name,
             )
 

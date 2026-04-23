@@ -6,3 +6,6 @@ tmp/
 
 # Local credentials for scripts/verify_shadow_live.py (copy scripts/gecko_live_test.env.example)
 .secrets/
+
+# Private dev/investigation scripts (not part of the public repo)
+dev-scripts/

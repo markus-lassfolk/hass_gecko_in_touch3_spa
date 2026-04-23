@@ -61,6 +61,21 @@
       },
       "active_alerts": {
         "name": "Aktive Alarme"
+      },
+      "spa_in_use": {
+        "name": "Whirlpool in Benutzung"
+      },
+      "eco_mode": {
+        "name": "Eco-Modus"
+      },
+      "zone_heating": {
+        "name": "Zonenheizung"
+      },
+      "vessel_heating": {
+        "name": "Behälterheizung"
+      },
+      "cleaning_mode": {
+        "name": "Reinigungsmodus"
       }
     },
     "sensor": {

@@ -19,7 +19,7 @@ from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 
-from .api import OAuthGeckoApi
+from .api import AppTokenSession, OAuthGeckoApi
 from .connection_manager import async_get_connection_manager
 from .const import (
     CONF_ALERTS_POLL_INTERVAL,
@@ -29,19 +29,27 @@ from .const import (
     DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
     DOMAIN,
+    OAUTH2_APP_CLIENT_ID,
     OAUTH2_AUTHORIZE,
     OAUTH2_CLIENT_ID,
     OAUTH2_TOKEN,
 )
 from .coordinator import GeckoVesselCoordinator
+from .energy_entity_registry import (
+    reenable_integration_disabled_energy_cost_score_entities,
+)
 from .oauth_implementation import GeckoPKCEOAuth2Implementation
 from .services import async_remove_services, async_setup_services
+from .zone_shadow_merge import (
+    install_mqtt_shadow_document_patch,
+    install_zone_parser_merge_patch,
+)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 _LOGGER = logging.getLogger(__name__)
 
-_TARGET_ENTRY_VERSION = 2
+_TARGET_ENTRY_VERSION = 3
 
 
 def _rest_alerts_entities_enabled(entry: ConfigEntry) -> bool:
@@ -121,7 +129,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if entry.version > _TARGET_ENTRY_VERSION:
         return False
 
-    need_version_bump = entry.version < _TARGET_ENTRY_VERSION
+    need_account_migrate = entry.version < 2
     existing_account = str(entry.data.get("account_id", "")).strip()
 
     resolved_account = existing_account
@@ -154,29 +162,46 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if current is None:
         return False
 
-    if need_version_bump:
-        data = dict(current.data)
+    data = dict(current.data)
+    target_version = current.version
+    data_changed = False
+
+    if need_account_migrate:
         if resolved_account:
             data["account_id"] = resolved_account
-        hass.config_entries.async_update_entry(
-            current,
-            data=data,
-            version=_TARGET_ENTRY_VERSION,
-        )
+            data_changed = True
+            target_version = 2
+        else:
+            target_version = 2
+
     elif (
         resolved_account
         and str(current.data.get("account_id", "")).strip() != resolved_account
     ):
-        data = dict(current.data)
         data["account_id"] = resolved_account
-        hass.config_entries.async_update_entry(current, data=data)
+        data_changed = True
+
+    needs_v3_reenable = current.version < 3 and target_version >= 2
+    if needs_v3_reenable:
+        target_version = 3
+
+    if data_changed or target_version != current.version:
+        hass.config_entries.async_update_entry(
+            current, data=data, version=target_version
+        )
+
+    if needs_v3_reenable:
+        updated_entry = hass.config_entries.async_get_entry(entry.entry_id)
+        if updated_entry:
+            reenable_integration_disabled_energy_cost_score_entities(
+                hass, updated_entry
+            )
 
     return True
 
 
 async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     """Set up the Gecko component."""
-    # Register hardcoded OAuth implementation with PKCE (no user credentials needed)
     config_entry_oauth2_flow.async_register_implementation(
         hass,
         DOMAIN,
@@ -197,6 +222,9 @@ class GeckoRuntimeData:
 
     api_client: OAuthGeckoApi
     coordinators: list[GeckoVesselCoordinator]
+    app_api_client: OAuthGeckoApi | None = field(
+        default=None, repr=False, compare=False
+    )
     rest_vessels_response_cache: list[Any] | None = field(
         default=None, repr=False, compare=False
     )
@@ -234,6 +262,16 @@ class GeckoRuntimeData:
         default_factory=dict, repr=False, compare=False
     )
     rest_vessel_detail_lock: asyncio.Lock = field(
+        default_factory=asyncio.Lock, repr=False, compare=False
+    )
+    # Premium energy caches (keyed by vessel_id)
+    energy_data_cache: dict[str, dict[str, Any]] = field(
+        default_factory=dict, repr=False, compare=False
+    )
+    energy_data_mono: dict[str, float] = field(
+        default_factory=dict, repr=False, compare=False
+    )
+    energy_data_lock: asyncio.Lock = field(
         default_factory=asyncio.Lock, repr=False, compare=False
     )
 
@@ -303,16 +341,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         len(entry.data.get("vessels", [])),
     )
 
+    install_zone_parser_merge_patch()
+    install_mqtt_shadow_document_patch()
+
     _migrate_options_defaults(hass, entry)
 
-    # Fallback: resolve missing account_id for version-2 entries (recovery path)
+    # Fallback: resolve missing account_id for current-version entries (recovery path)
     if (
         entry.version == _TARGET_ENTRY_VERSION
         and not str(entry.data.get("account_id", "")).strip()
     ):
         _LOGGER.info(
-            "Gecko setup: version-2 entry %s missing account_id, attempting resolution",
+            "Gecko setup: entry %s (v%s) missing account_id, attempting resolution",
             entry.entry_id,
+            entry.version,
         )
         resolved = await _async_resolve_missing_account_id(hass, entry)
         if resolved:
@@ -338,8 +380,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     session = config_entry_oauth2_flow.OAuth2Session(hass, entry, implementation)
 
-    # Create OAuth-based Gecko API client
+    # Create OAuth-based Gecko API client (community token — basic access)
     api_client = OAuthGeckoApi(hass, session)
+
+    # Create optional app-token API client for premium features if linked
+    app_api_client: OAuthGeckoApi | None = None
+    if entry.data.get("app_token"):
+        app_implementation = GeckoPKCEOAuth2Implementation(
+            hass,
+            DOMAIN,
+            client_id=OAUTH2_APP_CLIENT_ID,
+            authorize_url=OAUTH2_AUTHORIZE,
+            token_url=OAUTH2_TOKEN,
+        )
+        app_session = AppTokenSession(hass, entry, app_implementation)
+        app_api_client = OAuthGeckoApi(hass, app_session)
+        _LOGGER.debug(
+            "App token detected for entry %s; premium API client initialized",
+            entry.entry_id,
+        )
 
     # Create one coordinator per vessel following Home Assistant best practices
     vessels = entry.data.get("vessels", [])
@@ -366,6 +425,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.runtime_data = GeckoRuntimeData(
         api_client=api_client,
         coordinators=coordinators,
+        app_api_client=app_api_client,
     )
 
     try:

@@ -15,7 +15,9 @@
       "missing_configuration": "[%key:common::config_flow::abort::oauth2_missing_configuration%]",
       "authorize_url_timeout": "[%key:common::config_flow::abort::oauth2_authorize_url_timeout%]",
       "no_url_available": "[%key:common::config_flow::abort::oauth2_no_url_available%]",
-      "user_rejected_authorize": "[%key:common::config_flow::abort::oauth2_user_rejected_authorize%]"
+      "user_rejected_authorize": "[%key:common::config_flow::abort::oauth2_user_rejected_authorize%]",
+      "api_error": "Failed to connect to the Gecko API after authentication. Please try again.",
+      "account_resolution_failed": "{message}"
     },
     "create_entry": {
       "default": "[%key:common::config_flow::create_entry::authenticated%]"
@@ -23,23 +25,57 @@
   },
   "options": {
     "abort": {
-      "reconfigure_successful": "Options saved; integration reloaded so alert entities match the new setting."
+      "reconfigure_successful": "Options saved; integration reloaded so alert entities match the new setting.",
+      "energy_linked": "Energy data linked successfully. The integration has been reloaded.",
+      "energy_unlinked": "Energy data unlinked. The integration has been reloaded.",
+      "energy_not_linked": "No energy data link to remove."
     },
     "step": {
       "init": {
+        "menu_options": {
+          "settings": "Cloud REST & alerts settings",
+          "link_energy": "Link energy data (premium)",
+          "unlink_energy": "Unlink energy data"
+        }
+      },
+      "settings": {
         "title": "Cloud REST & alerts",
         "description": "Optional Gecko Cloud REST polling: vessel summary tiles (numbers/strings merged as cloud.rest.* when MQTT is sparse or disconnected) and a separate alerts poll (unread messages scope + vessel actions). Uses only IDs from this config entry.",
         "data": {
           "cloud_rest_poll_interval": "Cloud REST poll interval (seconds)",
           "cloud_rest_only_when_mqtt_down": "Only poll REST when MQTT is disconnected",
-          "alerts_poll_interval": "Alerts poll interval (seconds)"
+          "alerts_poll_interval": "Alerts poll interval (seconds)",
+          "energy_poll_interval": "Premium energy poll interval (seconds)"
         },
         "data_description": {
           "cloud_rest_poll_interval": "How often to fetch chemistry readings (pH, ORP, water temp, alkalinity, chlorine, etc.) from the Gecko cloud. Default: 300 seconds (5 minutes). Set to 0 to disable.",
           "cloud_rest_only_when_mqtt_down": "When enabled, REST polling only runs while MQTT is disconnected. Default: off — keeps REST polling active so chemistry readings always update.",
-          "alerts_poll_interval": "How often to fetch unread messages and vessel action alerts. Default: 0 (disabled). Recommended: 300 seconds (5 minutes) if you want alert notifications."
+          "alerts_poll_interval": "How often to fetch unread messages and vessel action alerts. Default: 0 (disabled). Recommended: 300 seconds (5 minutes) if you want alert notifications.",
+          "energy_poll_interval": "How often to refresh premium energy metrics (consumption, score, cost) when energy data is linked. Default: 3600 seconds (1 hour). Set to 0 to disable polling."
+        }
+      },
+      "link_energy": {
+        "title": "Link energy data",
+        "description": "This links a second Gecko login that unlocks energy consumption, charts, activities, routines, and other premium data.\n\n1. Open the link below in your browser:\n\n{authorize_url}\n\n2. Log in with your Gecko account.\n3. After login the browser will try to open an app link that starts with `com.geckoportal.gecko://` — it will fail to load (that is expected).\n4. **Copy the full URL** from your browser's address bar and paste it below.",
+        "data": {
+          "callback_url": "Callback URL"
+        },
+        "data_description": {
+          "callback_url": "Paste the full URL that starts with com.geckoportal.gecko://… here."
+        }
+      },
+      "unlink_energy": {
+        "title": "Unlink energy data",
+        "description": "This will remove the linked energy data token. Energy, chart, activity, and routine sensors will no longer be available. Enable the checkbox and press Submit to confirm.",
+        "data": {
+          "confirm_unlink": "I want to unlink energy data"
         }
       }
+    },
+    "error": {
+      "invalid_callback_url": "Could not find an authorization code in the URL. Make sure you copied the full callback URL.",
+      "token_exchange_failed": "Token exchange failed. The authorization code may have expired — please try again.",
+      "must_confirm_unlink": "Please enable the confirmation checkbox to unlink energy data."
     }
   },
   "entity": {
@@ -61,6 +97,21 @@
       },
       "active_alerts": {
         "name": "Active Alerts"
+      },
+      "spa_in_use": {
+        "name": "Spa In Use"
+      },
+      "eco_mode": {
+        "name": "Eco Mode"
+      },
+      "zone_heating": {
+        "name": "Zone Heating"
+      },
+      "vessel_heating": {
+        "name": "Vessel Heating"
+      },
+      "cleaning_mode": {
+        "name": "Cleaning Mode"
       }
     },
     "sensor": {
@@ -78,6 +129,18 @@
       },
       "spa_current_temperature": {
         "name": "Current temperature {zone_id}"
+      },
+      "energy_consumption": {
+        "name": "Energy consumption"
+      },
+      "energy_cost": {
+        "name": "Energy cost"
+      },
+      "energy_score": {
+        "name": "Energy score"
+      },
+      "electricity_rate": {
+        "name": "Electricity rate"
       }
     },
     "select": {
@@ -85,7 +148,7 @@
         "name": "Watercare Mode",
         "state": {
           "away": "Away",
-          "standard": "Standard", 
+          "standard": "Standard",
           "savings": "Savings",
           "super_savings": "Super Savings",
           "weekender": "Weekender",
@@ -100,6 +163,9 @@
     }
   },
   "exceptions": {
+    "thermostat_temperature_out_of_range": {
+      "message": "Temperature must be between {lo} and {hi} °C (got {value} °C)."
+    },
     "unsupported_hvac_mode": {
       "message": "Unsupported HVAC mode: {hvac_mode}. Only HEAT mode is supported."
     }

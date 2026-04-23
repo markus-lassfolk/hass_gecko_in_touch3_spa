@@ -45,11 +45,11 @@ def test_get_gecko_client_info_shadow_topology() -> None:
     assert info["configuration_zones_keys"] == ["flow"]
 
 
-def test_get_connection_diagnostics_empty_manager() -> None:
-    assert gecko_diag._get_connection_diagnostics(None) == {}
+async def test_get_connection_diagnostics_empty_manager() -> None:
+    assert await gecko_diag._get_connection_diagnostics(None) == {}
 
 
-def test_get_connection_diagnostics_with_connection() -> None:
+async def test_get_connection_diagnostics_with_connection() -> None:
     class _Conn:
         vessel_name = "Spa"
         is_connected = True
@@ -66,8 +66,11 @@ def test_get_connection_diagnostics_with_connection() -> None:
             transporter=None,
         )
 
-    mgr = SimpleNamespace(_connections={"m1": _Conn()})
-    out = gecko_diag._get_connection_diagnostics(mgr)
+    connections = {"m1": _Conn()}
+    mgr = SimpleNamespace(
+        get_connections_snapshot=lambda: dict(connections),
+    )
+    out = await gecko_diag._get_connection_diagnostics(mgr)
     assert "m1" in out
     assert out["m1"]["gecko_client"]["client_id"] == "gc"
 

@@ -21,6 +21,8 @@ from custom_components.gecko.const import (
 )
 from custom_components.gecko.entity import GeckoEntityAvailabilityMixin
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity_registry import RegistryEntryDisabler
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
@@ -130,8 +132,51 @@ async def test_async_migrate_entry_bumps_version_and_account(
     assert ok is True
     updated = hass.config_entries.async_get_entry(entry.entry_id)
     assert updated is not None
-    assert updated.version == 2
+    assert updated.version == 3
     assert updated.data.get("account_id") == "acct-9"
+
+
+async def test_async_migrate_entry_v3_enables_integration_disabled_energy_entities(
+    hass: HomeAssistant,
+) -> None:
+    """v3 migration re-enables cost/score sensors left disabled-by-integration."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "vessels": [],
+            "account_id": "a1",
+            "app_token": {"access_token": "x"},
+        },
+        version=2,
+    )
+    entry.add_to_hass(hass)
+    reg = er.async_get(hass)
+    uid_cost = f"{entry.entry_id}_99_energy_cost"
+    uid_score = f"{entry.entry_id}_99_energy_score"
+    cost_ent = reg.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        uid_cost,
+        config_entry=entry,
+        disabled_by=RegistryEntryDisabler.INTEGRATION,
+    )
+    score_ent = reg.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        uid_score,
+        config_entry=entry,
+        disabled_by=RegistryEntryDisabler.INTEGRATION,
+    )
+    assert cost_ent.disabled_by == RegistryEntryDisabler.INTEGRATION
+
+    assert await gecko_pkg.async_migrate_entry(hass, entry) is True
+    updated = hass.config_entries.async_get_entry(entry.entry_id)
+    assert updated is not None
+    assert updated.version == 3
+
+    reg2 = er.async_get(hass)
+    assert reg2.async_get(cost_ent.entity_id).disabled_by is None
+    assert reg2.async_get(score_ent.entity_id).disabled_by is None
 
 
 async def test_async_migrate_entry_future_version_no_op(

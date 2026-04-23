@@ -61,6 +61,21 @@
       },
       "active_alerts": {
         "name": "Alertes actives"
+      },
+      "spa_in_use": {
+        "name": "Spa en cours d'utilisation"
+      },
+      "eco_mode": {
+        "name": "Mode éco"
+      },
+      "zone_heating": {
+        "name": "Chauffage de zone"
+      },
+      "vessel_heating": {
+        "name": "Chauffage du bassin"
+      },
+      "cleaning_mode": {
+        "name": "Mode nettoyage"
       }
     },
     "sensor": {

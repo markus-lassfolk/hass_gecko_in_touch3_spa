@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from gecko_iot_client.models.temperature_control_zone import (
@@ -19,11 +20,12 @@ from homeassistant.components.climate import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .connection_manager import async_get_connection_manager
 from .const import DOMAIN
 from .coordinator import GeckoVesselCoordinator
 from .entity import GeckoEntityAvailabilityMixin, gecko_zone_ids_equal
@@ -109,6 +111,7 @@ class GeckoClimate(
     _attr_hvac_modes = [HVACMode.HEAT]
     _attr_hvac_mode = HVACMode.HEAT
     _attr_target_temperature_step = 0.5
+    _PENDING_TARGET_GRACE_S = 90.0
 
     def __init__(
         self,
@@ -135,6 +138,8 @@ class GeckoClimate(
         self._attr_available = False
 
         # Initialize state from zone
+        self._pending_target_temperature: float | None = None
+        self._pending_target_deadline_mono: float | None = None
         self._update_from_zone()
 
     def _sync_zone_from_coordinator(self) -> None:
@@ -173,7 +178,25 @@ class GeckoClimate(
             self._attr_hvac_action = HVACAction.IDLE
 
         self._attr_current_temperature = self._zone.temperature
-        self._attr_target_temperature = self._zone.target_temperature
+        reported_target = self._zone.target_temperature
+        pend = self._pending_target_temperature
+        deadline = self._pending_target_deadline_mono
+        now = time.monotonic()
+        if pend is not None and deadline is not None and now < deadline:
+            if (
+                reported_target is not None
+                and abs(float(reported_target) - float(pend)) < 0.05
+            ):
+                self._pending_target_temperature = None
+                self._pending_target_deadline_mono = None
+                self._attr_target_temperature = reported_target
+            else:
+                self._attr_target_temperature = pend
+        else:
+            if deadline is not None and now >= deadline:
+                self._pending_target_temperature = None
+                self._pending_target_deadline_mono = None
+            self._attr_target_temperature = reported_target
         self._attr_max_temp = self._zone.max_temperature_set_point_c
         self._attr_min_temp = self._zone.min_temperature_set_point_c
 
@@ -205,24 +228,118 @@ class GeckoClimate(
         self.async_write_ha_state()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set new target temperature."""
+        """Set new target temperature via the Gecko zone model (MQTT shadow desired).
+
+        ``gecko_iot_client`` wires ``TemperatureControlZone.set_target_temperature`` to
+        ``MqttTransporter.publish_desired_state`` with an ``is_connected`` guard. That
+        call must run on the Home Assistant event loop — the AWS IoT MQTT5 client used
+        by the transporter is not safe to invoke from ``async_add_executor_job`` worker
+        threads (publishes can fail silently or error depending on platform).
+        """
         if (temperature := kwargs.get("temperature")) is None:
             return
 
+        temperature = float(temperature)
         self._sync_zone_from_coordinator()
-        try:
-            # set_target_temperature is a synchronous method, run in executor
-            await self.hass.async_add_executor_job(
-                self._zone.set_target_temperature, temperature
+
+        lo = self._zone.min_temperature_set_point_c
+        hi = self._zone.max_temperature_set_point_c
+        if lo is None or hi is None:
+            raise HomeAssistantError(
+                "Temperature limits are not available yet; wait for the spa to finish "
+                "loading configuration, then try again."
+            )
+        if not (lo <= temperature <= hi):
+            raise ServiceValidationError(
+                f"Temperature must be between {lo:.1f} and {hi:.1f} °C (got {temperature:.1f} °C).",
+                translation_domain=DOMAIN,
+                translation_key="thermostat_temperature_out_of_range",
+                translation_placeholders={
+                    "lo": f"{lo:.1f}",
+                    "hi": f"{hi:.1f}",
+                    "value": f"{temperature:.1f}",
+                },
             )
 
-            _LOGGER.debug(
-                "Set target temperature to %.1f°C for %s",
-                temperature,
-                self.entity_id,
+        mgr = await async_get_connection_manager(self.hass)
+        conn = mgr.get_connection(self.coordinator.monitor_id)
+        if not conn or not conn.is_connected or not conn.gecko_client:
+            raise HomeAssistantError(
+                "Gecko MQTT connection is not available; check connectivity and try again."
             )
-        except Exception as err:
-            _LOGGER.error("Error setting temperature for %s: %s", self.entity_id, err)
+
+        zone_id = str(self._zone.id)
+        setter = getattr(self._zone, "set_target_temperature", None)
+        if callable(setter):
+            try:
+                setter(temperature)
+            except ValueError as err:
+                msg = str(err).strip() or "Could not apply temperature setpoint"
+                _LOGGER.warning(
+                    "set_target_temperature failed for %s zone %s: %s",
+                    self.entity_id,
+                    zone_id,
+                    err,
+                )
+                if "outside configured range" in msg.lower():
+                    raise ServiceValidationError(
+                        msg,
+                        translation_domain=DOMAIN,
+                        translation_key="thermostat_temperature_out_of_range",
+                        translation_placeholders={
+                            "lo": f"{lo:.1f}",
+                            "hi": f"{hi:.1f}",
+                            "value": f"{temperature:.1f}",
+                        },
+                    ) from err
+                raise HomeAssistantError(msg) from err
+            except Exception as err:
+                _LOGGER.error(
+                    "Unexpected error setting temperature for %s: %s",
+                    self.entity_id,
+                    err,
+                    exc_info=True,
+                )
+                raise HomeAssistantError(f"Failed to set temperature: {err}") from err
+        else:
+            # Extremely defensive fallback (custom / mocked zone objects).
+            gecko_client = conn.gecko_client
+            desired = {
+                "zones": {
+                    "temperatureControl": {zone_id: {"setPoint": temperature}},
+                }
+            }
+            try:
+                gecko_client.transporter.publish_desired_state(desired)
+            except Exception as err:
+                _LOGGER.error(
+                    "Failed to publish thermostat setpoint for %s: %s",
+                    self.entity_id,
+                    err,
+                    exc_info=True,
+                )
+                raise HomeAssistantError(f"Failed to set temperature: {err}") from err
+
+        self._pending_target_temperature = temperature
+        self._pending_target_deadline_mono = (
+            time.monotonic() + self._PENDING_TARGET_GRACE_S
+        )
+        self._attr_target_temperature = temperature
+        self.schedule_update_ha_state()
+
+        _LOGGER.info(
+            "Thermostat setpoint %.1f °C requested for zone %s (%s); "
+            "waiting for spa shadow reported state to match",
+            temperature,
+            zone_id,
+            self.entity_id,
+        )
+        _LOGGER.debug(
+            "Applied target temperature %.1f°C for zone %s (%s)",
+            temperature,
+            zone_id,
+            self.entity_id,
+        )
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode."""

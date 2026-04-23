@@ -9,7 +9,7 @@ import time
 from datetime import timedelta
 from typing import Any
 
-from aiohttp import ClientError
+from aiohttp import ClientError, ClientResponseError
 
 # Import from geckoIotClient
 from gecko_iot_client.models.zone_types import (
@@ -41,12 +41,15 @@ from .const import (
     CONF_ALERTS_POLL_INTERVAL,
     CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     CONF_CLOUD_REST_POLL_INTERVAL,
+    CONF_ENERGY_POLL_INTERVAL,
     DEFAULT_ALERTS_POLL_INTERVAL,
     DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
+    DEFAULT_ENERGY_POLL_INTERVAL,
     DOMAIN,
-    clamp_sensor_native_str,
+    sanitize_sensor_native_str,
 )
+from .energy_parse import premium_energy_poll_has_usable_values
 from .rest_alerts import build_alerts_snapshot
 from .shadow_metrics import (
     extract_extension_booleans,
@@ -147,6 +150,15 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_zone_shadow_refresh_mono: float | None = None
         self._account_id_resolve_attempted = False
 
+        # Premium energy data (populated by _async_poll_energy_if_due)
+        self._energy_data: dict[str, Any] = {}
+        self._last_energy_poll_monotonic: float | None = None
+        self._logged_energy_api_forbidden: bool = False
+        self._logged_energy_unparsed_shapes: bool = False
+
+        # Cache operation mode status for synchronous access by entities
+        self._cached_operation_mode_status: Any | None = None
+
     def register_zone_update_callback(self, callback):
         """Register a callback to be called when zone data updates."""
         self._zone_update_callbacks.append(callback)
@@ -201,6 +213,17 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return ""
         return str(entry.data.get("account_id", "")).strip()
 
+    def _get_community_api_client(self):
+        """Return the community-token API client (tiles, alerts, account resolution).
+
+        Premium REST uses :meth:`_get_premium_api_client` so a failing app token
+        refresh does not break basic cloud polling.
+        """
+        entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if not entry or not getattr(entry, "runtime_data", None):
+            return None
+        return getattr(entry.runtime_data, "api_client", None)
+
     async def _async_lazy_resolve_account_id(self) -> str:
         """Resolve and persist ``account_id`` when missing (retries after transient failures).
 
@@ -212,7 +235,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
         if not entry or not getattr(entry, "runtime_data", None):
             return ""
-        api = entry.runtime_data.api_client
+        api = self._get_community_api_client()
+        if not api:
+            return ""
         try:
             user_id = await api.async_get_user_id()
             user_data = await api.async_get_user_info(user_id)
@@ -290,7 +315,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
         if not entry or not getattr(entry, "runtime_data", None):
             return
-        api = entry.runtime_data.api_client
+        api = self._get_community_api_client()
+        if not api:
+            return
         rd = entry.runtime_data
         vessels: list[Any] | None = None
         try:
@@ -387,7 +414,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
         if not entry or not getattr(entry, "runtime_data", None):
             return
-        api = entry.runtime_data.api_client
+        api = self._get_community_api_client()
+        if not api:
+            return
         rd = entry.runtime_data
         messages_payload: Any | None = None
         actions_payload: Any | None = None
@@ -457,6 +486,179 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Latest merged REST alerts (counts + short previews)."""
         return dict(self._rest_alerts_snapshot)
 
+    def _has_premium_api(self) -> bool:
+        """Return True if the premium (app-token) API client is available."""
+        entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if not entry or not getattr(entry, "runtime_data", None):
+            return False
+        return entry.runtime_data.app_api_client is not None
+
+    def has_premium_energy_api(self) -> bool:
+        """Public alias for REST-backed energy sensors (availability when MQTT is down)."""
+        return self._has_premium_api()
+
+    def _get_premium_api_client(self):
+        """Return the premium (app-token) API client or None."""
+        entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if not entry or not getattr(entry, "runtime_data", None):
+            return None
+        return entry.runtime_data.app_api_client
+
+    async def _async_poll_energy_if_due(self) -> None:
+        """Poll premium energy endpoints if the app token is linked and interval elapsed."""
+        if not self._has_premium_api():
+            return
+
+        account_id = self._config_account_id()
+        if not account_id:
+            account_id = await self._async_lazy_resolve_account_id()
+        if not account_id:
+            return
+
+        opts = self._entry_options()
+        interval = int(
+            opts.get(CONF_ENERGY_POLL_INTERVAL, DEFAULT_ENERGY_POLL_INTERVAL)
+        )
+        if interval <= 0:
+            return
+
+        now = time.monotonic()
+        if (
+            self._last_energy_poll_monotonic is not None
+            and (now - self._last_energy_poll_monotonic) < interval
+        ):
+            return
+
+        entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if not entry or not getattr(entry, "runtime_data", None):
+            return
+        rd = entry.runtime_data
+        vid = str(self.vessel_id)
+        aid = str(account_id)
+
+        async with rd.energy_data_lock:
+            cached_mono = rd.energy_data_mono.get(vid)
+            if cached_mono is not None and (now - cached_mono) < interval:
+                cached = rd.energy_data_cache.get(vid)
+                if cached is not None:
+                    self._energy_data = cached
+                    self._last_energy_poll_monotonic = now
+                    return
+
+        api = self._get_premium_api_client()
+        if not api:
+            return
+
+        candidate_vessel_ids: list[str] = []
+        for candidate in (vid, str(self.monitor_id)):
+            if candidate and candidate not in candidate_vessel_ids:
+                candidate_vessel_ids.append(candidate)
+
+        energy: dict[str, Any] = {}
+        for key, fetcher in (
+            ("consumption", api.async_get_energy_consumption),
+            ("score", api.async_get_energy_score),
+            ("cost", api.async_get_energy_cost),
+        ):
+            energy[key] = None
+            last_err: Exception | None = None
+            for candidate_vid in candidate_vessel_ids:
+                try:
+                    energy[key] = await fetcher(aid, candidate_vid)
+                    last_err = None
+                    break
+                except ClientResponseError as err:
+                    last_err = err
+                    if err.status == 404:
+                        _LOGGER.debug(
+                            "Energy %s HTTP 404 for %s (vessel id %s); trying next id",
+                            key,
+                            self.vessel_name,
+                            candidate_vid,
+                        )
+                        continue
+                    if err.status == 403 and not self._logged_energy_api_forbidden:
+                        self._logged_energy_api_forbidden = True
+                        _LOGGER.warning(
+                            "Gecko premium energy API returned HTTP 403 for %s. "
+                            "Open **Settings → Devices & services → Gecko → Configure** "
+                            "and complete **Link energy data (premium)** with the Gecko "
+                            "mobile app login, then reload the integration. "
+                            "Community OAuth alone cannot read consumption, score, or cost.",
+                            self.vessel_name,
+                        )
+                    _LOGGER.debug(
+                        "Energy %s poll failed for %s: %s", key, self.vessel_name, err
+                    )
+                    break
+                except (ClientError, TimeoutError, OSError) as err:
+                    last_err = err
+                    _LOGGER.debug(
+                        "Energy %s poll failed for %s: %s", key, self.vessel_name, err
+                    )
+                    break
+            if energy[key] is None and last_err is not None:
+                _LOGGER.debug(
+                    "Energy %s: no data for %s after trying ids %s",
+                    key,
+                    self.vessel_name,
+                    candidate_vessel_ids,
+                )
+
+        prev: dict[str, Any] = dict(self._energy_data)
+        if not prev:
+            async with rd.energy_data_lock:
+                cached_prev = rd.energy_data_cache.get(vid)
+                if cached_prev:
+                    prev = dict(cached_prev)
+        for merge_key in ("consumption", "score", "cost"):
+            if energy.get(merge_key) is None and prev.get(merge_key) is not None:
+                energy[merge_key] = prev[merge_key]
+
+        any_success = premium_energy_poll_has_usable_values(energy)
+        if not any_success:
+            if not self._logged_energy_unparsed_shapes:
+                hints: list[str] = []
+                for key in ("consumption", "score", "cost"):
+                    raw = energy.get(key)
+                    if isinstance(raw, dict) and raw:
+                        keys = sorted(str(k) for k in raw.keys())
+                        hints.append(f"{key} keys={keys[:25]}")
+                    elif isinstance(raw, list) and raw:
+                        hints.append(f"{key} list[len={len(raw)}]")
+                if hints:
+                    self._logged_energy_unparsed_shapes = True
+                    _LOGGER.warning(
+                        "Gecko premium energy for %s: HTTP succeeded but no kWh/cost/score "
+                        "values could be parsed (%s). If sensors stay empty, capture one "
+                        "redacted JSON sample in a GitHub issue.",
+                        self.vessel_name,
+                        "; ".join(hints),
+                    )
+            _LOGGER.debug(
+                "Energy poll for %s: all premium endpoints returned no data; "
+                "not advancing poll interval or cache so the next cycle can retry",
+                self.vessel_name,
+            )
+            return
+
+        self._energy_data = energy
+        self._last_energy_poll_monotonic = now
+
+        async with rd.energy_data_lock:
+            rd.energy_data_cache[vid] = energy
+            rd.energy_data_mono[vid] = now
+
+        _LOGGER.debug(
+            "Energy data refreshed for %s: keys=%s",
+            self.vessel_name,
+            [k for k, v in energy.items() if v is not None],
+        )
+
+    def get_energy_data(self) -> dict[str, Any]:
+        """Return the latest energy data dict (consumption, score, cost)."""
+        return dict(self._energy_data)
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Gecko API."""
         try:
@@ -473,6 +675,12 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 await self._async_poll_alerts_if_due()
             except (ClientError, TimeoutError, OSError) as err:
                 _LOGGER.debug("Alerts poll failed for %s: %s", self.vessel_name, err)
+            try:
+                await self._async_poll_energy_if_due()
+            except Exception as err:
+                # Premium poll can raise token refresh / KeyError / OAuth errors that
+                # are not aiohttp ClientError; never fail the whole coordinator cycle.
+                _LOGGER.debug("Energy poll failed for %s: %s", self.vessel_name, err)
 
             if not connection or not connection.is_connected:
                 self._consecutive_failures += 1
@@ -508,6 +716,20 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             client = await self.get_gecko_client()
             self.sync_refresh_shadow_metrics(client)
+
+            # Cache operation mode status for synchronous access by entities
+            if client:
+                try:
+                    self._cached_operation_mode_status = client.operation_mode_status
+                except Exception as ex:
+                    _LOGGER.debug(
+                        "Could not fetch operation_mode_status for %s: %s",
+                        self.vessel_name,
+                        ex,
+                    )
+                    self._cached_operation_mode_status = None
+            else:
+                self._cached_operation_mode_status = None
 
             return {"status": "active", "vessel_id": self.vessel_id}
         except Exception as exception:
@@ -565,7 +787,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         merged_strings: dict[str, str] = dict(self._cloud_string_metrics)
         merged_strings.update(mqtt_strings)
         self._shadow_string_values = {
-            k: clamp_sensor_native_str(v) for k, v in merged_strings.items()
+            k: sanitize_sensor_native_str(v) for k, v in merged_strings.items()
         }
         new_string_paths = (
             set(self._shadow_string_values) - self._registered_string_paths
@@ -878,6 +1100,10 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return gecko_client.operation_mode_status
         return None
 
+    def get_cached_operation_mode_status(self):
+        """Get cached operation mode status (synchronous, updated during coordinator refresh)."""
+        return self._cached_operation_mode_status
+
     def update_spa_state(self, state_data: dict[str, Any]) -> None:
         """Update spa state data and trigger coordinator update."""
         self._spa_state = state_data
@@ -956,6 +1182,8 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._cloud_string_metrics.clear()
         self._cloud_bool_metrics.clear()
         self._last_cloud_poll_monotonic = None
+        self._energy_data.clear()
+        self._last_energy_poll_monotonic = None
         self._rest_alerts_snapshot = {
             "total": 0,
             "messages": [],

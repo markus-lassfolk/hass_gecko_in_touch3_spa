@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 from custom_components.gecko import shadow_metrics
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
-from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import UnitOfTemperature
 
 
@@ -193,6 +193,16 @@ def test_apply_numeric_shadow_sensor_hints_sets_attrs() -> None:
     ent = SimpleNamespace()
     shadow_metrics.apply_numeric_shadow_sensor_hints(ent, "zones.z.phReading")
     assert ent._attr_device_class == SensorDeviceClass.PH
+    assert ent._attr_state_class == SensorStateClass.MEASUREMENT
+    assert ent._attr_suggested_display_precision == 2
+
+
+def test_apply_numeric_shadow_sensor_hints_lsi_gets_measurement_state_class() -> None:
+    """LSI has no device_class but must still be a statistical numeric (line graph)."""
+    ent = SimpleNamespace()
+    shadow_metrics.apply_numeric_shadow_sensor_hints(ent, "cloud.rest.readings.lsi")
+    assert ent._attr_device_class is None
+    assert ent._attr_state_class == SensorStateClass.MEASUREMENT
     assert ent._attr_suggested_display_precision == 2
 
 
@@ -248,7 +258,7 @@ def test_binary_extension_enabled_by_default_snake_case() -> None:
 
 
 def test_string_extension_enabled_by_default() -> None:
-    assert shadow_metrics.string_extension_enabled_by_default(
+    assert not shadow_metrics.string_extension_enabled_by_default(
         "cloud.rest.status.waterStatus"
     )
     assert shadow_metrics.string_extension_enabled_by_default("zone.status_text")
@@ -333,7 +343,7 @@ def test_infer_binary_sensor_heat_cold_lock() -> None:
 
 
 def test_string_extension_cloud_rest_mode_token() -> None:
-    assert shadow_metrics.string_extension_enabled_by_default(
+    assert not shadow_metrics.string_extension_enabled_by_default(
         "cloud.rest.status.mode_tile"
     )
 
@@ -362,6 +372,7 @@ def test_metric_path_to_entity_slug_empty_path() -> None:
         ("features.extra.n", "Extra N"),
         ("cloud.rest.readings.ph", "pH"),
         ("cloud.rest.readings.waterTemp", "Water Temp"),
+        ("cloud.rest.summary.ph", "Tile copy pH"),
         ("cloud.rest.readings.totalAlkalinity", "Total Alkalinity"),
         ("cloud.rest.readings.lsi", "LSI"),
         ("cloud.rest.readings.wifiRssi", "WiFi RSSI"),
@@ -385,9 +396,17 @@ def test_humanize_shadow_path(path: str, expected: str) -> None:
         ("cloud.rest.readings.ph", True),
         ("cloud.rest.readings.orp", True),
         ("cloud.rest.readings.waterTemp", True),
-        ("cloud.rest.readings.totalAlkalinity", False),
+        ("cloud.rest.readings.totalAlkalinity", True),
         ("cloud.rest.readings.freeChlorine", True),
-        ("cloud.rest.readings.lsi", False),
+        ("cloud.rest.readings.lsi", True),
+        ("cloud.rest.readings.calciumHardness", True),
+        ("cloud.rest.readings.cyanuricAcid", True),
+        ("cloud.rest.readings.totalChlorine", True),
+        ("cloud.rest.readings.adjustedTotalAlkalinity", True),
+        ("cloud.rest.readings.totalHardness", True),
+        ("cloud.rest.readings.phStc20", True),
+        ("cloud.rest.readings.tds", True),
+        ("cloud.rest.readings.salinity", True),
         ("cloud.rest.readings.wifiRssi", False),
         ("cloud.rest.summary.ph", False),
         ("cloud.rest.summary.orp_mv", False),
@@ -402,12 +421,24 @@ def test_chemistry_metric_enabled_readings(path: str, expected: bool) -> None:
 @pytest.mark.parametrize(
     ("path", "expected"),
     [
-        ("cloud.rest.actions.lower_ph", True),
-        ("cloud.rest.actions.raise_orp_chlorine", True),
-        ("cloud.rest.actions.lower_ph.instructions", True),
-        ("cloud.rest.disc.text", True),
-        ("cloud.rest.disc.waterStatusColor", True),
-        ("cloud.rest.disc.lastUpdatedText", True),
+        ("cloud.rest.actions.lower_ph", False),
+        ("cloud.rest.actions.raise_orp_chlorine", False),
+        ("cloud.rest.actions.lower_ph.instructions", False),
+        ("cloud.rest.actions.raise_orp_chlorine.instructions", False),
+        ("cloud.rest.disc.text", False),
+        ("cloud.rest.disc.waterStatusColor", False),
+        ("cloud.rest.disc.lastUpdatedText", False),
+        ("cloud.rest.readings.waterTemp.status", True),
+        ("cloud.rest.readings.waterTemp.title", False),
+        ("cloud.rest.readings.orp.status", True),
+        ("cloud.rest.readings.freechlorine.status", True),
+        ("cloud.rest.readings.wifiRssi.status", False),
+        ("cloud.rest.readings.totalChlorine.status", True),
+        ("cloud.rest.readings.adjustedTotalAlkalinity.status", True),
+        ("cloud.rest.readings.calciumHardness.status", True),
+        ("cloud.rest.readings.lsi.status", True),
+        ("cloud.rest.readings.phStc20.status", True),
+        ("cloud.rest.readings.ph.status", True),
     ],
 )
 def test_string_enabled_by_default_actions(path: str, expected: bool) -> None:
@@ -423,6 +454,14 @@ def test_string_enabled_by_default_actions(path: str, expected: bool) -> None:
         ("cloud.rest.readings.totalAlkalinity", None, "ppm"),
         ("cloud.rest.readings.freeChlorine", None, "ppm"),
         ("cloud.rest.readings.lsi", None, None),
+        ("cloud.rest.readings.wifiRssi", "signal_strength", "dB"),
+        ("cloud.rest.readings.phSTC20", "ph", None),
+        ("cloud.rest.readings.calciumHardness", None, "ppm"),
+        ("cloud.rest.readings.adjustedTotalAlkalinity", None, "ppm"),
+        ("cloud.rest.readings.totalChlorine", None, "ppm"),
+        ("cloud.rest.readings.totalHardness", None, "ppm"),
+        ("cloud.rest.readings.cyanuricAcid", None, "ppm"),
+        ("cloud.rest.disc_elements.temp_c", "temperature", "°C"),
     ],
 )
 def test_infer_sensor_metadata_readings(path, dc, unit) -> None:
@@ -432,3 +471,16 @@ def test_infer_sensor_metadata_readings(path, dc, unit) -> None:
     else:
         assert result_dc is not None and result_dc.value == dc
     assert result_unit == unit
+
+
+def test_infer_sensor_metadata_rssi_and_rf_strength() -> None:
+    """WiFi RSSI and RF signal strength paths get SIGNAL_STRENGTH device class."""
+    dc_rssi, u_rssi = shadow_metrics.infer_sensor_metadata(
+        "cloud.rest.readings.wifiRssi"
+    )
+    assert dc_rssi is not None and dc_rssi.value == "signal_strength"
+    assert u_rssi == "dB"
+
+    dc_rf, u_rf = shadow_metrics.infer_sensor_metadata("features.rf.strength_")
+    assert dc_rf is not None and dc_rf.value == "signal_strength"
+    assert u_rf == "dB"
