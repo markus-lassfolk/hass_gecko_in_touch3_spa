@@ -138,7 +138,7 @@ class OAuthGeckoApi(GeckoSpaApiMixin, GeckoApiClient):
     async def async_get_access_token(self) -> str:
         """Return a valid access token for the Gecko API."""
         await self._oauth_session.async_ensure_token_valid()
-        return self._oauth_session.token["access_token"]
+        return self._oauth_session.token.get("access_token", "")
 
 
 class ConfigFlowGeckoApi(GeckoSpaApiMixin, GeckoApiClient):

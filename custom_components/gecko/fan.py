@@ -146,9 +146,6 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
         self._attr_percentage = derive_flow_percentage(self._zone)
         self._attr_speed = derive_flow_speed_mode(self._zone)
 
-        if not self._zone.active:
-            self._attr_is_on = False
-
     @callback
     def _handle_coordinator_update(self) -> None:
         _LOGGER.debug(
