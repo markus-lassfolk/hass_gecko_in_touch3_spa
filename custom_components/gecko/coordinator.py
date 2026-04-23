@@ -604,6 +604,16 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     candidate_vessel_ids,
                 )
 
+        prev: dict[str, Any] = dict(self._energy_data)
+        if not prev:
+            async with rd.energy_data_lock:
+                cached_prev = rd.energy_data_cache.get(vid)
+                if cached_prev:
+                    prev = dict(cached_prev)
+        for merge_key in ("consumption", "score", "cost"):
+            if energy.get(merge_key) is None and prev.get(merge_key) is not None:
+                energy[merge_key] = prev[merge_key]
+
         any_success = premium_energy_poll_has_usable_values(energy)
         if not any_success:
             _LOGGER.debug(

@@ -926,22 +926,21 @@ def string_extension_enabled_by_default(path: str) -> bool:
 
     ``cloud.rest.readings.<key>.status`` is enabled when ``<key>`` is in
     ``_CLOUD_REST_READINGS_ENABLED_BY_DEFAULT`` (same set as numeric readings).
-    Other ``cloud.rest.*`` strings containing common user-facing tokens like
-    "status", "message", "text", "mode", etc. are also enabled by default.
+    All other ``cloud.rest.*`` string paths stay disabled by default (diagnostics).
     """
     if _is_connectivity_shadow_metric_path(path) or _is_rf_diagnostic_path(path):
         return False
     lower = path.lower()
-    spaced = re.sub(r"[._\-]+", " ", lower)
     if lower.startswith("cloud.rest."):
         if _cloud_rest_reading_status_enabled_by_default(path):
             return True
         parts = path.split(".")
-        if len(parts) == 5 and [p.lower() for p in parts[:3]] == ["cloud", "rest", "readings"]:
+        if len(parts) == 5 and [p.lower() for p in parts[:3]] == [
+            "cloud",
+            "rest",
+            "readings",
+        ]:
             return False
-        return bool(
-            re.search(
-                r"\b(water|status|message|text|mode|tile|summary|actions)\b", spaced
-            )
-        )
+        return False
+    spaced = re.sub(r"[._\-]+", " ", lower)
     return bool(re.search(r"\b(alarm|message|status|text|reason|fault)\b", spaced))

@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 from custom_components.gecko.energy_parse import (
     _coerce_energy_consumption_kwh,
     _first_valid_float,
-    premium_energy_poll_has_usable_values,
     _safe_float,
+    premium_energy_poll_has_usable_values,
 )
 from custom_components.gecko.sensor import (
     GeckoEnergyConsumptionSensor,
@@ -54,8 +54,14 @@ def test_coerce_energy_consumption_unwraps_data_and_extra_keys() -> None:
 
 
 def test_coerce_energy_consumption_nested_and_kwh_key_scan() -> None:
-    assert _coerce_energy_consumption_kwh({"data": {"values": {"cumulativeKwh": 7.0}}}) == 7.0
-    assert _coerce_energy_consumption_kwh({"spaMetrics": {"lifetimeEnergyKwh": 99.1}}) == 99.1
+    assert (
+        _coerce_energy_consumption_kwh({"data": {"values": {"cumulativeKwh": 7.0}}})
+        == 7.0
+    )
+    assert (
+        _coerce_energy_consumption_kwh({"spaMetrics": {"lifetimeEnergyKwh": 99.1}})
+        == 99.1
+    )
     assert _coerce_energy_consumption_kwh("12.25") == 12.25
 
 

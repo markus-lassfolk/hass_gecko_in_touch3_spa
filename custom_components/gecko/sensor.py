@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any, Literal
+from typing import Literal
 
 from gecko_iot_client.models.zone_types import ZoneType
 from homeassistant.components.sensor import (

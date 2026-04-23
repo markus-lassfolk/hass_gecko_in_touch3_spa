@@ -47,6 +47,9 @@ from .const import (
     OAUTH2_CLIENT_ID,
     OAUTH2_TOKEN,
 )
+from .energy_entity_registry import (
+    reenable_integration_disabled_energy_cost_score_entities,
+)
 from .oauth_implementation import GeckoPKCEOAuth2Implementation
 
 _LOGGER = logging.getLogger(__name__)
@@ -450,6 +453,13 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                     self.hass.config_entries.async_update_entry(
                         self.config_entry, data=data
                     )
+                    updated = self.hass.config_entries.async_get_entry(
+                        self.config_entry.entry_id
+                    )
+                    if updated is not None:
+                        reenable_integration_disabled_energy_cost_score_entities(
+                            self.hass, updated
+                        )
                     await self.hass.config_entries.async_reload(
                         self.config_entry.entry_id
                     )

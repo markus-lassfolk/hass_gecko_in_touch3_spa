@@ -60,6 +60,7 @@ def _log_gecko_configuration_load_failed(
         hint,
     )
 
+
 # Global key for the connection manager
 GECKO_CONNECTION_MANAGER_KEY: HassKey[GeckoConnectionManager] = HassKey(
     f"{DOMAIN}_connection_manager"

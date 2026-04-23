@@ -59,7 +59,9 @@ def test_gecko_climate_rebinds_zone_when_coordinator_replaces_models(mock_hass):
 
 
 @pytest.mark.asyncio
-async def test_async_set_temperature_publishes_shadow_desired_like_number_entities() -> None:
+async def test_async_set_temperature_publishes_shadow_desired_like_number_entities() -> (
+    None
+):
     """Thermostat writes use transporter + executor (same strategy as shadow setpoint numbers)."""
     hass_stub = MagicMock()
     hass_stub.async_add_executor_job = AsyncMock(return_value=None)

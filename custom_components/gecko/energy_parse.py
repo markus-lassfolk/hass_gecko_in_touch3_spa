@@ -74,7 +74,7 @@ def _float_from_kwh_named_keys(obj: Any, depth: int = 0) -> float | None:
         if "kwh" in key_l or key_l.endswith("kilowatthour"):
             if isinstance(val, bool):
                 continue
-            if isinstance(val, (int, float)):
+            if isinstance(val, int | float):
                 return float(val)
             if isinstance(val, str):
                 try:

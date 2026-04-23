@@ -363,6 +363,41 @@ async def test_options_flow_link_energy_rejects_invalid_url(
     assert result["errors"]["callback_url"] == "invalid_callback_url"
 
 
+async def test_options_flow_link_energy_reenables_integration_disabled_energy_entities(
+    hass: HomeAssistant,
+) -> None:
+    """After a successful link, cost/score entities disabled-by-integration are re-enabled."""
+    entry = _mock_config_entry()
+    flow = _create_options_flow(hass, entry)
+
+    token = {"access_token": "app", "refresh_token": "r"}
+    with (
+        patch.object(
+            flow,
+            "_async_exchange_code",
+            new_callable=AsyncMock,
+            return_value=token,
+        ),
+        patch(
+            "custom_components.gecko.config_flow.reenable_integration_disabled_energy_cost_score_entities",
+        ) as re_enable,
+        patch.object(hass.config_entries, "async_reload", new_callable=AsyncMock),
+    ):
+        await flow.async_step_link_energy(user_input=None)
+        result = await flow.async_step_link_energy(
+            user_input={"callback_url": "?code=exchanged&state=s"}
+        )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "energy_linked"
+    re_enable.assert_called_once()
+    called_hass, called_entry = re_enable.call_args[0]
+    assert called_hass is hass
+    stored = called_entry.data.get("app_token") or {}
+    assert stored.get("access_token") == "app"
+    assert "expires_at" in stored
+
+
 async def test_options_flow_unlink_energy_aborts_when_not_linked(
     hass: HomeAssistant,
 ) -> None:

@@ -82,7 +82,10 @@ def get_flow_speed_step_values(zone: Any) -> tuple[float, ...]:
     # Build the configured speed ladder and drop zero/off values.
     values: list[float] = []
     current = minimum
-    for _ in range(16):
+    safety = 0
+    # No fixed step cap: large min/max/step ranges must map through the full ladder.
+    while safety < 100_000:
+        safety += 1
         if current > maximum + (step / 2):
             break
         if current > 0:

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from custom_components.gecko.telemetry import (
     derive_flow_percentage,
     get_flow_speed_mode_for_percentage,
+    get_flow_speed_step_values,
     get_supported_flow_speed_modes,
     zone_supports_speed_control,
 )
@@ -29,6 +30,18 @@ def test_zone_supports_speed_control_true_with_speed_ladder() -> None:
         speed_config={"minimum": 1.0, "maximum": 3.0, "stepIncrement": 1.0},
     )
     assert zone_supports_speed_control(zone)
+
+
+def test_flow_speed_step_values_full_ladder_not_capped_at_16() -> None:
+    """Large min/max/step ranges must not truncate the ladder (PR review)."""
+    zone = SimpleNamespace(
+        id="pwide",
+        speed_config={"minimum": 1.0, "maximum": 100.0, "stepIncrement": 1.0},
+    )
+    steps = get_flow_speed_step_values(zone)
+    assert len(steps) == 100
+    assert steps[0] == 1.0
+    assert steps[-1] == 100.0
 
 
 def test_three_mode_percentage_round_trips_with_derive_flow_percentage() -> None:
