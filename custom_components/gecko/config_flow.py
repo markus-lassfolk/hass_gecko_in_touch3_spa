@@ -504,6 +504,8 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                     data_schema=schema,
                     errors={"base": "must_confirm_unlink"},
                 )
+            if not self.config_entry.data.get("app_token"):
+                return self.async_abort(reason="energy_not_linked")
             data = {k: v for k, v in self.config_entry.data.items() if k != "app_token"}
             self.hass.config_entries.async_update_entry(self.config_entry, data=data)
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)

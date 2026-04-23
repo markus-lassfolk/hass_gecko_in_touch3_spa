@@ -528,7 +528,7 @@ class GeckoEnergyConsumptionSensor(
     def available(self) -> bool:
         """REST energy consumption stays available when MQTT transport is disconnected."""
         if self.coordinator.has_premium_energy_api():
-            return True
+            return self._attr_native_value is not None
         return super().available
 
     @callback
@@ -606,7 +606,7 @@ class GeckoEnergyCostSensor(
     def available(self) -> bool:
         """REST energy cost stays available when MQTT transport is disconnected."""
         if self.coordinator.has_premium_energy_api():
-            return True
+            return self._attr_native_value is not None
         return super().available
 
     @callback
@@ -681,7 +681,7 @@ class GeckoEnergyScoreSensor(
     def available(self) -> bool:
         """REST energy score stays available when MQTT transport is disconnected."""
         if self.coordinator.has_premium_energy_api():
-            return True
+            return self._attr_native_value is not None
         return super().available
 
     @callback
