@@ -248,7 +248,7 @@ def test_binary_extension_enabled_by_default_snake_case() -> None:
 
 
 def test_string_extension_enabled_by_default() -> None:
-    assert shadow_metrics.string_extension_enabled_by_default(
+    assert not shadow_metrics.string_extension_enabled_by_default(
         "cloud.rest.status.waterStatus"
     )
     assert shadow_metrics.string_extension_enabled_by_default("zone.status_text")
@@ -333,7 +333,7 @@ def test_infer_binary_sensor_heat_cold_lock() -> None:
 
 
 def test_string_extension_cloud_rest_mode_token() -> None:
-    assert shadow_metrics.string_extension_enabled_by_default(
+    assert not shadow_metrics.string_extension_enabled_by_default(
         "cloud.rest.status.mode_tile"
     )
 
@@ -362,6 +362,7 @@ def test_metric_path_to_entity_slug_empty_path() -> None:
         ("features.extra.n", "Extra N"),
         ("cloud.rest.readings.ph", "pH"),
         ("cloud.rest.readings.waterTemp", "Water Temp"),
+        ("cloud.rest.summary.ph", "Tile copy pH"),
         ("cloud.rest.readings.totalAlkalinity", "Total Alkalinity"),
         ("cloud.rest.readings.lsi", "LSI"),
         ("cloud.rest.readings.wifiRssi", "WiFi RSSI"),
@@ -385,9 +386,17 @@ def test_humanize_shadow_path(path: str, expected: str) -> None:
         ("cloud.rest.readings.ph", True),
         ("cloud.rest.readings.orp", True),
         ("cloud.rest.readings.waterTemp", True),
-        ("cloud.rest.readings.totalAlkalinity", False),
+        ("cloud.rest.readings.totalAlkalinity", True),
         ("cloud.rest.readings.freeChlorine", True),
-        ("cloud.rest.readings.lsi", False),
+        ("cloud.rest.readings.lsi", True),
+        ("cloud.rest.readings.calciumHardness", True),
+        ("cloud.rest.readings.cyanuricAcid", True),
+        ("cloud.rest.readings.totalChlorine", True),
+        ("cloud.rest.readings.adjustedTotalAlkalinity", True),
+        ("cloud.rest.readings.totalHardness", True),
+        ("cloud.rest.readings.phStc20", True),
+        ("cloud.rest.readings.tds", True),
+        ("cloud.rest.readings.salinity", True),
         ("cloud.rest.readings.wifiRssi", False),
         ("cloud.rest.summary.ph", False),
         ("cloud.rest.summary.orp_mv", False),
@@ -402,12 +411,24 @@ def test_chemistry_metric_enabled_readings(path: str, expected: bool) -> None:
 @pytest.mark.parametrize(
     ("path", "expected"),
     [
-        ("cloud.rest.actions.lower_ph", True),
-        ("cloud.rest.actions.raise_orp_chlorine", True),
-        ("cloud.rest.actions.lower_ph.instructions", True),
-        ("cloud.rest.disc.text", True),
-        ("cloud.rest.disc.waterStatusColor", True),
-        ("cloud.rest.disc.lastUpdatedText", True),
+        ("cloud.rest.actions.lower_ph", False),
+        ("cloud.rest.actions.raise_orp_chlorine", False),
+        ("cloud.rest.actions.lower_ph.instructions", False),
+        ("cloud.rest.actions.raise_orp_chlorine.instructions", False),
+        ("cloud.rest.disc.text", False),
+        ("cloud.rest.disc.waterStatusColor", False),
+        ("cloud.rest.disc.lastUpdatedText", False),
+        ("cloud.rest.readings.waterTemp.status", True),
+        ("cloud.rest.readings.waterTemp.title", False),
+        ("cloud.rest.readings.orp.status", True),
+        ("cloud.rest.readings.freechlorine.status", True),
+        ("cloud.rest.readings.wifiRssi.status", False),
+        ("cloud.rest.readings.totalChlorine.status", True),
+        ("cloud.rest.readings.adjustedTotalAlkalinity.status", True),
+        ("cloud.rest.readings.calciumHardness.status", True),
+        ("cloud.rest.readings.lsi.status", True),
+        ("cloud.rest.readings.phStc20.status", True),
+        ("cloud.rest.readings.ph.status", True),
     ],
 )
 def test_string_enabled_by_default_actions(path: str, expected: bool) -> None:

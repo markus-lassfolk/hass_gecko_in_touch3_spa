@@ -5,6 +5,27 @@ numeric, string, and shallow boolean shapes used for dashboard tiles while
 avoiding identifiers where possible. Keys are written under ``cloud.rest.*``
 so they merge cleanly with MQTT shadow metrics (shadow wins on path
 collision).
+
+**Path layout (why names look similar)**
+
+* ``cloud.rest.readings.<key>`` — Values from the API **readings** object
+  (``readings`` / ``monitorReadings`` / …). This is the structured “water lab”
+  list: one sensor per ``<key>`` (``ph``, ``waterTemp``, ``totalAlkalinity``, …).
+  **Total** vs **free** vs **adjusted** prefixes come from the vendor field names
+  (e.g. total alkalinity vs adjusted total alkalinity are different tests).
+
+* ``cloud.rest.summary.ph`` / ``cloud.rest.summary.orp_mv`` — **Duplicate**
+  pH/ORP numbers scraped from the **dashboard disc tile** (``phStatus`` /
+  ``orpStatus``). Same chemistry as readings when both exist; the integration
+  prefers **readings** for defaults and keeps summary paths for diagnostics /
+  offline tile parity.
+
+* ``cloud.rest.disc_elements.*`` / ``cloud.rest.disc.*`` / ``cloud.rest.status.*`` —
+  Short strings and flags from the app’s **status / disc** tiles (headline text,
+  colours, modes), not the canonical readings table.
+
+* ``cloud.rest.actions.*`` — Suggested maintenance **actions** (titles and
+  instruction text), separate from live sensor readings.
 """
 
 from __future__ import annotations

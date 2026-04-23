@@ -394,20 +394,47 @@ _KNOWN_ABBREVIATIONS: dict[str, str] = {
     "wifi": "WiFi",
 }
 
-# ``cloud.rest.readings.*`` chemistry leaves that stay in Diagnostics until enabled.
-# Primary dashboard chemistry stays on: pH/ORP (via path segments), water temp,
-# free/total chlorine; see ``chemistry_metric_enabled_by_default``.
-_CLOUD_REST_READINGS_OFF_BY_DEFAULT = frozenset(
+# REST ``readings.<key>`` numeric sensors enabled by default (water quality dashboard).
+# Keys are lowercased API reading ids (camelCase in JSON → lower here). Excludes
+# ``wifiRssi`` (connectivity), tile/action/disc strings, and ``summary.*`` duplicates.
+_CLOUD_REST_READINGS_ENABLED_BY_DEFAULT = frozenset(
     {
-        "adjustedtotalalkalinity",
-        "calciumhardness",
-        "cyanuricacid",
+        # Core sanitizer / temp
+        "ph",
+        "orp",
+        "watertemp",
+        "freechlorine",
+        "totalchlorine",
+        "freebromine",
+        "totalbromine",
+        # Balance / indices
         "lsi",
         "phstc20",
+        # Alkalinity / hardness / stabilizer
         "totalalkalinity",
+        "adjustedtotalalkalinity",
         "totalhardness",
+        "calciumhardness",
+        "cyanuricacid",
+        # Other common health-style readings (omit keys that only duplicate ``summary.*``)
+        "tds",
+        "salinity",
+        "turbidity",
+        "conductivity",
     }
 )
+
+
+def _cloud_rest_reading_status_enabled_by_default(path: str) -> bool:
+    """True for ``cloud.rest.readings.<key>.status`` when ``<key>`` is a primary reading."""
+    parts = path.split(".")
+    if len(parts) != 5:
+        return False
+    if [p.lower() for p in parts[:3]] != ["cloud", "rest", "readings"]:
+        return False
+    if parts[4].lower() != "status":
+        return False
+    return parts[3].lower() in _CLOUD_REST_READINGS_ENABLED_BY_DEFAULT
 
 _AMBIGUOUS_LEAVES = frozenset(
     {
@@ -442,6 +469,8 @@ _CONTEXT_ALIASES: dict[str, str] = {
     "cloud": "",
     "rest": "",
     "readings": "",
+    # ``summary.*`` is pH/ORP mirrored from the app disc tile (see ``cloud_tiles``).
+    "summary": "Tile copy",
     "actions": "Action",
     "disc": "Status",
     # REST vessel list ``status.discElements`` / ``disc_elements`` (app dashboard tile).
@@ -757,7 +786,14 @@ def apply_numeric_shadow_sensor_hints(entity: Any, path: str) -> None:
 
 
 def chemistry_metric_enabled_by_default(path: str) -> bool:
-    """Whether a shadow path is likely water chemistry and safe to enable by default."""
+    """Whether a shadow path is likely water chemistry and safe to enable by default.
+
+    MQTT / shadow extension paths use heuristics (pH/ORP tokens, chemistry words).
+
+    ``cloud.rest.readings.<key>`` numerics use an allowlist of water-quality keys;
+    every other ``cloud.rest.*`` path is treated as non-primary here. ``summary.*``
+    stays off (tile duplicate of pH/ORP).
+    """
     lower = path.lower()
     if shadow_extension_diagnostic_disables_registry_default(path):
         return False
@@ -773,10 +809,16 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
         return False
     if lower.endswith("disc_elements.temp_c"):
         return False
-    if lower.startswith("cloud.rest.readings."):
-        reading_key = path.split(".")[-1].lower()
-        if reading_key in _CLOUD_REST_READINGS_OFF_BY_DEFAULT:
-            return False
+
+    parts = path.split(".")
+    if (
+        len(parts) == 4
+        and [p.lower() for p in parts[:3]] == ["cloud", "rest", "readings"]
+    ):
+        return parts[3].lower() in _CLOUD_REST_READINGS_ENABLED_BY_DEFAULT
+
+    if lower.startswith("cloud.rest."):
+        return False
 
     segs = _path_segments(path)
     if any(_segment_is_ph(s) for s in segs):
@@ -809,23 +851,6 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
     )
     if re.search(_chem_word_re, lower):
         return True
-    if lower.startswith("cloud.rest.") and any(
-        tail in lower
-        for tail in (
-            ".ph",
-            ".orp",
-            "orp_mv",
-        )
-    ):
-        return True
-    if lower.startswith("cloud.rest.readings."):
-        reading_key = path.split(".")[-1].lower()
-        if reading_key in (
-            "watertemp",
-            "freechlorine",
-            "totalchlorine",
-        ):
-            return True
     return False
 
 
@@ -894,23 +919,16 @@ def binary_extension_enabled_by_default(path: str) -> bool:
 
 
 def string_extension_enabled_by_default(path: str) -> bool:
-    """Enable a subset of REST / status strings by default."""
+    """Enable a subset of REST / status strings by default.
+
+    ``cloud.rest.readings.<key>.status`` is enabled when ``<key>`` is in
+    ``_CLOUD_REST_READINGS_ENABLED_BY_DEFAULT`` (same set as numeric readings).
+    Other ``cloud.rest.*`` strings stay Diagnostics + disabled by default.
+    """
     if _is_connectivity_shadow_metric_path(path) or _is_rf_diagnostic_path(path):
         return False
     lower = path.lower()
     spaced = re.sub(r"[._\-]+", " ", lower)
     if lower.startswith("cloud.rest."):
-        return any(
-            tok in lower
-            for tok in (
-                "water",
-                "status",
-                "message",
-                "text",
-                "mode",
-                "tile",
-                "summary",
-                "actions.",
-            )
-        )
+        return _cloud_rest_reading_status_enabled_by_default(path)
     return bool(re.search(r"\b(alarm|message|status|text|reason|fault)\b", spaced))

@@ -2,8 +2,7 @@
   "domain": "gecko",
   "name": "Gecko Full Community Integration for Home Assistant",
   "codeowners": [
-    "@markus-lassfolk",
-    "@geckoal"
+    "@markus-lassfolk"
   ],
   "config_flow": true,
   "dependencies": [],

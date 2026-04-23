@@ -16,6 +16,8 @@
 
 This repository ([**markus-lassfolk/hass_gecko_in_touch3_spa**](https://github.com/markus-lassfolk/hass_gecko_in_touch3_spa)) extends the upstream [**geckoal/ha-gecko-integration**](https://github.com/geckoal/ha-gecko-integration) line and the [**gecko-iot-client**](https://github.com/geckoal/gecko-iot-client) library. It keeps the Home Assistant integration **`domain`: `gecko`** (folder `custom_components/gecko/`) so OAuth, devices, and services stay compatible with existing installs — the manifest **display name** is **Gecko Full Community Integration for Home Assistant**.
 
+**Pull requests:** open them **only** against [**markus-lassfolk/hass_gecko_in_touch3_spa**](https://github.com/markus-lassfolk/hass_gecko_in_touch3_spa), not against `geckoal/ha-gecko-integration`, unless you intentionally contribute upstream. See [**CONTRIBUTING.md**](CONTRIBUTING.md).
+
 ---
 
 ## Highlights
@@ -391,7 +393,7 @@ Call **`gecko.dump_shadow_snapshot`** with defaults for a **community-safe** exp
 ## Credits
 
 - **[gecko-iot-client](https://github.com/geckoal/gecko-iot-client)** — MQTT / shadow client
-- **Upstream integration:** [geckoal/ha-gecko-integration](https://github.com/geckoal/ha-gecko-integration)
+- **Upstream reference (do not use as PR target for this fork):** [geckoal/ha-gecko-integration](https://github.com/geckoal/ha-gecko-integration)
 - **Trademarks:** Gecko and related marks belong to **Gecko Alliance**; see [NOTICE](NOTICE)
 
 ---
