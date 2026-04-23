@@ -19,7 +19,7 @@ from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 
-from .api import AppTokenSession, OAuthGeckoApi
+from .api import OAuthGeckoApi
 from .connection_manager import async_get_connection_manager
 from .const import (
     CONF_ALERTS_POLL_INTERVAL,
@@ -29,7 +29,6 @@ from .const import (
     DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
     DOMAIN,
-    OAUTH2_APP_CLIENT_ID,
     OAUTH2_AUTHORIZE,
     OAUTH2_CLIENT_ID,
     OAUTH2_TOKEN,
@@ -197,7 +196,6 @@ class GeckoRuntimeData:
 
     api_client: OAuthGeckoApi
     coordinators: list[GeckoVesselCoordinator]
-    premium_api_client: OAuthGeckoApi | None = field(default=None, repr=False)
     rest_vessels_response_cache: list[Any] | None = field(
         default=None, repr=False, compare=False
     )
@@ -342,23 +340,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Create OAuth-based Gecko API client (community token — basic access)
     api_client = OAuthGeckoApi(hass, session)
 
-    # If the user linked an app-client token, create a premium API client
-    premium_api_client: OAuthGeckoApi | None = None
-    if entry.data.get("app_token"):
-        app_impl = GeckoPKCEOAuth2Implementation(
-            hass,
-            DOMAIN,
-            client_id=OAUTH2_APP_CLIENT_ID,
-            authorize_url=OAUTH2_AUTHORIZE,
-            token_url=OAUTH2_TOKEN,
-        )
-        app_session = AppTokenSession(hass, entry, app_impl)
-        premium_api_client = OAuthGeckoApi(hass, app_session)
-        _LOGGER.info(
-            "Gecko setup: premium (energy) API client enabled for entry %s",
-            entry.entry_id,
-        )
-
     # Create one coordinator per vessel following Home Assistant best practices
     vessels = entry.data.get("vessels", [])
     vessels_count = len(vessels)
@@ -384,7 +365,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.runtime_data = GeckoRuntimeData(
         api_client=api_client,
         coordinators=coordinators,
-        premium_api_client=premium_api_client,
     )
 
     try:

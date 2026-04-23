@@ -21,6 +21,14 @@ from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers import config_validation as cv
 from yarl import URL
 
+# Try importing OAuth2TokenRequestError for HA 2026+
+try:
+    from homeassistant.helpers.config_entry_oauth2_flow import (
+        OAuth2TokenRequestError,
+    )
+except ImportError:
+    OAuth2TokenRequestError = None
+
 from .const import (
     CONF_ALERTS_POLL_INTERVAL,
     CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
@@ -346,6 +354,12 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
             authorize_url=OAUTH2_AUTHORIZE,
             token_url=OAUTH2_TOKEN,
         )
+        
+        # Build exception tuple based on what's available
+        exceptions = (ClientResponseError, ClientError)
+        if OAuth2TokenRequestError is not None:
+            exceptions = (ClientResponseError, ClientError, OAuth2TokenRequestError)
+        
         try:
             return await impl._token_request(  # noqa: SLF001
                 {
@@ -356,7 +370,7 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                     "client_id": OAUTH2_APP_CLIENT_ID,
                 }
             )
-        except (ClientResponseError, ClientError) as err:
+        except exceptions as err:
             _LOGGER.error("App-client token exchange failed: %s", err)
             return None
 
