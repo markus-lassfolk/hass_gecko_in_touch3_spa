@@ -2,13 +2,16 @@
 
 from unittest.mock import MagicMock
 
+from custom_components.gecko.energy_parse import (
+    _coerce_energy_consumption_kwh,
+    _first_valid_float,
+    premium_energy_poll_has_usable_values,
+    _safe_float,
+)
 from custom_components.gecko.sensor import (
     GeckoEnergyConsumptionSensor,
     GeckoEnergyCostSensor,
     GeckoEnergyScoreSensor,
-    _coerce_energy_consumption_kwh,
-    _first_valid_float,
-    _safe_float,
 )
 from homeassistant.components.sensor.const import DEVICE_CLASS_STATE_CLASSES
 
@@ -48,6 +51,22 @@ def test_coerce_energy_consumption_unwraps_data_and_extra_keys() -> None:
     assert _coerce_energy_consumption_kwh({"data": {"totalKwh": 42.25}}) == 42.25
     assert _coerce_energy_consumption_kwh({"totalEnergyKWh": 10.0}) == 10.0
     assert _coerce_energy_consumption_kwh(3.5) == 3.5
+
+
+def test_coerce_energy_consumption_nested_and_kwh_key_scan() -> None:
+    assert _coerce_energy_consumption_kwh({"data": {"values": {"cumulativeKwh": 7.0}}}) == 7.0
+    assert _coerce_energy_consumption_kwh({"spaMetrics": {"lifetimeEnergyKwh": 99.1}}) == 99.1
+    assert _coerce_energy_consumption_kwh("12.25") == 12.25
+
+
+def test_premium_energy_poll_requires_parseable_values() -> None:
+    """Coordinator must not treat opaque JSON blobs as a successful energy poll."""
+    assert not premium_energy_poll_has_usable_values(
+        {"consumption": {"foo": 1}, "score": None, "cost": None}
+    )
+    assert premium_energy_poll_has_usable_values(
+        {"consumption": {"totalKwh": 1.0}, "score": {}, "cost": None}
+    )
 
 
 def test_energy_sensors_device_class_state_class_allowed_by_ha_matrix() -> None:

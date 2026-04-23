@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from custom_components.gecko.climate import GeckoClimate
@@ -59,12 +59,24 @@ def test_gecko_climate_rebinds_zone_when_coordinator_replaces_models(mock_hass):
 
 
 @pytest.mark.asyncio
-async def test_async_set_temperature_does_not_use_executor_thread() -> None:
-    """MQTT desired-state publish must run on the event loop (see climate module note)."""
+async def test_async_set_temperature_publishes_shadow_desired_like_number_entities() -> None:
+    """Thermostat writes use transporter + executor (same strategy as shadow setpoint numbers)."""
     hass_stub = MagicMock()
-    hass_stub.async_add_executor_job = AsyncMock(
-        side_effect=AssertionError("set_temperature must not offload to executor")
-    )
+    hass_stub.async_add_executor_job = AsyncMock(return_value=None)
+
+    publish = MagicMock()
+    transporter = MagicMock()
+    transporter.publish_desired_state = publish
+    gecko_client = MagicMock()
+    gecko_client.transporter = transporter
+
+    conn = MagicMock()
+    conn.is_connected = True
+    conn.gecko_client = gecko_client
+
+    mgr = MagicMock()
+    mgr.get_connection = MagicMock(return_value=conn)
+
     zone = SimpleNamespace(
         id=1,
         min_temperature_set_point_c=15.0,
@@ -73,8 +85,8 @@ async def test_async_set_temperature_does_not_use_executor_thread() -> None:
         target_temperature=29.0,
         status=None,
         mode=None,
-        set_target_temperature=MagicMock(),
     )
+
     coordinator = SimpleNamespace(
         hass=hass_stub,
         entry_id="ent1",
@@ -87,6 +99,18 @@ async def test_async_set_temperature_does_not_use_executor_thread() -> None:
     )
     ent = GeckoClimate(coordinator, zone)
     ent.hass = hass_stub
-    await ent.async_set_temperature(temperature=31.5)
-    zone.set_target_temperature.assert_called_once_with(31.5)
-    hass_stub.async_add_executor_job.assert_not_called()
+    ent.entity_id = "climate.test"
+
+    with patch(
+        "custom_components.gecko.climate.async_get_connection_manager",
+        new=AsyncMock(return_value=mgr),
+    ):
+        await ent.async_set_temperature(temperature=31.5)
+
+    hass_stub.async_add_executor_job.assert_called_once()
+    pub_fn = hass_stub.async_add_executor_job.call_args[0][0]
+    pub_fn()
+    publish.assert_called_once_with(
+        {"zones": {"temperatureControl": {"1": {"setPoint": 31.5}}}}
+    )
+    assert zone.set_point == 31.5

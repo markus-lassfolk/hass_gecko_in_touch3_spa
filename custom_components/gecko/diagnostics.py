@@ -12,6 +12,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .connection_manager import async_get_connection_manager
+from .energy_parse import (
+    _coerce_energy_consumption_kwh,
+    _coerce_energy_cost_amount,
+    _coerce_energy_score_value,
+)
 from .shadow_metrics import shadow_topology_summary
 
 _LOGGER = logging.getLogger(__name__)
@@ -238,6 +243,13 @@ async def async_get_config_entry_diagnostics(
             if not callable(getter):
                 continue
             ed = getter()
+            parseable: list[str] = []
+            if _coerce_energy_consumption_kwh(ed.get("consumption")) is not None:
+                parseable.append("consumption")
+            if _coerce_energy_cost_amount(ed.get("cost")) is not None:
+                parseable.append("cost")
+            if _coerce_energy_score_value(ed.get("score")) is not None:
+                parseable.append("score")
             energy_summary.append(
                 {
                     "vessel_name": getattr(coord, "vessel_name", None),
@@ -246,6 +258,7 @@ async def async_get_config_entry_diagnostics(
                     "energy_keys_with_data": [
                         k for k, v in ed.items() if v is not None
                     ],
+                    "energy_keys_parseable_for_sensors": parseable,
                 }
             )
         diagnostics_data["runtime_data"] = {

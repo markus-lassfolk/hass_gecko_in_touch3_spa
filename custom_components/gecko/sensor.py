@@ -25,6 +25,11 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL, DOMAIN
 from .coordinator import GeckoVesselCoordinator
+from .energy_parse import (
+    _coerce_energy_consumption_kwh,
+    _coerce_energy_cost_amount,
+    _coerce_energy_score_value,
+)
 from .entity import GeckoEntityAvailabilityMixin, gecko_zone_ids_equal
 from .shadow_metrics import (
     apply_numeric_shadow_sensor_hints,
@@ -410,71 +415,6 @@ class GeckoRestActiveAlertsSensor(CoordinatorEntity, SensorEntity):
 # ---------------------------------------------------------------------------
 
 
-def _safe_float(data: Any, *keys: str) -> float | None:
-    """Walk a nested dict by *keys* and return the leaf as a float, or None."""
-    current = data
-    for k in keys:
-        if not isinstance(current, dict):
-            return None
-        current = current.get(k)
-    if current is None:
-        return None
-    if isinstance(current, bool):
-        return None
-    try:
-        return float(current)
-    except (TypeError, ValueError):
-        return None
-
-
-def _first_valid_float(data: Any, *key_paths: tuple[str, ...]) -> float | None:
-    """Try each key path and return the first non-None float result.
-
-    Unlike or-chaining ``_safe_float`` calls, this correctly handles ``0.0`` values.
-    """
-    for keys in key_paths:
-        val = _safe_float(data, *keys)
-        if val is not None:
-            return val
-    return None
-
-
-_ENERGY_CONSUMPTION_FLOAT_PATHS: tuple[tuple[str, ...], ...] = (
-    ("totalKwh",),
-    ("total_kwh",),
-    ("totalKWh",),
-    ("totalEnergyKwh",),
-    ("totalEnergyKWh",),
-    ("energyKwh",),
-    ("energy_kwh",),
-    ("kwh",),
-    ("consumptionKwh",),
-    ("consumption_kwh",),
-    ("value",),
-    ("consumption", "totalKwh"),
-    ("consumption", "value"),
-    ("reading",),
-)
-
-
-def _coerce_energy_consumption_kwh(raw: Any) -> float | None:
-    """Parse ``/energy-consumption`` payloads into kWh (vendor shapes vary)."""
-    if raw is None:
-        return None
-    if isinstance(raw, bool):
-        return None
-    if isinstance(raw, int | float):
-        return float(raw)
-    if not isinstance(raw, dict):
-        return None
-    inner = raw.get("data")
-    if isinstance(inner, dict):
-        from_inner = _first_valid_float(inner, *_ENERGY_CONSUMPTION_FLOAT_PATHS)
-        if from_inner is not None:
-            return from_inner
-    return _first_valid_float(raw, *_ENERGY_CONSUMPTION_FLOAT_PATHS)
-
-
 class GeckoEnergyConsumptionSensor(
     GeckoEntityAvailabilityMixin, CoordinatorEntity, SensorEntity
 ):
@@ -582,15 +522,7 @@ class GeckoEnergyCostSensor(
             self._attr_extra_state_attributes = {}
             return
 
-        val = _first_valid_float(
-            raw,
-            ("totalCost",),
-            ("total_cost",),
-            ("cost",),
-            ("value",),
-        )
-        if val is None and not isinstance(raw, bool) and isinstance(raw, int | float):
-            val = float(raw)
+        val = _coerce_energy_cost_amount(raw)
 
         currency = None
         if isinstance(raw, dict):
@@ -655,14 +587,7 @@ class GeckoEnergyScoreSensor(
             self._attr_extra_state_attributes = {}
             return
 
-        val = _first_valid_float(
-            raw,
-            ("score",),
-            ("value",),
-            ("rating",),
-        )
-        if val is None and not isinstance(raw, bool) and isinstance(raw, int | float):
-            val = float(raw)
+        val = _coerce_energy_score_value(raw)
 
         unit: str | None = None
         if isinstance(raw, dict):

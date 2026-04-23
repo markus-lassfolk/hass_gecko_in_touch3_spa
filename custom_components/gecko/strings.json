@@ -160,6 +160,9 @@
     }
   },
   "exceptions": {
+    "thermostat_temperature_out_of_range": {
+      "message": "Temperature must be between {lo} and {hi} °C (got {value} °C)."
+    },
     "unsupported_hvac_mode": {
       "message": "Unsupported HVAC mode: {hvac_mode}. Only HEAT mode is supported."
     }

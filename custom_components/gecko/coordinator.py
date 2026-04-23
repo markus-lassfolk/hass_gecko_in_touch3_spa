@@ -49,6 +49,7 @@ from .const import (
     DOMAIN,
     clamp_sensor_native_str,
 )
+from .energy_parse import premium_energy_poll_has_usable_values
 from .rest_alerts import build_alerts_snapshot
 from .shadow_metrics import (
     extract_extension_booleans,
@@ -603,7 +604,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     candidate_vessel_ids,
                 )
 
-        any_success = any(v is not None for v in energy.values())
+        any_success = premium_energy_poll_has_usable_values(energy)
         if not any_success:
             _LOGGER.debug(
                 "Energy poll for %s: all premium endpoints returned no data; "
