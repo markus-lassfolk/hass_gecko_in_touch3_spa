@@ -4,6 +4,8 @@ from unittest.mock import MagicMock
 
 from custom_components.gecko.energy_parse import (
     _coerce_energy_consumption_kwh,
+    _coerce_energy_cost_amount,
+    _coerce_energy_score_value,
     _first_valid_float,
     _safe_float,
     premium_energy_poll_has_usable_values,
@@ -76,6 +78,22 @@ def test_premium_energy_poll_requires_parseable_values() -> None:
     assert premium_energy_poll_has_usable_values(
         {"consumption": {"totalKwh": 1.0}, "score": {}, "cost": None}
     )
+
+
+def test_coerce_gecko_app_energy_wh_and_wrapped_cost() -> None:
+    """Live Gecko API uses Wh fields and nests monetary amount under ``energyCost``."""
+    assert _coerce_energy_consumption_kwh({"energyConsumptionWh": 12500}) == 12.5
+    assert _coerce_energy_consumption_kwh({"worstCaseConsumptionWh": 1000}) == 1.0
+    assert (
+        _coerce_energy_cost_amount({"energyCost": {"amount": 42.5, "currency": "SEK"}})
+        == 42.5
+    )
+    assert _coerce_energy_cost_amount({"energyCost": 9.99}) == 9.99
+
+
+def test_coerce_gecko_app_score_scalar_and_object() -> None:
+    assert _coerce_energy_score_value({"score": 77, "period": "month"}) == 77.0
+    assert _coerce_energy_score_value({"score": {"value": 81.0}}) == 81.0
 
 
 def test_energy_sensors_device_class_state_class_allowed_by_ha_matrix() -> None:

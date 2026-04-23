@@ -120,6 +120,20 @@ def _coerce_energy_consumption_kwh(raw: Any) -> float | None:
             return got
     if not isinstance(raw, dict):
         return None
+    # Gecko app API (v1): totals in watt-hours, not kWh (see energyConsumptionWh).
+    for wh_key in ("energyConsumptionWh", "totalEnergyConsumptionWh"):
+        wh = raw.get(wh_key)
+        if isinstance(wh, bool):
+            continue
+        if isinstance(wh, int | float):
+            kwh = float(wh) / 1000.0
+            if kwh >= 0:
+                return kwh
+    worst = raw.get("worstCaseConsumptionWh")
+    if isinstance(worst, int | float) and not isinstance(worst, bool):
+        kwh = float(worst) / 1000.0
+        if kwh >= 0:
+            return kwh
     inner = raw.get("data")
     if isinstance(inner, list) and inner:
         inner = inner[0] if isinstance(inner[0], dict) else None
@@ -147,6 +161,10 @@ _ENERGY_COST_PATHS: tuple[tuple[str, ...], ...] = (
     ("grandTotal",),
     ("data", "totalCost"),
     ("data", "cost"),
+    ("energyCost", "amount"),
+    ("energyCost", "totalCost"),
+    ("energyCost", "value"),
+    ("energyCost", "cost"),
 )
 
 
@@ -163,6 +181,13 @@ def _coerce_energy_cost_amount(raw: Any) -> float | None:
             return None
     if not isinstance(raw, dict):
         return None
+    # Wrapper shape: ``{"energyCost": {...}}`` or ``{"energyCost": 12.34}``.
+    if "energyCost" in raw:
+        ec = raw.get("energyCost")
+        if ec is not None and not isinstance(ec, bool):
+            nested = _coerce_energy_cost_amount(ec)
+            if nested is not None:
+                return nested
     inner = raw.get("data")
     if isinstance(inner, dict):
         v = _first_valid_float(inner, *_ENERGY_COST_PATHS)
@@ -183,6 +208,9 @@ _ENERGY_SCORE_PATHS: tuple[tuple[str, ...], ...] = (
     ("points",),
     ("data", "score"),
     ("data", "value"),
+    ("score", "value"),
+    ("score", "rating"),
+    ("score", "current"),
 )
 
 
@@ -199,6 +227,13 @@ def _coerce_energy_score_value(raw: Any) -> float | None:
             return None
     if not isinstance(raw, dict):
         return None
+    score_obj = raw.get("score")
+    if isinstance(score_obj, dict):
+        v = _first_valid_float(score_obj, ("value",), ("rating",), ("score",))
+        if v is not None:
+            return v
+    elif isinstance(score_obj, int | float):
+        return float(score_obj)
     inner = raw.get("data")
     if isinstance(inner, dict):
         v = _first_valid_float(inner, *_ENERGY_SCORE_PATHS)
