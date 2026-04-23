@@ -163,7 +163,12 @@ class OAuthGeckoApi(GeckoSpaApiMixin, GeckoApiClient):
     async def async_get_access_token(self) -> str:
         """Return a valid access token for the Gecko API."""
         await self._oauth_session.async_ensure_token_valid()
-        return self._oauth_session.token["access_token"]
+        token = self._oauth_session.token
+        if "access_token" not in token:
+            raise ValueError(
+                "access_token not found in token dict; token refresh may have failed or app_token is missing/malformed"
+            )
+        return token["access_token"]
 
 
 class ConfigFlowGeckoApi(GeckoSpaApiMixin, GeckoApiClient):
