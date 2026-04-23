@@ -19,7 +19,7 @@ from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 
-from .api import OAuthGeckoApi
+from .api import AppTokenSession, OAuthGeckoApi
 from .connection_manager import async_get_connection_manager
 from .const import (
     CONF_ALERTS_POLL_INTERVAL,

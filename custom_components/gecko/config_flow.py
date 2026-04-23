@@ -63,8 +63,12 @@ def _extract_code_from_callback(raw: str) -> str | None:
         )
 
     try:
-        parsed = urlparse(raw)
-        qs = parse_qs(parsed.query)
+        if "?" in raw:
+            query_string = raw.split("?", 1)[1]
+        else:
+            parsed = urlparse(raw)
+            query_string = parsed.query
+        qs = parse_qs(query_string)
         codes = qs.get("code")
         if codes:
             return codes[0]
