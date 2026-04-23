@@ -59,12 +59,9 @@ def test_gecko_climate_rebinds_zone_when_coordinator_replaces_models(mock_hass):
 
 
 @pytest.mark.asyncio
-async def test_async_set_temperature_publishes_shadow_desired_like_number_entities() -> (
-    None
-):
-    """Thermostat writes use transporter + executor (same strategy as shadow setpoint numbers)."""
+async def test_async_set_temperature_calls_zone_setter_on_event_loop() -> None:
+    """Thermostat must call ``set_target_temperature`` on the HA loop (not executor)."""
     hass_stub = MagicMock()
-    hass_stub.async_add_executor_job = AsyncMock(return_value=None)
 
     publish = MagicMock()
     transporter = MagicMock()
@@ -79,6 +76,7 @@ async def test_async_set_temperature_publishes_shadow_desired_like_number_entiti
     mgr = MagicMock()
     mgr.get_connection = MagicMock(return_value=conn)
 
+    set_target_temperature = MagicMock()
     zone = SimpleNamespace(
         id=1,
         min_temperature_set_point_c=15.0,
@@ -87,6 +85,7 @@ async def test_async_set_temperature_publishes_shadow_desired_like_number_entiti
         target_temperature=29.0,
         status=None,
         mode=None,
+        set_target_temperature=set_target_temperature,
     )
 
     coordinator = SimpleNamespace(
@@ -109,10 +108,6 @@ async def test_async_set_temperature_publishes_shadow_desired_like_number_entiti
     ):
         await ent.async_set_temperature(temperature=31.5)
 
-    hass_stub.async_add_executor_job.assert_called_once()
-    pub_fn = hass_stub.async_add_executor_job.call_args[0][0]
-    pub_fn()
-    publish.assert_called_once_with(
-        {"zones": {"temperatureControl": {"1": {"setPoint": 31.5}}}}
-    )
+    set_target_temperature.assert_called_once_with(31.5)
+    publish.assert_not_called()
     assert ent._attr_target_temperature == 31.5

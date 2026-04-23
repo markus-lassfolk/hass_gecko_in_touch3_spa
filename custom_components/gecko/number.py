@@ -131,9 +131,8 @@ class GeckoUnknownZoneSetpointNumber(
             }
         }
 
-        def _pub() -> None:
-            gecko_client.transporter.publish_desired_state(desired)
-
-        await self.hass.async_add_executor_job(_pub)
+        # Publish on the event loop — AWS IoT MQTT client is not thread-safe for
+        # arbitrary worker threads (same constraint as ``climate`` setpoint writes).
+        gecko_client.transporter.publish_desired_state(desired)
         self._attr_native_value = value
         self.async_write_ha_state()

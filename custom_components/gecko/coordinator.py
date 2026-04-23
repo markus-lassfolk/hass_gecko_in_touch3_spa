@@ -154,6 +154,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._energy_data: dict[str, Any] = {}
         self._last_energy_poll_monotonic: float | None = None
         self._logged_energy_api_forbidden: bool = False
+        self._logged_energy_unparsed_shapes: bool = False
 
         # Cache operation mode status for synchronous access by entities
         self._cached_operation_mode_status: Any | None = None
@@ -616,6 +617,24 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         any_success = premium_energy_poll_has_usable_values(energy)
         if not any_success:
+            if not self._logged_energy_unparsed_shapes:
+                hints: list[str] = []
+                for key in ("consumption", "score", "cost"):
+                    raw = energy.get(key)
+                    if isinstance(raw, dict) and raw:
+                        keys = sorted(str(k) for k in raw.keys())
+                        hints.append(f"{key} keys={keys[:25]}")
+                    elif isinstance(raw, list) and raw:
+                        hints.append(f"{key} list[len={len(raw)}]")
+                if hints:
+                    self._logged_energy_unparsed_shapes = True
+                    _LOGGER.warning(
+                        "Gecko premium energy for %s: HTTP succeeded but no kWh/cost/score "
+                        "values could be parsed (%s). If sensors stay empty, capture one "
+                        "redacted JSON sample in a GitHub issue.",
+                        self.vessel_name,
+                        "; ".join(hints),
+                    )
             _LOGGER.debug(
                 "Energy poll for %s: all premium endpoints returned no data; "
                 "not advancing poll interval or cache so the next cycle can retry",

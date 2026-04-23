@@ -163,7 +163,7 @@ async def async_handle_publish_zone_desired(
     zone_id = str(call.data[ATTR_ZONE_ID])
     updates = call.data[ATTR_UPDATES]
     desired = {"zones": {zone_type: {zone_id: updates}}}
-    await hass.async_add_executor_job(client.transporter.publish_desired_state, desired)
+    client.transporter.publish_desired_state(desired)
 
 
 async def async_handle_publish_feature_desired(
@@ -174,7 +174,7 @@ async def async_handle_publish_feature_desired(
     client = await _async_client_for_monitor_from_call(hass, call)
     updates = call.data[ATTR_UPDATES]
     desired = {"features": updates}
-    await hass.async_add_executor_job(client.transporter.publish_desired_state, desired)
+    client.transporter.publish_desired_state(desired)
 
 
 async def async_handle_publish_desired_state(
@@ -184,9 +184,7 @@ async def async_handle_publish_desired_state(
     _validate_config_entry(hass, call)
     client = await _async_client_for_monitor_from_call(hass, call)
     fragment = call.data[ATTR_DESIRED_FRAGMENT]
-    await hass.async_add_executor_job(
-        client.transporter.publish_desired_state, fragment
-    )
+    client.transporter.publish_desired_state(fragment)
 
 
 DUMP_SHADOW_SCHEMA = vol.Schema(

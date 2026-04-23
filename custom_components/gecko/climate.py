@@ -206,14 +206,13 @@ class GeckoClimate(
         self.async_write_ha_state()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set new target temperature via shadow desired (same path as ``number`` entities).
+        """Set new target temperature via the Gecko zone model (MQTT shadow desired).
 
-        ``TemperatureControlZone.set_target_temperature`` delegates to gecko_iot_client's
-        publish helper, which only sends when ``GeckoIotClient.is_connected`` is true
-        (transport + gateway CONNECTED + vessel RUNNING/READY). That is stricter than
-        MQTT readiness and can block valid setpoints. Publishing through the transporter
-        after the same MQTT check as :class:`GeckoShadowSetpointNumber` matches working
-        writes elsewhere in this integration.
+        ``gecko_iot_client`` wires ``TemperatureControlZone.set_target_temperature`` to
+        ``MqttTransporter.publish_desired_state`` with an ``is_connected`` guard. That
+        call must run on the Home Assistant event loop — the AWS IoT MQTT5 client used
+        by the transporter is not safe to invoke from ``async_add_executor_job`` worker
+        threads (publishes can fail silently or error depending on platform).
         """
         if (temperature := kwargs.get("temperature")) is None:
             return
@@ -247,34 +246,63 @@ class GeckoClimate(
                 "Gecko MQTT connection is not available; check connectivity and try again."
             )
 
-        gecko_client = conn.gecko_client
         zone_id = str(self._zone.id)
-        desired = {
-            "zones": {
-                "temperatureControl": {zone_id: {"setPoint": temperature}},
+        setter = getattr(self._zone, "set_target_temperature", None)
+        if callable(setter):
+            try:
+                setter(temperature)
+            except ValueError as err:
+                msg = str(err).strip() or "Could not apply temperature setpoint"
+                _LOGGER.warning(
+                    "set_target_temperature failed for %s zone %s: %s",
+                    self.entity_id,
+                    zone_id,
+                    err,
+                )
+                if "outside configured range" in msg.lower():
+                    raise ServiceValidationError(
+                        msg,
+                        translation_domain=DOMAIN,
+                        translation_key="thermostat_temperature_out_of_range",
+                        translation_placeholders={
+                            "lo": f"{lo:.1f}",
+                            "hi": f"{hi:.1f}",
+                            "value": f"{temperature:.1f}",
+                        },
+                    ) from err
+                raise HomeAssistantError(msg) from err
+            except Exception as err:
+                _LOGGER.error(
+                    "Unexpected error setting temperature for %s: %s",
+                    self.entity_id,
+                    err,
+                    exc_info=True,
+                )
+                raise HomeAssistantError(f"Failed to set temperature: {err}") from err
+        else:
+            # Extremely defensive fallback (custom / mocked zone objects).
+            gecko_client = conn.gecko_client
+            desired = {
+                "zones": {
+                    "temperatureControl": {zone_id: {"setPoint": temperature}},
+                }
             }
-        }
-
-        def _publish_setpoint() -> None:
-            gecko_client.transporter.publish_desired_state(desired)
-
-        try:
-            await self.hass.async_add_executor_job(_publish_setpoint)
-        except Exception as err:
-            _LOGGER.error(
-                "Failed to publish thermostat setpoint for %s: %s",
-                self.entity_id,
-                err,
-                exc_info=True,
-            )
-            raise HomeAssistantError(f"Failed to set temperature: {err}") from err
+            try:
+                gecko_client.transporter.publish_desired_state(desired)
+            except Exception as err:
+                _LOGGER.error(
+                    "Failed to publish thermostat setpoint for %s: %s",
+                    self.entity_id,
+                    err,
+                    exc_info=True,
+                )
+                raise HomeAssistantError(f"Failed to set temperature: {err}") from err
 
         self._attr_target_temperature = temperature
-        # ``async_add_executor_job`` runs the publish off the event loop; defer state write.
         self.schedule_update_ha_state()
 
         _LOGGER.debug(
-            "Published target temperature %.1f°C for zone %s (%s)",
+            "Applied target temperature %.1f°C for zone %s (%s)",
             temperature,
             zone_id,
             self.entity_id,

@@ -63,6 +63,9 @@ def test_coerce_energy_consumption_nested_and_kwh_key_scan() -> None:
         == 99.1
     )
     assert _coerce_energy_consumption_kwh("12.25") == 12.25
+    assert _coerce_energy_consumption_kwh({"aggregates": {"totalKwh": 3.5}}) == 3.5
+    assert _coerce_energy_consumption_kwh({"data": {"consumption": 2.0}}) == 2.0
+    assert _coerce_energy_consumption_kwh({"energy": {"totalKwh": 9.0}}) == 9.0
 
 
 def test_premium_energy_poll_requires_parseable_values() -> None:
