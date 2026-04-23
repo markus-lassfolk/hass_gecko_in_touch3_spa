@@ -12,5 +12,5 @@
   "issue_tracker": "https://github.com/markus-lassfolk/hass_gecko_in_touch3_spa/issues",
   "loggers": ["gecko_iot_client"],
   "requirements": ["awsiotsdk==1.26.0", "gecko-iot-client==0.2.5"],
-  "version": "2.4.0-beta.2"
+  "version": "2.4.0-beta.3"
 }
