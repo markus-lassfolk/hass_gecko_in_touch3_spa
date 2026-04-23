@@ -183,6 +183,24 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
                             "No monitor ID found for vessel %s", vessel.get("name")
                         )
                         vessels_with_config.append(vessel)
+                except ClientResponseError as config_err:
+                    # 404 is common when the v4 spa/configuration surface is not
+                    # populated for a monitor yet, or IDs differ from MQTT shadow —
+                    # setup still succeeds; the integration uses live shadow/MQTT data.
+                    if config_err.status == 404:
+                        _LOGGER.debug(
+                            "Spa configuration endpoint returned 404 for vessel %s "
+                            "(monitor %s); continuing without static spa config",
+                            vessel.get("name"),
+                            monitor_id,
+                        )
+                    else:
+                        _LOGGER.warning(
+                            "Failed to get spa config for vessel %s: %s",
+                            vessel.get("name"),
+                            config_err,
+                        )
+                    vessels_with_config.append(vessel)
                 except Exception as config_err:
                     _LOGGER.warning(
                         "Failed to get spa config for vessel %s: %s",
