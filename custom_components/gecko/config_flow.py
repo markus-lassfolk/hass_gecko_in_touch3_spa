@@ -477,9 +477,6 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Remove the linked app-client token."""
-        if not self.config_entry.data.get("app_token"):
-            return self.async_abort(reason="energy_not_linked")
-
         schema = vol.Schema(
             {vol.Required("confirm_unlink", default=False): cv.boolean},
         )
@@ -495,6 +492,9 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
             self.hass.config_entries.async_update_entry(self.config_entry, data=data)
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
             return self.async_abort(reason="energy_unlinked")
+
+        if not self.config_entry.data.get("app_token"):
+            return self.async_abort(reason="energy_not_linked")
 
         return self.async_show_form(
             step_id="unlink_energy",
