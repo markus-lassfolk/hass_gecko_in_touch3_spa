@@ -50,6 +50,10 @@ from .oauth_implementation import GeckoPKCEOAuth2Implementation
 _LOGGER = logging.getLogger(__name__)
 
 
+class AccountResolutionError(Exception):
+    """Custom exception for account resolution failures in config flow."""
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -219,7 +223,7 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
                     "account_info": account_data,
                 },
             )
-        except ConnectionError as err:
+        except AccountResolutionError as err:
             self.logger.error("Gecko account resolution failed: %s", err)
             return self.async_abort(
                 reason="account_resolution_failed",
@@ -260,7 +264,7 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
                         user_id,
                     )
                 else:
-                    raise ConnectionError(
+                    raise AccountResolutionError(
                         f"Failed to resolve user and account: {err}"
                     ) from err
             except Exception as err:
@@ -284,11 +288,12 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
                 )
                 return jwt_sub, {"name": "Account"}, str(jwt_account)
 
-        raise ConnectionError(
+        raise AccountResolutionError(
             f"Could not resolve Gecko account for user {user_id}. "
-            "The Gecko API returned 404 for your user profile. This can "
-            "happen with newer accounts — please ensure you have at least "
-            "one vessel/spa linked in the Gecko mobile app, then try again."
+            "This can happen if your user profile is not fully provisioned, "
+            "if JWT claims are missing, or if the account lookup failed. "
+            "Please ensure you have at least one vessel/spa linked in the "
+            "Gecko mobile app, then try again."
         )
 
     @property
