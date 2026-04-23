@@ -459,14 +459,53 @@ class GeckoSpaInUseBinarySensor(
         self.async_write_ha_state()
 
 
-class GeckoEcoModeBinarySensor(
+class GeckoTemperatureZoneBinarySensorBase(
     GeckoEntityAvailabilityMixin,
     CoordinatorEntity[GeckoVesselCoordinator],
     BinarySensorEntity,
 ):
-    """Eco mode state for a single temperature control zone."""
+    """Base class for binary sensors tracking a single temperature control zone."""
 
     _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: GeckoVesselCoordinator,
+        zone: TemperatureControlZone,
+    ) -> None:
+        super().__init__(coordinator)
+        self._zone = zone
+        self._attr_device_info = dr.DeviceInfo(
+            identifiers={(DOMAIN, str(coordinator.vessel_id))},
+        )
+        self._attr_available = False
+
+    def _sync_zone_from_coordinator(self) -> None:
+        """Re-bind ``self._zone`` to the live model after each coordinator refresh."""
+        zones = self.coordinator.get_zones_by_type(ZoneType.TEMPERATURE_CONTROL_ZONE)
+        my_id = getattr(self._zone, "id", None)
+        for z in zones:
+            if gecko_zone_ids_equal(getattr(z, "id", None), my_id):
+                self._zone = z
+                return
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "status": self._zone.status.name if self._zone.status else None,
+            "current_temperature": self._zone.temperature,
+            "target_temperature": self._zone.target_temperature,
+        }
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._update_state()
+        self.async_write_ha_state()
+
+
+class GeckoEcoModeBinarySensor(GeckoTemperatureZoneBinarySensorBase):
+    """Eco mode state for a single temperature control zone."""
+
     _attr_icon = "mdi:leaf"
 
     def __init__(
@@ -474,54 +513,22 @@ class GeckoEcoModeBinarySensor(
         coordinator: GeckoVesselCoordinator,
         zone: TemperatureControlZone,
     ) -> None:
-        super().__init__(coordinator)
-        self._zone = zone
+        super().__init__(coordinator, zone)
         self._attr_translation_key = "eco_mode"
         self._attr_unique_id = (
             f"{coordinator.entry_id}_{coordinator.vessel_id}_eco_mode_{zone.id}"
         )
-        self._attr_device_info = dr.DeviceInfo(
-            identifiers={(DOMAIN, str(coordinator.vessel_id))},
-        )
-        self._attr_available = False
         self._update_state()
-
-    def _sync_zone_from_coordinator(self) -> None:
-        """Re-bind ``self._zone`` to the live model after each coordinator refresh."""
-        zones = self.coordinator.get_zones_by_type(ZoneType.TEMPERATURE_CONTROL_ZONE)
-        my_id = getattr(self._zone, "id", None)
-        for z in zones:
-            if gecko_zone_ids_equal(getattr(z, "id", None), my_id):
-                self._zone = z
-                return
 
     def _update_state(self) -> None:
         self._sync_zone_from_coordinator()
         mode = getattr(self._zone, "mode", None)
         self._attr_is_on = bool(mode and getattr(mode, "eco", False))
 
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        return {
-            "status": self._zone.status.name if self._zone.status else None,
-            "current_temperature": self._zone.temperature,
-            "target_temperature": self._zone.target_temperature,
-        }
 
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        self._update_state()
-        self.async_write_ha_state()
-
-
-class GeckoTemperatureHeatingBinarySensor(
-    GeckoEntityAvailabilityMixin,
-    CoordinatorEntity[GeckoVesselCoordinator],
-    BinarySensorEntity,
-):
+class GeckoTemperatureHeatingBinarySensor(GeckoTemperatureZoneBinarySensorBase):
     """Heating state for a single temperature control zone."""
 
-    _attr_has_entity_name = True
     _attr_icon = "mdi:fire"
 
     def __init__(
@@ -529,44 +536,17 @@ class GeckoTemperatureHeatingBinarySensor(
         coordinator: GeckoVesselCoordinator,
         zone: TemperatureControlZone,
     ) -> None:
-        super().__init__(coordinator)
-        self._zone = zone
+        super().__init__(coordinator, zone)
         self._attr_translation_key = "zone_heating"
         self._attr_unique_id = (
             f"{coordinator.entry_id}_{coordinator.vessel_id}_heating_{zone.id}"
         )
-        self._attr_device_info = dr.DeviceInfo(
-            identifiers={(DOMAIN, str(coordinator.vessel_id))},
-        )
-        self._attr_available = False
         self._update_state()
-
-    def _sync_zone_from_coordinator(self) -> None:
-        """Re-bind ``self._zone`` to the live model after each coordinator refresh."""
-        zones = self.coordinator.get_zones_by_type(ZoneType.TEMPERATURE_CONTROL_ZONE)
-        my_id = getattr(self._zone, "id", None)
-        for z in zones:
-            if gecko_zone_ids_equal(getattr(z, "id", None), my_id):
-                self._zone = z
-                return
 
     def _update_state(self) -> None:
         self._sync_zone_from_coordinator()
         status = getattr(self._zone, "status", None)
         self._attr_is_on = bool(status and getattr(status, "is_heating", False))
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        return {
-            "status": self._zone.status.name if self._zone.status else None,
-            "current_temperature": self._zone.temperature,
-            "target_temperature": self._zone.target_temperature,
-        }
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        self._update_state()
-        self.async_write_ha_state()
 
 
 class GeckoVesselHeatingBinarySensor(
