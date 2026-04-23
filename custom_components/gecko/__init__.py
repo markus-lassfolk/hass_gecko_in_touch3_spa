@@ -172,7 +172,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             data_changed = True
         target_version = 2
 
-    if (
+    elif (
         resolved_account
         and str(current.data.get("account_id", "")).strip() != resolved_account
     ):
