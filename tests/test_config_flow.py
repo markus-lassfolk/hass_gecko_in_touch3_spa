@@ -441,7 +441,7 @@ def test_config_flow_get_options_flow_returns_gecko_options() -> None:
 def test_config_flow_domain_and_version() -> None:
     """Verify the ConfigFlow meta-class properties."""
     assert ConfigFlow.DOMAIN == DOMAIN
-    assert ConfigFlow.VERSION == 2
+    assert ConfigFlow.VERSION == 3
 
 
 def test_options_flow_inherits_from_options_flow() -> None:
