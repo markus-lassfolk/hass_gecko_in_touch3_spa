@@ -252,8 +252,6 @@ class GeckoConnectionManager:
                 if update_callback:
                     connection.update_callbacks.append(update_callback)
 
-                self._setup_client_handlers(gecko_client, connection, mid)
-
             _LOGGER.debug(
                 "Calling gecko_client.connect() for monitor %s (blocking)", mid
             )
@@ -297,6 +295,7 @@ class GeckoConnectionManager:
                 raise
 
             async with self._connection_lock:
+                self._setup_client_handlers(gecko_client, connection, mid)
                 self._connections[mid] = connection
                 connection.is_connected = True
 

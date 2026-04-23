@@ -145,13 +145,16 @@ def _get_gecko_client_info(gecko_client: GeckoIotClient) -> dict[str, Any]:
         return {"error": type(err).__name__, "message": msg}
 
 
-def _get_connection_diagnostics(connection_manager: Any) -> dict[str, Any]:
+async def _get_connection_diagnostics(connection_manager: Any) -> dict[str, Any]:
     """Get connection manager diagnostics."""
     if not connection_manager:
         return {}
 
+    async with connection_manager._connection_lock:
+        connections_snapshot = dict(connection_manager._connections)
+
     connections: dict[str, Any] = {}
-    for monitor_id, connection in connection_manager._connections.items():
+    for monitor_id, connection in connections_snapshot.items():
         conn_data: dict[str, Any] = {
             "monitor_id": monitor_id,
             "vessel_name": connection.vessel_name,
@@ -417,7 +420,7 @@ async def async_get_config_entry_diagnostics(
             ),
         },
         "vessels": _get_vessel_coordinators_diagnostics(config_entry),
-        "connections": _get_connection_diagnostics(connection_manager),
+        "connections": await _get_connection_diagnostics(connection_manager),
     }
 
     if hasattr(config_entry, "runtime_data") and config_entry.runtime_data:
@@ -536,7 +539,9 @@ async def async_get_config_entry_diagnostics(
 
     # Full MQTT shadow state + flow zone runtime for debugging pump/thermostat issues.
     shadow_dumps: list[dict[str, Any]] = []
-    for monitor_id, connection in (connection_manager._connections or {}).items():
+    async with connection_manager._connection_lock:
+        connections_snapshot = dict(connection_manager._connections)
+    for monitor_id, connection in connections_snapshot.items():
         gc = getattr(connection, "gecko_client", None)
         if not gc:
             continue

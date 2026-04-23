@@ -444,15 +444,16 @@ class GeckoEnergyConsumptionSensor(
 ):
     """Total energy consumed by the spa (kWh).
 
-    Compatible with the HA Energy Dashboard as an individual device
-    consumption source (device_class=ENERGY, state_class=TOTAL_INCREASING).
+    Uses TOTAL state class (not TOTAL_INCREASING) because the Gecko API may return
+    period-scoped consumption values that reset each billing cycle rather than
+    lifetime cumulative meter readings.
     """
 
     _attr_should_poll = False
     _attr_has_entity_name = True
     _attr_translation_key = "energy_consumption"
     _attr_device_class = SensorDeviceClass.ENERGY
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_suggested_display_precision = 1
     _attr_icon = "mdi:lightning-bolt"
