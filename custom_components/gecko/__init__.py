@@ -197,7 +197,9 @@ class GeckoRuntimeData:
 
     api_client: OAuthGeckoApi
     coordinators: list[GeckoVesselCoordinator]
-    app_api_client: OAuthGeckoApi | None = field(default=None, repr=False, compare=False)
+    app_api_client: OAuthGeckoApi | None = field(
+        default=None, repr=False, compare=False
+    )
     rest_vessels_response_cache: list[Any] | None = field(
         default=None, repr=False, compare=False
     )
@@ -235,6 +237,16 @@ class GeckoRuntimeData:
         default_factory=dict, repr=False, compare=False
     )
     rest_vessel_detail_lock: asyncio.Lock = field(
+        default_factory=asyncio.Lock, repr=False, compare=False
+    )
+    # Premium energy caches (keyed by vessel_id)
+    energy_data_cache: dict[str, dict[str, Any]] = field(
+        default_factory=dict, repr=False, compare=False
+    )
+    energy_data_mono: dict[str, float] = field(
+        default_factory=dict, repr=False, compare=False
+    )
+    energy_data_lock: asyncio.Lock = field(
         default_factory=asyncio.Lock, repr=False, compare=False
     )
 

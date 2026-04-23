@@ -34,7 +34,9 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 # ---------------------------------------------------------------------------
 
 
-def _mock_config_entry(*, options: dict | None = None, **data_overrides) -> MockConfigEntry:
+def _mock_config_entry(
+    *, options: dict | None = None, **data_overrides
+) -> MockConfigEntry:
     """Create a MockConfigEntry pre-loaded with typical Gecko data."""
     data = {
         "token": {"access_token": "fake"},
@@ -328,10 +330,14 @@ async def test_options_flow_link_energy_shows_form(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "link_energy"
     assert "authorize_url" in result["description_placeholders"]
-    assert "gecko-prod.us.auth0.com" in result["description_placeholders"]["authorize_url"]
+    assert (
+        "gecko-prod.us.auth0.com" in result["description_placeholders"]["authorize_url"]
+    )
 
 
-async def test_options_flow_link_energy_rejects_invalid_url(hass: HomeAssistant) -> None:
+async def test_options_flow_link_energy_rejects_invalid_url(
+    hass: HomeAssistant,
+) -> None:
     """link_energy step must reject input without a code parameter."""
     entry = _mock_config_entry()
     flow = _create_options_flow(hass, entry)

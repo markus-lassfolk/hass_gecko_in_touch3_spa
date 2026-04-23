@@ -105,7 +105,9 @@ async def async_setup_entry(
             added_heating_zone_ids.setdefault(vessel_key, set())
 
             new_entities: list[BinarySensorEntity] = []
-            for zone in coordinator.get_zones_by_type(ZoneType.TEMPERATURE_CONTROL_ZONE):
+            for zone in coordinator.get_zones_by_type(
+                ZoneType.TEMPERATURE_CONTROL_ZONE
+            ):
                 if not isinstance(zone, TemperatureControlZone):
                     continue
                 zone_id = str(zone.id)
@@ -662,11 +664,15 @@ class GeckoCleaningModeBinarySensor(
                 n = getattr(operation_mode, "name", None)
                 v = getattr(operation_mode, "value", None)
                 self._operation_mode_raw = (
-                    f"{n}:{v}" if (n is not None or v is not None) else str(operation_mode)
+                    f"{n}:{v}"
+                    if (n is not None or v is not None)
+                    else str(operation_mode)
                 )
             self._attr_is_on = self._is_cleaning_from_status(status)
         except Exception as ex:
-            _LOGGER.debug("Could not update cleaning mode for %s: %s", self._attr_name, ex)
+            _LOGGER.debug(
+                "Could not update cleaning mode for %s: %s", self._attr_name, ex
+            )
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()

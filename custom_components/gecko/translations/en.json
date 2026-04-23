@@ -107,6 +107,15 @@
       },
       "spa_current_temperature": {
         "name": "Current temperature {zone_id}"
+      },
+      "energy_consumption": {
+        "name": "Energy consumption"
+      },
+      "energy_cost": {
+        "name": "Energy cost"
+      },
+      "energy_score": {
+        "name": "Energy score"
       }
     },
     "select": {

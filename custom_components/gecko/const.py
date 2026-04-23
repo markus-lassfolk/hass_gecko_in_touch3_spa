@@ -32,6 +32,10 @@ DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN = False
 CONF_ALERTS_POLL_INTERVAL = "alerts_poll_interval"
 DEFAULT_ALERTS_POLL_INTERVAL = 0
 
+# Premium energy data polling (only active when app token is linked).
+CONF_ENERGY_POLL_INTERVAL = "energy_poll_interval"
+DEFAULT_ENERGY_POLL_INTERVAL = 3600  # 1 hour — energy data is slow-moving
+
 # Legacy community client — basic access only (energy/premium endpoints return 403).
 OAUTH2_CLIENT_ID = "L81oh6hgUsvMg40TgTGoz4lxNy8eViM0"
 

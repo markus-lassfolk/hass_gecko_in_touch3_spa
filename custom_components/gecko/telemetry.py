@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from enum import Enum
 import math
+from enum import Enum
 from typing import Any
 
 from gecko_iot_client.models.flow_zone import FlowZoneInitiator
@@ -61,7 +61,7 @@ def _as_float(value: Any) -> float | None:
     """Return a float for numeric values, otherwise None."""
     if isinstance(value, bool):
         return None
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return float(value)
     return None
 
@@ -97,7 +97,7 @@ def get_flow_speed_step_values(zone: Any) -> tuple[float, ...]:
 
 def _uses_binary_near_max_speed_encoding(zone: Any) -> bool:
     """Return True when Gecko reports low/high as 99/100 style values.
-    
+
     Detection is based on the zone's speed_config hardware characteristics,
     not on the current runtime speed value (which is 0 when off).
     """
@@ -109,14 +109,14 @@ def _uses_binary_near_max_speed_encoding(zone: Any) -> bool:
     if isinstance(speed_config, dict):
         minimum = _as_float(speed_config.get("minimum"))
         maximum = _as_float(speed_config.get("maximum"))
-        
+
         # Binary encoding zones have min/max in the 98-100 range
         if minimum is not None and maximum is not None:
             if 98.5 <= minimum <= 100.5 and 98.5 <= maximum <= 100.5:
                 return True
             # Has explicit config but not binary range
             return False
-    
+
     # No speed_config available - default to standard 4-mode encoding
     # (Cannot reliably detect binary encoding without hardware config)
     return False
@@ -213,9 +213,7 @@ def _get_zone_runtime_state(
             continue
 
         zone_state = (
-            branch.get("zones", {})
-            .get(zone_type.value, {})
-            .get(str(zone_id), {})
+            branch.get("zones", {}).get(zone_type.value, {}).get(str(zone_id), {})
         )
         if zone_state:
             return zone_state
@@ -358,6 +356,6 @@ def derive_flow_percentage(zone: Any) -> int:
         return int(round((mode_index / len(supported_modes)) * 100))
 
     speed = getattr(zone, "speed", None)
-    if isinstance(speed, (int, float)):
+    if isinstance(speed, int | float):
         return max(0, min(100, int(speed)))
     return 0

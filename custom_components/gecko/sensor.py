@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from gecko_iot_client.models.zone_types import ZoneType
 from homeassistant.components.sensor import (
@@ -13,7 +13,11 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory, UnitOfTemperature
+from homeassistant.const import (
+    EntityCategory,
+    UnitOfEnergy,
+    UnitOfTemperature,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -213,6 +217,20 @@ async def async_setup_entry(
             ]
         )
 
+    # Premium energy sensors — only when app token is linked
+    if config_entry.data.get("app_token"):
+        energy_entities: list[SensorEntity] = []
+        for coordinator in coordinators:
+            energy_entities.extend(
+                [
+                    GeckoEnergyConsumptionSensor(coordinator, config_entry),
+                    GeckoEnergyCostSensor(coordinator, config_entry),
+                    GeckoEnergyScoreSensor(coordinator, config_entry),
+                ]
+            )
+        if energy_entities:
+            async_add_entities(energy_entities)
+
 
 class GeckoShadowMetricSensor(
     GeckoEntityAvailabilityMixin, CoordinatorEntity, SensorEntity
@@ -385,3 +403,220 @@ class GeckoRestActiveAlertsSensor(CoordinatorEntity, SensorEntity):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         self._refresh_from_snapshot()
+
+
+# ---------------------------------------------------------------------------
+# Premium energy sensors (require app-client token)
+# ---------------------------------------------------------------------------
+
+
+def _safe_float(data: Any, *keys: str) -> float | None:
+    """Walk a nested dict by *keys* and return the leaf as a float, or None."""
+    current = data
+    for k in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(k)
+    if current is None:
+        return None
+    try:
+        return float(current)
+    except (TypeError, ValueError):
+        return None
+
+
+class GeckoEnergyConsumptionSensor(CoordinatorEntity, SensorEntity):
+    """Total energy consumed by the spa (kWh).
+
+    Compatible with the HA Energy Dashboard as an individual device
+    consumption source (device_class=ENERGY, state_class=TOTAL_INCREASING).
+    """
+
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+    _attr_translation_key = "energy_consumption"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_suggested_display_precision = 1
+    _attr_icon = "mdi:lightning-bolt"
+    _attr_entity_registry_enabled_default = True
+
+    def __init__(
+        self,
+        coordinator: GeckoVesselCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{coordinator.vessel_id}_energy_consumption"
+        )
+        self._attr_device_info = dr.DeviceInfo(
+            identifiers={(DOMAIN, str(coordinator.vessel_id))},
+        )
+        self._refresh_value()
+
+    def _refresh_value(self) -> None:
+        energy = self.coordinator.get_energy_data()
+        raw = energy.get("consumption")
+        if raw is None:
+            self._attr_native_value = None
+            self._attr_extra_state_attributes = {}
+            return
+
+        val = (
+            _safe_float(raw, "totalKwh")
+            or _safe_float(raw, "total_kwh")
+            or _safe_float(raw, "totalKWh")
+            or _safe_float(raw, "kwh")
+            or _safe_float(raw, "value")
+        )
+        if val is None and isinstance(raw, int | float):
+            val = float(raw)
+
+        self._attr_native_value = val
+        self._attr_extra_state_attributes = (
+            {"raw_response": raw} if isinstance(raw, dict) else {}
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._refresh_value()
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._refresh_value()
+
+
+class GeckoEnergyCostSensor(CoordinatorEntity, SensorEntity):
+    """Estimated energy cost for the spa.
+
+    Disabled by default — power users can enable it in Settings > Entities.
+    Uses MONETARY device class so HA can track it alongside consumption.
+    """
+
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+    _attr_translation_key = "energy_cost"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 2
+    _attr_icon = "mdi:currency-usd"
+    _attr_entity_registry_enabled_default = False
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        coordinator: GeckoVesselCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{coordinator.vessel_id}_energy_cost"
+        )
+        self._attr_device_info = dr.DeviceInfo(
+            identifiers={(DOMAIN, str(coordinator.vessel_id))},
+        )
+        self._refresh_value()
+
+    def _refresh_value(self) -> None:
+        energy = self.coordinator.get_energy_data()
+        raw = energy.get("cost")
+        if raw is None:
+            self._attr_native_value = None
+            self._attr_native_unit_of_measurement = None
+            self._attr_extra_state_attributes = {}
+            return
+
+        val = (
+            _safe_float(raw, "totalCost")
+            or _safe_float(raw, "total_cost")
+            or _safe_float(raw, "cost")
+            or _safe_float(raw, "value")
+        )
+        if val is None and isinstance(raw, int | float):
+            val = float(raw)
+
+        currency = None
+        if isinstance(raw, dict):
+            currency = raw.get("currency") or raw.get("currencyCode") or raw.get("unit")
+
+        self._attr_native_value = val
+        self._attr_native_unit_of_measurement = currency
+        self._attr_extra_state_attributes = (
+            {"raw_response": raw} if isinstance(raw, dict) else {}
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._refresh_value()
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._refresh_value()
+
+
+class GeckoEnergyScoreSensor(CoordinatorEntity, SensorEntity):
+    """Energy efficiency score from the Gecko app.
+
+    Disabled by default — informational metric for power users.
+    """
+
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+    _attr_translation_key = "energy_score"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:leaf"
+    _attr_entity_registry_enabled_default = False
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        coordinator: GeckoVesselCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{coordinator.vessel_id}_energy_score"
+        )
+        self._attr_device_info = dr.DeviceInfo(
+            identifiers={(DOMAIN, str(coordinator.vessel_id))},
+        )
+        self._refresh_value()
+
+    def _refresh_value(self) -> None:
+        energy = self.coordinator.get_energy_data()
+        raw = energy.get("score")
+        if raw is None:
+            self._attr_native_value = None
+            self._attr_extra_state_attributes = {}
+            return
+
+        val = (
+            _safe_float(raw, "score")
+            or _safe_float(raw, "value")
+            or _safe_float(raw, "rating")
+        )
+        if val is None and isinstance(raw, int | float):
+            val = float(raw)
+
+        unit = None
+        if isinstance(raw, dict):
+            unit = raw.get("unit") or raw.get("scale")
+        self._attr_native_unit_of_measurement = unit or "%"
+
+        self._attr_native_value = val
+        self._attr_extra_state_attributes = (
+            {"raw_response": raw} if isinstance(raw, dict) else {}
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._refresh_value()
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._refresh_value()

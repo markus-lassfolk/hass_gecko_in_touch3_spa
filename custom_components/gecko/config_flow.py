@@ -382,9 +382,7 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                     return self.async_abort(reason="energy_linked")
 
         if self._authorize_url is None:
-            self._code_verifier = (
-                GeckoPKCEOAuth2Implementation.generate_code_verifier()
-            )
+            self._code_verifier = GeckoPKCEOAuth2Implementation.generate_code_verifier()
             challenge = GeckoPKCEOAuth2Implementation.compute_code_challenge(
                 self._code_verifier
             )
@@ -420,12 +418,12 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
             authorize_url=OAUTH2_AUTHORIZE,
             token_url=OAUTH2_TOKEN,
         )
-        
+
         # Build exception tuple based on what's available
         exceptions = (ClientResponseError, ClientError)
         if OAuth2TokenRequestError is not None:
             exceptions = (ClientResponseError, ClientError, OAuth2TokenRequestError)
-        
+
         try:
             return await impl._token_request(  # noqa: SLF001
                 {
@@ -450,9 +448,7 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
             return self.async_abort(reason="energy_not_linked")
 
         if user_input is not None:
-            data = {
-                k: v for k, v in self.config_entry.data.items() if k != "app_token"
-            }
+            data = {k: v for k, v in self.config_entry.data.items() if k != "app_token"}
             self.hass.config_entries.async_update_entry(self.config_entry, data=data)
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
             return self.async_abort(reason="energy_unlinked")

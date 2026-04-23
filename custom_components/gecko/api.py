@@ -58,9 +58,7 @@ class AppTokenSession:
                 return
             new_token = await self._implementation.async_refresh_token(self.token)
             data = {**self.config_entry.data, "app_token": new_token}
-            self.hass.config_entries.async_update_entry(
-                self.config_entry, data=data
-            )
+            self.hass.config_entries.async_update_entry(self.config_entry, data=data)
 
 
 class GeckoSpaApiMixin:
@@ -96,6 +94,31 @@ class GeckoSpaApiMixin:
         return await self.async_request(
             "GET",
             f"/v6/accounts/{account_id}/vessels/{vessel_id}?customActionsVersion=0",
+        )
+
+    # -- Premium (app-token) endpoints -------------------------------------
+
+    async def async_get_energy_consumption(
+        self, account_id: str, vessel_id: str
+    ) -> Any:
+        """Energy consumption data (requires app-client token)."""
+        return await self.async_request(
+            "GET",
+            f"/v1/accounts/{account_id}/vessels/{vessel_id}/energy-consumption",
+        )
+
+    async def async_get_energy_score(self, account_id: str, vessel_id: str) -> Any:
+        """Energy efficiency score (requires app-client token)."""
+        return await self.async_request(
+            "GET",
+            f"/v1/accounts/{account_id}/vessels/{vessel_id}/energy/score",
+        )
+
+    async def async_get_energy_cost(self, account_id: str, vessel_id: str) -> Any:
+        """Energy cost data (requires app-client token)."""
+        return await self.async_request(
+            "GET",
+            f"/v1/accounts/{account_id}/vessels/{vessel_id}/energyCost",
         )
 
 

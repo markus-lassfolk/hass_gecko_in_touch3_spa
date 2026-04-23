@@ -25,6 +25,7 @@ This repository ([**markus-lassfolk/hass_gecko_in_touch3_spa**](https://github.c
 | Area | What you get |
 |------|----------------|
 | **Live control (MQTT)** | Climate, lights, fans/pumps, watercare **select**, connectivity and energy-saving **binary sensors** (gateway, transport, spa running, overall link, energy saving). |
+| **Premium energy data** | Optional second login (app-client token) unlocks **energy consumption (kWh)**, **energy cost**, and **energy score** sensors — compatible with the **HA Energy Dashboard**. See [Link energy data](#link-energy-data-optional) below. |
 | **Shadow extensions** | **Sensors** for numeric leaves, **string** sensors, and **binary sensors** for boolean leaves discovered under unmodeled `zones.*` and relevant `features.*` (for example Waterlab-style chemistry when the device shadow publishes it). Likely chemistry-style paths are **enabled by default**; other numeric paths are often added as **disabled diagnostics** you can enable in the entity registry. |
 | **Unknown-zone setpoints** | **Number** entities for supported setpoint paths in unknown zone types so you can write **desired** shadow fragments consistent with the Gecko app / library. |
 | **Optional Gecko Cloud REST** | Integration **options** (see below) can poll account/vessel REST data for **summary tile** metrics and strings, merged under paths prefixed with `cloud.rest.*` where **MQTT shadow values take precedence** when both exist. A separate optional poll surfaces **account unread messages** and **per-vessel actions** as **sensor + binary sensor** (counts/previews, not full message history). |
@@ -87,6 +88,15 @@ This repository ([**markus-lassfolk/hass_gecko_in_touch3_spa**](https://github.c
 
 </td>
 </tr>
+<tr>
+<td colspan="3" valign="top">
+
+### Premium energy data (optional)
+
+Link the Gecko mobile-app client via **Configure → Link energy data** to unlock **energy consumption**, **energy cost**, and **energy score** sensors. The consumption sensor is compatible with the **HA Energy Dashboard** out of the box. See [setup instructions](#link-energy-data-optional) below.
+
+</td>
+</tr>
 </table>
 
 ---
@@ -137,6 +147,38 @@ On the Gecko card → **Configure**:
 | **Only poll when MQTT is disconnected** | When enabled, REST tile polling runs only if the live MQTT link for that monitor is down — useful to avoid duplicating data while MQTT is healthy. |
 | **Alerts poll interval** | Seconds between optional REST calls for **unread-messages** (account-scoped) and **vessel actions** (`0` = disabled). Feeds the **REST active alerts** sensor/binary pair. |
 
+### Link energy data (optional)
+
+The default Gecko OAuth login uses a community client that covers MQTT control and basic REST data. However, Gecko's API **blocks energy, chart, activity, and routine endpoints** for this client (HTTP 403). The Gecko mobile app uses a different client ID that has access to these premium endpoints.
+
+This integration lets you optionally link that second client to unlock additional sensors — no changes to your primary login are needed.
+
+#### What it unlocks
+
+| Entity | Device class | Enabled by default | HA Energy Dashboard |
+|--------|-------------|-------------------|-------------------|
+| **Energy consumption** | `energy` (kWh, total increasing) | Yes | Yes — add it as an individual device consumption source |
+| **Energy cost** | `monetary` (total increasing) | No (enable in entity settings) | Yes — can track alongside consumption |
+| **Energy score** | measurement (%) | No (enable in entity settings) | No |
+
+#### How to link
+
+1. Go to **Settings → Devices & services → Gecko** and click **Configure**
+2. Select **Link energy data (premium)** from the menu
+3. The integration generates an authorization URL — **open it in your browser**
+4. **Log in** with your normal Gecko account credentials
+5. After login, your browser will try to open a link starting with `com.geckoportal.gecko://…` — **this will fail** (that is expected, it is the mobile app's deep link)
+6. **Copy the full URL** from your browser's address bar (it contains a `code=…` parameter)
+7. **Paste** the full URL into the input field in Home Assistant and submit
+
+The integration exchanges the code for a token, stores it alongside your existing login, and reloads. Energy sensors appear automatically.
+
+> **Tip:** The energy consumption sensor uses `state_class: total_increasing` and `device_class: energy`, which means you can add your spa to the **HA Energy Dashboard** under **Settings → Dashboards → Energy → Add consumption → Individual devices**.
+
+#### How to unlink
+
+Go to **Configure → Unlink energy data** and confirm. The energy token is removed, the integration reloads, and the energy sensors disappear.
+
 ---
 
 ## Entities (summary)
@@ -148,7 +190,7 @@ On the Gecko card → **Configure**:
 | **Fan** | Pumps / blowers |
 | **Select** | Watercare operation mode |
 | **Binary sensor** | Connection stack, energy saving, dynamic shadow booleans, **REST active alerts** (on when there is something to review, per snapshot rules) |
-| **Sensor** | **Spa target / current temperature** (°C, per thermostat zone — for cards that only accept `sensor`), **dynamic shadow numerics**, **dynamic shadow strings**, optional **REST active alerts** count + previews |
+| **Sensor** | **Spa target / current temperature** (°C, per thermostat zone — for cards that only accept `sensor`), **dynamic shadow numerics**, **dynamic shadow strings**, optional **REST active alerts** count + previews, optional **energy consumption / cost / score** (premium) |
 | **Number** | Writable unknown-zone **setpoints** (shadow **desired**), where paths match supported setpoint shapes |
 
 **Shadow extension sensors:** values under `cloud.rest.*` can remain available from REST when MQTT is offline; pure MQTT paths follow normal entity availability.
@@ -251,6 +293,18 @@ These use `device_class: temperature` and `state_class: measurement` so pool/spa
 | **`actions`** attribute | list | Up to **16** entries: `id`, `title`, `status`. |
 | **`updated_at`** | ISO timestamp | When the snapshot was built. |
 | **`error`** | string or empty | Set when the REST merge reports an error string. |
+
+**Premium energy sensors** (created only when [energy data is linked](#link-energy-data-optional))
+
+| Entity | Device class | State class | Unit | Default |
+|--------|-------------|------------|------|---------|
+| **Energy consumption** | `energy` | `total_increasing` | kWh | **Enabled** — eligible for HA Energy Dashboard |
+| **Energy cost** | `monetary` | `total_increasing` | auto-detected from API | **Disabled** (diagnostic) |
+| **Energy score** | _(none)_ | `measurement` | % | **Disabled** (diagnostic) |
+
+The **energy consumption** sensor reports total kWh consumed by the spa. Because it uses `total_increasing`, Home Assistant automatically calculates hourly/daily/monthly usage — no template sensors or utility meters needed. Add it to the Energy Dashboard under **Individual devices**.
+
+Energy data is polled hourly by default (configurable via `energy_poll_interval` in options). The raw API response is available as an `raw_response` attribute on each entity for debugging.
 
 **Dynamic shadow numeric sensors**
 
@@ -375,9 +429,11 @@ Call **`gecko.dump_shadow_snapshot`** with defaults for a **community-safe** exp
 
 ## Roadmap & limits
 
-**Already in this fork:** shadow-derived **sensor / binary_sensor / string / number** entities, REST **tile** merge, REST **alerts** snapshot entities, MQTT **desired** services, **sanitized shadow export**, richer **diagnostics**, and configurable REST intervals.
+**Already in this fork:** shadow-derived **sensor / binary_sensor / string / number** entities, REST **tile** merge, REST **alerts** snapshot entities, MQTT **desired** services, **sanitized shadow export**, richer **diagnostics**, configurable REST intervals, and **premium energy data** via optional app-client token link.
 
-**Still constrained by Gecko’s API:** many app-only REST surfaces return **HTTP 403** for normal third-party OAuth tokens. Full parity with every Gecko app screen may require **policy changes from Gecko Alliance**, not only more Home Assistant code.
+**Energy data unlocked:** the optional [Link energy data](#link-energy-data-optional) step uses the Gecko mobile-app client to bypass the HTTP 403 restriction on energy, chart, activity, and routine endpoints. This is the same client the official Gecko app uses.
+
+**Still constrained by Gecko’s API:** some app-only REST surfaces may still return **HTTP 403** for the community OAuth token. The optional energy link covers the known premium endpoints; full parity with every Gecko app screen may require **further reverse engineering or policy changes from Gecko Alliance**.
 
 **Privacy:** do not commit real account, vessel, monitor, token, or **`.secrets/`** data to git. Use placeholders in issues and PRs.
 

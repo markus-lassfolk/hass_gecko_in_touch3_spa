@@ -41,9 +41,11 @@ from .const import (
     CONF_ALERTS_POLL_INTERVAL,
     CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     CONF_CLOUD_REST_POLL_INTERVAL,
+    CONF_ENERGY_POLL_INTERVAL,
     DEFAULT_ALERTS_POLL_INTERVAL,
     DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
+    DEFAULT_ENERGY_POLL_INTERVAL,
     DOMAIN,
     clamp_sensor_native_str,
 )
@@ -147,6 +149,10 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_zone_shadow_refresh_mono: float | None = None
         self._account_id_resolve_attempted = False
 
+        # Premium energy data (populated by _async_poll_energy_if_due)
+        self._energy_data: dict[str, Any] = {}
+        self._last_energy_poll_monotonic: float | None = None
+
     def register_zone_update_callback(self, callback):
         """Register a callback to be called when zone data updates."""
         self._zone_update_callbacks.append(callback)
@@ -207,7 +213,8 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not entry or not getattr(entry, "runtime_data", None):
             return None
         rd = entry.runtime_data
-        return rd.app_api_client if rd.app_api_client else rd.api_client
+        app = getattr(rd, "app_api_client", None)
+        return app if app else getattr(rd, "api_client", None)
 
     async def _async_lazy_resolve_account_id(self) -> str:
         """Resolve and persist ``account_id`` when missing (retries after transient failures).
@@ -471,6 +478,94 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Latest merged REST alerts (counts + short previews)."""
         return dict(self._rest_alerts_snapshot)
 
+    def _has_premium_api(self) -> bool:
+        """Return True if the premium (app-token) API client is available."""
+        entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if not entry or not getattr(entry, "runtime_data", None):
+            return False
+        return entry.runtime_data.app_api_client is not None
+
+    def _get_premium_api_client(self):
+        """Return the premium (app-token) API client or None."""
+        entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if not entry or not getattr(entry, "runtime_data", None):
+            return None
+        return entry.runtime_data.app_api_client
+
+    async def _async_poll_energy_if_due(self) -> None:
+        """Poll premium energy endpoints if the app token is linked and interval elapsed."""
+        if not self._has_premium_api():
+            return
+
+        account_id = self._config_account_id()
+        if not account_id:
+            return
+
+        opts = self._entry_options()
+        interval = int(
+            opts.get(CONF_ENERGY_POLL_INTERVAL, DEFAULT_ENERGY_POLL_INTERVAL)
+        )
+        if interval <= 0:
+            return
+
+        now = time.monotonic()
+        if (
+            self._last_energy_poll_monotonic is not None
+            and (now - self._last_energy_poll_monotonic) < interval
+        ):
+            return
+
+        entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if not entry or not getattr(entry, "runtime_data", None):
+            return
+        rd = entry.runtime_data
+        vid = str(self.vessel_id)
+        aid = str(account_id)
+
+        async with rd.energy_data_lock:
+            cached_mono = rd.energy_data_mono.get(vid)
+            if cached_mono is not None and (now - cached_mono) < interval:
+                cached = rd.energy_data_cache.get(vid)
+                if cached is not None:
+                    self._energy_data = cached
+                    self._last_energy_poll_monotonic = now
+                    return
+
+        api = self._get_premium_api_client()
+        if not api:
+            return
+
+        energy: dict[str, Any] = {}
+        for key, fetcher in (
+            ("consumption", api.async_get_energy_consumption),
+            ("score", api.async_get_energy_score),
+            ("cost", api.async_get_energy_cost),
+        ):
+            try:
+                energy[key] = await fetcher(aid, vid)
+            except (ClientError, TimeoutError, OSError) as err:
+                _LOGGER.debug(
+                    "Energy %s poll failed for %s: %s", key, self.vessel_name, err
+                )
+                energy[key] = None
+
+        self._energy_data = energy
+        self._last_energy_poll_monotonic = now
+
+        async with rd.energy_data_lock:
+            rd.energy_data_cache[vid] = energy
+            rd.energy_data_mono[vid] = now
+
+        _LOGGER.debug(
+            "Energy data refreshed for %s: keys=%s",
+            self.vessel_name,
+            [k for k, v in energy.items() if v is not None],
+        )
+
+    def get_energy_data(self) -> dict[str, Any]:
+        """Return the latest energy data dict (consumption, score, cost)."""
+        return dict(self._energy_data)
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Gecko API."""
         try:
@@ -487,6 +582,10 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 await self._async_poll_alerts_if_due()
             except (ClientError, TimeoutError, OSError) as err:
                 _LOGGER.debug("Alerts poll failed for %s: %s", self.vessel_name, err)
+            try:
+                await self._async_poll_energy_if_due()
+            except (ClientError, TimeoutError, OSError) as err:
+                _LOGGER.debug("Energy poll failed for %s: %s", self.vessel_name, err)
 
             if not connection or not connection.is_connected:
                 self._consecutive_failures += 1
@@ -970,6 +1069,8 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._cloud_string_metrics.clear()
         self._cloud_bool_metrics.clear()
         self._last_cloud_poll_monotonic = None
+        self._energy_data.clear()
+        self._last_energy_poll_monotonic = None
         self._rest_alerts_snapshot = {
             "total": 0,
             "messages": [],

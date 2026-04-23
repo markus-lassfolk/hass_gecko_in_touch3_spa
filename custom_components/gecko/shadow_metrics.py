@@ -436,6 +436,7 @@ def _cloud_rest_reading_status_enabled_by_default(path: str) -> bool:
         return False
     return parts[3].lower() in _CLOUD_REST_READINGS_ENABLED_BY_DEFAULT
 
+
 _AMBIGUOUS_LEAVES = frozenset(
     {
         "id",
@@ -811,10 +812,11 @@ def chemistry_metric_enabled_by_default(path: str) -> bool:
         return False
 
     parts = path.split(".")
-    if (
-        len(parts) == 4
-        and [p.lower() for p in parts[:3]] == ["cloud", "rest", "readings"]
-    ):
+    if len(parts) == 4 and [p.lower() for p in parts[:3]] == [
+        "cloud",
+        "rest",
+        "readings",
+    ]:
         return parts[3].lower() in _CLOUD_REST_READINGS_ENABLED_BY_DEFAULT
 
     if lower.startswith("cloud.rest."):
