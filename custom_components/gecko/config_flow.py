@@ -51,7 +51,13 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class AccountResolutionError(Exception):
-    """Custom exception for account resolution failures in config flow."""
+    """Account / profile resolution failed during OAuth setup.
+
+    Used instead of Python's built-in ``ConnectionError`` so genuine
+    ``aiohttp.ClientError`` / network failures from ``async_oauth_create_entry``
+    still surface as ``api_error`` rather than being misclassified as account
+    resolution issues.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +297,8 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
         raise AccountResolutionError(
             f"Could not resolve Gecko account for user {user_id}. "
             "This can happen if your user profile is not fully provisioned, "
-            "if JWT claims are missing, or if the account lookup failed. "
+            "if JWT claims are missing, if the Gecko user API returned an error, "
+            "or if the account lookup failed. "
             "Please ensure you have at least one vessel/spa linked in the "
             "Gecko mobile app, then try again."
         )
@@ -472,7 +479,17 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
         if not self.config_entry.data.get("app_token"):
             return self.async_abort(reason="energy_not_linked")
 
+        schema = vol.Schema(
+            {vol.Required("confirm_unlink", default=False): cv.boolean},
+        )
+
         if user_input is not None:
+            if not user_input.get("confirm_unlink"):
+                return self.async_show_form(
+                    step_id="unlink_energy",
+                    data_schema=schema,
+                    errors={"base": "must_confirm_unlink"},
+                )
             data = {k: v for k, v in self.config_entry.data.items() if k != "app_token"}
             self.hass.config_entries.async_update_entry(self.config_entry, data=data)
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
@@ -480,5 +497,5 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="unlink_energy",
-            data_schema=vol.Schema({}),
+            data_schema=schema,
         )

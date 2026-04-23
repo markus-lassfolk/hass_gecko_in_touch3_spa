@@ -392,12 +392,29 @@ async def test_options_flow_unlink_energy_removes_token(hass: HomeAssistant) -> 
     with patch.object(
         hass.config_entries, "async_reload", new_callable=AsyncMock
     ) as mock_reload:
-        result = await flow.async_step_unlink_energy(user_input={})
+        result = await flow.async_step_unlink_energy(
+            user_input={"confirm_unlink": True}
+        )
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "energy_unlinked"
     assert "app_token" not in entry.data
     mock_reload.assert_awaited_once_with(entry.entry_id)
+
+
+async def test_options_flow_unlink_energy_requires_checkbox(hass: HomeAssistant) -> None:
+    """Submitting unlink without confirming must show an error, not remove the token."""
+    entry = _mock_config_entry(
+        app_token={"access_token": "app-fake", "refresh_token": "r", "expires_at": 0}
+    )
+    flow = _create_options_flow(hass, entry)
+
+    await flow.async_step_unlink_energy(user_input=None)
+    result = await flow.async_step_unlink_energy(user_input={"confirm_unlink": False})
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"]["base"] == "must_confirm_unlink"
+    assert "app_token" in entry.data
 
 
 # ---------------------------------------------------------------------------

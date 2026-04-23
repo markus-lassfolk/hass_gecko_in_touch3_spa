@@ -491,6 +491,10 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return False
         return entry.runtime_data.app_api_client is not None
 
+    def has_premium_energy_api(self) -> bool:
+        """Public alias for REST-backed energy sensors (availability when MQTT is down)."""
+        return self._has_premium_api()
+
     def _get_premium_api_client(self):
         """Return the premium (app-token) API client or None."""
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
@@ -634,7 +638,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.debug("Alerts poll failed for %s: %s", self.vessel_name, err)
             try:
                 await self._async_poll_energy_if_due()
-            except (ClientError, TimeoutError, OSError) as err:
+            except Exception as err:
+                # Premium poll can raise token refresh / KeyError / OAuth errors that
+                # are not aiohttp ClientError; never fail the whole coordinator cycle.
                 _LOGGER.debug("Energy poll failed for %s: %s", self.vessel_name, err)
 
             if not connection or not connection.is_connected:

@@ -64,12 +64,16 @@
       },
       "unlink_energy": {
         "title": "Unlink energy data",
-        "description": "This will remove the linked energy data token. Energy, chart, activity, and routine sensors will no longer be available. Press Submit to confirm."
+        "description": "This will remove the linked energy data token. Energy, chart, activity, and routine sensors will no longer be available. Enable the checkbox and press Submit to confirm.",
+        "data": {
+          "confirm_unlink": "I want to unlink energy data"
+        }
       }
     },
     "error": {
       "invalid_callback_url": "Could not find an authorization code in the URL. Make sure you copied the full callback URL.",
-      "token_exchange_failed": "Token exchange failed. The authorization code may have expired — please try again."
+      "token_exchange_failed": "Token exchange failed. The authorization code may have expired — please try again.",
+      "must_confirm_unlink": "Please enable the confirmation checkbox to unlink energy data."
     }
   },
   "entity": {

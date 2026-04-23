@@ -30,6 +30,7 @@ class OAuth2SessionProtocol(Protocol):
         """Ensure the token is valid, refreshing if needed."""
         ...
 
+
 CLOCK_OUT_OF_SYNC_MAX_SEC = 20
 
 
@@ -55,8 +56,9 @@ class AppTokenSession:
 
     @property
     def token(self) -> dict:
-        """Return the app token dict."""
-        return self.config_entry.data["app_token"]
+        """Return the app token dict (empty mapping if key missing or malformed)."""
+        tok = self.config_entry.data.get("app_token")
+        return tok if isinstance(tok, dict) else {}
 
     @property
     def valid_token(self) -> bool:
@@ -70,6 +72,13 @@ class AppTokenSession:
             if self.valid_token:
                 return
             new_token = await self._implementation.async_refresh_token(self.token)
+            if not isinstance(new_token, dict):
+                return
+            if "expires_at" not in new_token and new_token.get("expires_in") is not None:
+                new_token = {
+                    **new_token,
+                    "expires_at": time.time() + int(new_token["expires_in"]),
+                }
             data = {**self.config_entry.data, "app_token": new_token}
             self.hass.config_entries.async_update_entry(self.config_entry, data=data)
 

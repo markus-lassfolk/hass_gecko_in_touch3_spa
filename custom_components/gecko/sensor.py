@@ -522,6 +522,13 @@ class GeckoEnergyConsumptionSensor(
             {"raw_response": raw} if isinstance(raw, dict) else {}
         )
 
+    @property
+    def available(self) -> bool:
+        """REST energy consumption stays available when MQTT transport is disconnected."""
+        if self.coordinator.has_premium_energy_api():
+            return True
+        return super().available
+
     @callback
     def _handle_coordinator_update(self) -> None:
         self._refresh_value()
@@ -595,6 +602,13 @@ class GeckoEnergyCostSensor(
             {"raw_response": raw} if isinstance(raw, dict) else {}
         )
 
+    @property
+    def available(self) -> bool:
+        """REST energy cost stays available when MQTT transport is disconnected."""
+        if self.coordinator.has_premium_energy_api():
+            return True
+        return super().available
+
     @callback
     def _handle_coordinator_update(self) -> None:
         self._refresh_value()
@@ -666,6 +680,13 @@ class GeckoEnergyScoreSensor(
         self._attr_extra_state_attributes = (
             {"raw_response": raw} if isinstance(raw, dict) else {}
         )
+
+    @property
+    def available(self) -> bool:
+        """REST energy score stays available when MQTT transport is disconnected."""
+        if self.coordinator.has_premium_energy_api():
+            return True
+        return super().available
 
     @callback
     def _handle_coordinator_update(self) -> None:

@@ -258,7 +258,10 @@ def get_flow_initiators(
     if raw_initiators is not None:
         return normalize_initiators(raw_initiators)
 
-    return normalize_initiators(getattr(zone, "initiators_", None))
+    # Library zones may expose initiators on ``initiators_`` or ``initiators``.
+    return normalize_initiators(
+        getattr(zone, "initiators_", None) or getattr(zone, "initiators", None)
+    )
 
 
 def get_temperature_status_names(temperature_zones: list[Any]) -> set[str]:
