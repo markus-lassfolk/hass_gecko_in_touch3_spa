@@ -634,8 +634,8 @@ class GeckoCleaningModeBinarySensor(
     def _is_cleaning_from_status(self, status: Any) -> bool:
         for attr in ("is_cleaning", "cleaning", "cleaning_mode", "is_cleaning_mode"):
             value = getattr(status, attr, None)
-            if isinstance(value, bool):
-                return value
+            if isinstance(value, bool) and value:
+                return True
         mode_name = getattr(status, "mode_name", None)
         if mode_name and "clean" in str(mode_name).lower():
             return True
