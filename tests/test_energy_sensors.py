@@ -84,6 +84,16 @@ def test_coerce_gecko_app_energy_wh_and_wrapped_cost() -> None:
     """Live Gecko API uses Wh fields and nests monetary amount under ``energyCost``."""
     assert _coerce_energy_consumption_kwh({"energyConsumptionWh": 12500}) == 12.5
     assert _coerce_energy_consumption_kwh({"worstCaseConsumptionWh": 1000}) == 1.0
+
+
+def test_coerce_energy_prefers_total_wh_over_period_wh() -> None:
+    """Period ``energyConsumptionWh`` is often 0; cumulative total must win."""
+    raw = {
+        "energyConsumptionWh": 0,
+        "totalEnergyConsumptionWh": 500_000,
+        "period": "month",
+    }
+    assert _coerce_energy_consumption_kwh(raw) == 500.0
     assert (
         _coerce_energy_cost_amount({"energyCost": {"amount": 42.5, "currency": "SEK"}})
         == 42.5

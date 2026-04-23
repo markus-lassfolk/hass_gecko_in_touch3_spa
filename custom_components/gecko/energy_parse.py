@@ -99,6 +99,32 @@ def _float_from_kwh_named_keys(obj: Any, depth: int = 0) -> float | None:
     return None
 
 
+# Watt-hour keys on Gecko ``/energy-consumption`` (v1). Order matters: period totals
+# (``energyConsumptionWh``) are often 0 at the start of a billing window, while
+# ``totalEnergyConsumptionWh`` carries the cumulative meter reading we need for
+# ``TOTAL_INCREASING`` energy sensors.
+_WH_CONSUMPTION_KEYS: tuple[str, ...] = (
+    "totalEnergyConsumptionWh",
+    "lifetimeEnergyConsumptionWh",
+    "cumulativeEnergyConsumptionWh",
+    "energyConsumptionWh",
+    "worstCaseConsumptionWh",
+)
+
+
+def _kwh_from_wh_dict(d: dict[str, Any]) -> float | None:
+    """Return kWh from the first usable Wh counter on this dict branch."""
+    for wh_key in _WH_CONSUMPTION_KEYS:
+        wh = d.get(wh_key)
+        if isinstance(wh, bool):
+            continue
+        if isinstance(wh, int | float):
+            kwh = float(wh) / 1000.0
+            if kwh >= 0:
+                return kwh
+    return None
+
+
 def _coerce_energy_consumption_kwh(raw: Any) -> float | None:
     """Parse ``/energy-consumption`` payloads into kWh (vendor shapes vary)."""
     if raw is None:
@@ -119,24 +145,16 @@ def _coerce_energy_consumption_kwh(raw: Any) -> float | None:
             return got
     if not isinstance(raw, dict):
         return None
-    # Gecko app API (v1): totals in watt-hours, not kWh (see energyConsumptionWh).
-    for wh_key in ("energyConsumptionWh", "totalEnergyConsumptionWh"):
-        wh = raw.get(wh_key)
-        if isinstance(wh, bool):
-            continue
-        if isinstance(wh, int | float):
-            kwh = float(wh) / 1000.0
-            if kwh >= 0:
-                return kwh
-    worst = raw.get("worstCaseConsumptionWh")
-    if isinstance(worst, int | float) and not isinstance(worst, bool):
-        kwh = float(worst) / 1000.0
-        if kwh >= 0:
-            return kwh
+    got_wh = _kwh_from_wh_dict(raw)
+    if got_wh is not None:
+        return got_wh
     inner = raw.get("data")
     if isinstance(inner, list) and inner:
         inner = inner[0] if isinstance(inner[0], dict) else None
     if isinstance(inner, dict):
+        got_wh = _kwh_from_wh_dict(inner)
+        if got_wh is not None:
+            return got_wh
         from_inner = _first_valid_float(inner, *_ENERGY_CONSUMPTION_FLOAT_PATHS)
         if from_inner is not None:
             return from_inner
