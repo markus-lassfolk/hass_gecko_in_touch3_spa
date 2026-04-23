@@ -278,12 +278,12 @@ class GeckoWatercareSelectEntity(
             _LOGGER.error("Invalid watercare mode option: %s", option)
             return
 
-        # The library's set_mode_by_name() uppercases the input and matches
-        # against enum names like SUPER_SAVINGS (underscored).  Sending the
-        # display name "Super Savings" fails because "SUPER SAVINGS" (space)
-        # doesn't match.  Send the HA key uppercased instead — it already
-        # uses underscores and matches the library's enum names exactly.
-        library_cmd = normalized.upper()
+        # Library expects display-style names (see ``_MODE_KEY_TO_LIBRARY``),
+        # not HA snake_case keys or ALL_CAPS tokens.
+        library_cmd = _MODE_KEY_TO_LIBRARY.get(normalized)
+        if library_cmd is None:
+            _LOGGER.error("No library mapping for watercare mode key: %s", normalized)
+            return
         _LOGGER.debug(
             "Setting watercare mode for vessel %s to %s (cmd: %s)",
             self._vessel_name,

@@ -479,6 +479,10 @@ class GeckoTemperatureZoneBinarySensorBase(
         )
         self._attr_available = False
 
+    def _update_state(self) -> None:
+        """Subclasses sync the zone reference and set ``_attr_is_on``."""
+        raise NotImplementedError
+
     def _sync_zone_from_coordinator(self) -> None:
         """Re-bind ``self._zone`` to the live model after each coordinator refresh."""
         zones = self.coordinator.get_zones_by_type(ZoneType.TEMPERATURE_CONTROL_ZONE)
@@ -678,8 +682,7 @@ class GeckoCleaningModeBinarySensor(
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        await self._async_update_state()
-        self.async_write_ha_state()
+        await self._async_refresh_from_coordinator()
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -688,10 +691,14 @@ class GeckoCleaningModeBinarySensor(
             "operation_mode": self._operation_mode_raw,
         }
 
+    async def _async_refresh_from_coordinator(self) -> None:
+        """Refresh cleaning state from the library, then publish to HA."""
+        await self._async_update_state()
+        self.async_write_ha_state()
+
     @callback
     def _handle_coordinator_update(self) -> None:
-        self.hass.async_create_task(self._async_update_state())
-        self.async_write_ha_state()
+        self.hass.async_create_task(self._async_refresh_from_coordinator())
 
 
 class GeckoRestActiveAlertsBinarySensor(
