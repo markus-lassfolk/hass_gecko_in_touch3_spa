@@ -9,6 +9,7 @@ from typing import Any
 from gecko_iot_client import GeckoIotClient
 from gecko_iot_client.models.connectivity import ConnectivityStatus
 from gecko_iot_client.models.zone_types import ZoneType
+from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import async_get_platforms
@@ -33,6 +34,22 @@ from .energy_parse import (
 from .shadow_metrics import infer_sensor_metadata, shadow_topology_summary
 
 _LOGGER = logging.getLogger(__name__)
+
+_DIAG_REDACT_KEYS = frozenset(
+    {
+        "access_token",
+        "refresh_token",
+        "token",
+        "app_token",
+        "password",
+        "secret",
+        "ssid",
+        "email",
+        "username",
+        "auth",
+        "authorization",
+    }
+)
 
 
 def _oauth_token_diagnostics(token: Any, *, label: str) -> dict[str, Any]:
@@ -552,20 +569,25 @@ async def async_get_config_entry_diagnostics(
             reported = st.get("reported", {}) if isinstance(st, dict) else {}
             desired = st.get("desired", {}) if isinstance(st, dict) else {}
             delta = st.get("delta", {}) if isinstance(st, dict) else {}
-            dump["reported_zones"] = (
-                reported.get("zones") if isinstance(reported, dict) else None
+            dump["reported_zones"] = async_redact_data(
+                reported.get("zones") if isinstance(reported, dict) else None,
+                _DIAG_REDACT_KEYS,
             )
-            dump["desired_zones"] = (
-                desired.get("zones") if isinstance(desired, dict) else None
+            dump["desired_zones"] = async_redact_data(
+                desired.get("zones") if isinstance(desired, dict) else None,
+                _DIAG_REDACT_KEYS,
             )
-            dump["delta_zones"] = (
-                delta.get("zones") if isinstance(delta, dict) else None
+            dump["delta_zones"] = async_redact_data(
+                delta.get("zones") if isinstance(delta, dict) else None,
+                _DIAG_REDACT_KEYS,
             )
-            dump["reported_features"] = (
-                reported.get("features") if isinstance(reported, dict) else None
+            dump["reported_features"] = async_redact_data(
+                reported.get("features") if isinstance(reported, dict) else None,
+                _DIAG_REDACT_KEYS,
             )
-            dump["desired_features"] = (
-                desired.get("features") if isinstance(desired, dict) else None
+            dump["desired_features"] = async_redact_data(
+                desired.get("features") if isinstance(desired, dict) else None,
+                _DIAG_REDACT_KEYS,
             )
         zones = getattr(gc, "_zones", None)
         if isinstance(zones, dict):

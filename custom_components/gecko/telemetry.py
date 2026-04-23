@@ -180,6 +180,11 @@ def get_flow_speed_value_for_mode(zone: Any, mode: str) -> float | int | None:
             if _get_mode_label_for_step_index(step_index, len(step_values)) == mode
         ]
         if matching_values:
+            # For "max" always send the highest configured step so HA actually
+            # reaches full speed.  For other modes use the median of the mapped
+            # steps (conservative mid-point).
+            if mode == "max":
+                return matching_values[-1]
             return matching_values[len(matching_values) // 2]
 
     if _uses_binary_near_max_speed_encoding(zone):
