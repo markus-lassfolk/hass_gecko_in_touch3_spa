@@ -415,6 +415,25 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
         """Link a Gecko mobile-app token for energy/premium data."""
         errors: dict[str, str] = {}
 
+        if not hasattr(self, "_authorize_url") or self._authorize_url is None:
+            self._code_verifier = GeckoPKCEOAuth2Implementation.generate_code_verifier()
+            challenge = GeckoPKCEOAuth2Implementation.compute_code_challenge(
+                self._code_verifier
+            )
+            self._authorize_url = str(
+                URL(OAUTH2_AUTHORIZE).with_query(
+                    {
+                        "response_type": "code",
+                        "client_id": OAUTH2_APP_CLIENT_ID,
+                        "redirect_uri": OAUTH2_APP_REDIRECT_URI,
+                        "code_challenge": challenge,
+                        "code_challenge_method": "S256",
+                        "scope": "openid profile email offline_access",
+                        "audience": "https://api.geckowatermonitor.com",
+                    }
+                )
+            )
+
         if user_input is not None:
             code = _extract_code_from_callback(user_input.get("callback_url", ""))
             if code is None:
@@ -435,25 +454,6 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                         self.config_entry.entry_id
                     )
                     return self.async_abort(reason="energy_linked")
-
-        if not hasattr(self, "_authorize_url") or self._authorize_url is None:
-            self._code_verifier = GeckoPKCEOAuth2Implementation.generate_code_verifier()
-            challenge = GeckoPKCEOAuth2Implementation.compute_code_challenge(
-                self._code_verifier
-            )
-            self._authorize_url = str(
-                URL(OAUTH2_AUTHORIZE).with_query(
-                    {
-                        "response_type": "code",
-                        "client_id": OAUTH2_APP_CLIENT_ID,
-                        "redirect_uri": OAUTH2_APP_REDIRECT_URI,
-                        "code_challenge": challenge,
-                        "code_challenge_method": "S256",
-                        "scope": "openid profile email offline_access",
-                        "audience": "https://api.geckowatermonitor.com",
-                    }
-                )
-            )
 
         return self.async_show_form(
             step_id="link_energy",
