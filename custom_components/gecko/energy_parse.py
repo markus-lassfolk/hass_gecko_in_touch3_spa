@@ -126,7 +126,7 @@ def _kwh_from_wh_dict(d: dict[str, Any]) -> float | None:
     return None
 
 
-def _coerce_energy_consumption_kwh(raw: Any) -> float | None:
+def coerce_energy_consumption_kwh(raw: Any) -> float | None:
     """Parse ``/energy-consumption`` payloads into kWh (vendor shapes vary)."""
     if raw is None:
         return None
@@ -141,7 +141,7 @@ def _coerce_energy_consumption_kwh(raw: Any) -> float | None:
             return None
     if isinstance(raw, list) and raw:
         first = raw[0]
-        got = _coerce_energy_consumption_kwh(first)
+        got = coerce_energy_consumption_kwh(first)
         if got is not None:
             return got
     if not isinstance(raw, dict):
@@ -189,7 +189,6 @@ _ENERGY_COST_PATHS: tuple[tuple[str, ...], ...] = (
     ("energyCost", "value"),
     ("energyCost", "cost"),
     ("data", "amount"),
-    ("data", "totalCost"),
 )
 
 
@@ -288,7 +287,7 @@ def _scan_dict_for_cost_number(obj: Any, depth: int = 0) -> float | None:
     return None
 
 
-def _coerce_energy_cost_amount(raw: Any) -> float | None:
+def coerce_energy_cost_amount(raw: Any) -> float | None:
     """Parse ``energyCost`` payloads into a currency amount."""
     if raw is None or isinstance(raw, bool):
         return None
@@ -303,14 +302,14 @@ def _coerce_energy_cost_amount(raw: Any) -> float | None:
                 return parsed
             return None
     if isinstance(raw, list) and raw:
-        return _coerce_energy_cost_amount(raw[0])
+        return coerce_energy_cost_amount(raw[0])
     if not isinstance(raw, dict):
         return None
     # Wrapper shape: ``{"energyCost": {...}}`` or ``{"energyCost": 12.34}``.
     if "energyCost" in raw:
         ec = raw.get("energyCost")
         if ec is not None and not isinstance(ec, bool):
-            nested = _coerce_energy_cost_amount(ec)
+            nested = coerce_energy_cost_amount(ec)
             if nested is not None:
                 return nested
     for fmt_key in (
@@ -330,7 +329,7 @@ def _coerce_energy_cost_amount(raw: Any) -> float | None:
         v = _first_valid_float(inner, *_ENERGY_COST_PATHS)
         if v is not None:
             return v
-        nested_inner = _coerce_energy_cost_amount(inner)
+        nested_inner = coerce_energy_cost_amount(inner)
         if nested_inner is not None:
             return nested_inner
     v = _first_valid_float(raw, *_ENERGY_COST_PATHS)
@@ -357,7 +356,7 @@ _ENERGY_SCORE_PATHS: tuple[tuple[str, ...], ...] = (
 )
 
 
-def _coerce_energy_score_value(raw: Any) -> float | None:
+def coerce_energy_score_value(raw: Any) -> float | None:
     """Parse ``energy/score`` payloads."""
     if raw is None or isinstance(raw, bool):
         return None
@@ -387,10 +386,10 @@ def _coerce_energy_score_value(raw: Any) -> float | None:
 
 def premium_energy_poll_has_usable_values(energy: dict[str, Any]) -> bool:
     """True if at least one premium endpoint returned a value we can show in HA."""
-    if _coerce_energy_consumption_kwh(energy.get("consumption")) is not None:
+    if coerce_energy_consumption_kwh(energy.get("consumption")) is not None:
         return True
-    if _coerce_energy_cost_amount(energy.get("cost")) is not None:
+    if coerce_energy_cost_amount(energy.get("cost")) is not None:
         return True
-    if _coerce_energy_score_value(energy.get("score")) is not None:
+    if coerce_energy_score_value(energy.get("score")) is not None:
         return True
     return False

@@ -26,9 +26,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL, DOMAIN
 from .coordinator import GeckoVesselCoordinator
 from .energy_parse import (
-    _coerce_energy_consumption_kwh,
-    _coerce_energy_cost_amount,
-    _coerce_energy_score_value,
+    coerce_energy_consumption_kwh,
+    coerce_energy_cost_amount,
+    coerce_energy_score_value,
 )
 from .entity import GeckoEntityAvailabilityMixin, gecko_zone_ids_equal
 from .shadow_metrics import (
@@ -457,7 +457,7 @@ class GeckoEnergyConsumptionSensor(
             self._attr_extra_state_attributes = {}
             return
 
-        val = _coerce_energy_consumption_kwh(raw)
+        val = coerce_energy_consumption_kwh(raw)
 
         self._attr_native_value = val
         self._attr_extra_state_attributes = (
@@ -524,7 +524,7 @@ class GeckoEnergyCostSensor(
             self._attr_extra_state_attributes = {}
             return
 
-        val = _coerce_energy_cost_amount(raw)
+        val = coerce_energy_cost_amount(raw)
 
         currency = None
         if isinstance(raw, dict):
@@ -596,7 +596,7 @@ class GeckoEnergyScoreSensor(
             self._attr_extra_state_attributes = {}
             return
 
-        val = _coerce_energy_score_value(raw)
+        val = coerce_energy_score_value(raw)
 
         unit: str | None = None
         if isinstance(raw, dict):

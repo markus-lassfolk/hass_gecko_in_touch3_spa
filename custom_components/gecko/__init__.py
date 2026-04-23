@@ -40,6 +40,10 @@ from .energy_entity_registry import (
 )
 from .oauth_implementation import GeckoPKCEOAuth2Implementation
 from .services import async_remove_services, async_setup_services
+from .zone_shadow_merge import (
+    install_mqtt_shadow_document_patch,
+    install_zone_parser_merge_patch,
+)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -327,6 +331,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.entry_id,
         len(entry.data.get("vessels", [])),
     )
+
+    install_zone_parser_merge_patch()
+    install_mqtt_shadow_document_patch()
 
     _migrate_options_defaults(hass, entry)
 

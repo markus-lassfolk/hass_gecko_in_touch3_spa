@@ -13,9 +13,9 @@ from homeassistant.core import HomeAssistant
 
 from .connection_manager import async_get_connection_manager
 from .energy_parse import (
-    _coerce_energy_consumption_kwh,
-    _coerce_energy_cost_amount,
-    _coerce_energy_score_value,
+    coerce_energy_consumption_kwh,
+    coerce_energy_cost_amount,
+    coerce_energy_score_value,
 )
 from .shadow_metrics import shadow_topology_summary
 
@@ -244,11 +244,11 @@ async def async_get_config_entry_diagnostics(
                 continue
             ed = getter()
             parseable: list[str] = []
-            if _coerce_energy_consumption_kwh(ed.get("consumption")) is not None:
+            if coerce_energy_consumption_kwh(ed.get("consumption")) is not None:
                 parseable.append("consumption")
-            if _coerce_energy_cost_amount(ed.get("cost")) is not None:
+            if coerce_energy_cost_amount(ed.get("cost")) is not None:
                 parseable.append("cost")
-            if _coerce_energy_score_value(ed.get("score")) is not None:
+            if coerce_energy_score_value(ed.get("score")) is not None:
                 parseable.append("score")
             energy_summary.append(
                 {
