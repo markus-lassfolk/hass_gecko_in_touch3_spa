@@ -135,6 +135,17 @@ def _get_mode_label_for_step_index(step_index: int, step_count: int) -> str:
     return ("low", "medium", "high", "max")[normalized_index]
 
 
+def zone_supports_speed_control(zone: Any) -> bool:
+    """Return True if the zone has actual speed control capability."""
+    if get_flow_speed_step_values(zone):
+        return True
+    if _uses_binary_near_max_speed_encoding(zone):
+        return True
+    if hasattr(zone, "set_speed") and callable(getattr(zone, "set_speed", None)):
+        return True
+    return False
+
+
 def get_supported_flow_speed_modes(zone: Any) -> tuple[str, ...]:
     """Return the HA speed labels supported by this flow zone."""
     step_values = get_flow_speed_step_values(zone)
