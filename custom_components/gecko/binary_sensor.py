@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from typing import Any
@@ -650,6 +651,7 @@ class GeckoCleaningModeBinarySensor(
         self._attr_available = False
         self._mode_name: str | None = None
         self._operation_mode_raw: str | None = None
+        self._update_lock = asyncio.Lock()
 
     def _is_cleaning_from_status(self, status: Any) -> bool:
         for attr in ("is_cleaning", "cleaning", "cleaning_mode", "is_cleaning_mode"):
@@ -713,8 +715,9 @@ class GeckoCleaningModeBinarySensor(
         self.hass.async_create_task(self._async_update_and_write())
 
     async def _async_update_and_write(self) -> None:
-        await self._async_update_state()
-        self.async_write_ha_state()
+        async with self._update_lock:
+            await self._async_update_state()
+            self.async_write_ha_state()
 
 
 class GeckoRestActiveAlertsBinarySensor(

@@ -437,7 +437,9 @@ def _first_valid_float(data: Any, *key_paths: tuple[str, ...]) -> float | None:
     return None
 
 
-class GeckoEnergyConsumptionSensor(CoordinatorEntity, SensorEntity):
+class GeckoEnergyConsumptionSensor(
+    GeckoEntityAvailabilityMixin, CoordinatorEntity, SensorEntity
+):
     """Total energy consumed by the spa (kWh).
 
     Compatible with the HA Energy Dashboard as an individual device
@@ -466,6 +468,7 @@ class GeckoEnergyConsumptionSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, str(coordinator.vessel_id))},
         )
+        self._attr_available = False
         self._refresh_value()
 
     def _refresh_value(self) -> None:
@@ -502,7 +505,9 @@ class GeckoEnergyConsumptionSensor(CoordinatorEntity, SensorEntity):
         self._refresh_value()
 
 
-class GeckoEnergyCostSensor(CoordinatorEntity, SensorEntity):
+class GeckoEnergyCostSensor(
+    GeckoEntityAvailabilityMixin, CoordinatorEntity, SensorEntity
+):
     """Estimated energy cost for the spa.
 
     Disabled by default — power users can enable it in Settings > Entities.
@@ -531,6 +536,7 @@ class GeckoEnergyCostSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, str(coordinator.vessel_id))},
         )
+        self._attr_available = False
         self._refresh_value()
 
     def _refresh_value(self) -> None:
@@ -572,7 +578,9 @@ class GeckoEnergyCostSensor(CoordinatorEntity, SensorEntity):
         self._refresh_value()
 
 
-class GeckoEnergyScoreSensor(CoordinatorEntity, SensorEntity):
+class GeckoEnergyScoreSensor(
+    GeckoEntityAvailabilityMixin, CoordinatorEntity, SensorEntity
+):
     """Energy efficiency score from the Gecko app.
 
     Disabled by default — informational metric for power users.
@@ -598,6 +606,7 @@ class GeckoEnergyScoreSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, str(coordinator.vessel_id))},
         )
+        self._attr_available = False
         self._refresh_value()
 
     def _refresh_value(self) -> None:
