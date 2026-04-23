@@ -12,6 +12,9 @@ from typing import Any
 
 from gecko_iot_client import GeckoIotClient
 from gecko_iot_client.models.events import EventChannel
+from gecko_iot_client.transporters.exceptions import (
+    ConfigurationError as GeckoConfigurationError,
+)
 from gecko_iot_client.transporters.mqtt import MqttTransporter
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import Event, HomeAssistant
@@ -219,12 +222,23 @@ class GeckoConnectionManager:
 
             except Exception as e:
                 elapsed = time.monotonic() - _t0
-                _LOGGER.debug(
-                    "Failed to create connection for monitor %s after %.1fs: %s",
-                    mid,
-                    elapsed,
-                    e,
-                )
+                if isinstance(e, GeckoConfigurationError):
+                    _LOGGER.warning(
+                        "Gecko MQTT configuration load failed for monitor %s (%s) "
+                        "after %.1fs (config_timeout=%.1fs): %s",
+                        mid,
+                        vessel_name,
+                        elapsed,
+                        CONFIG_TIMEOUT,
+                        e,
+                    )
+                else:
+                    _LOGGER.debug(
+                        "Failed to create connection for monitor %s after %.1fs: %s",
+                        mid,
+                        elapsed,
+                        e,
+                    )
                 raise
 
     def get_connection(self, monitor_id: str | int) -> GeckoMonitorConnection | None:

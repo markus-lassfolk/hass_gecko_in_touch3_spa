@@ -69,8 +69,8 @@ async def test_async_get_config_entry_diagnostics_runtime_data(
     assert data["runtime_data"]["api_client_type"] == "NoneType"
     assert data["runtime_data"]["coordinator_count"] == 1
     assert data["runtime_data"]["premium_energy_client"] is False
-    assert data["runtime_data"]["energy_data_per_vessel"][0]["energy_keys_with_data"] == [
-        "score"
-    ]
+    assert data["runtime_data"]["energy_data_per_vessel"][0][
+        "energy_keys_with_data"
+    ] == ["score"]
     assert len(data["vessels"]) == 1
     assert data["vessels"][0]["monitor_id"] == "m1"

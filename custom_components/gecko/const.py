@@ -86,7 +86,9 @@ API_BASE_URL = "https://api.geckowatermonitor.com"
 
 # Client configuration
 CONFIG_TIMEOUT = (
-    20.0  # Default timeout for GeckoIotClient configuration loading in seconds
+    # MQTT ``config/get`` round-trip can exceed 20s on slow Wi‑Fi / HA OS; the
+    # gecko_iot_client transporter logs ``Configuration loading failed`` on timeout.
+    45.0
 )
 
 # Home Assistant core rejects ``Sensor.native_value`` strings longer than this.

@@ -3,11 +3,14 @@
 from unittest.mock import MagicMock
 
 from custom_components.gecko.sensor import (
+    GeckoEnergyConsumptionSensor,
+    GeckoEnergyCostSensor,
     GeckoEnergyScoreSensor,
     _coerce_energy_consumption_kwh,
     _first_valid_float,
     _safe_float,
 )
+from homeassistant.components.sensor.const import DEVICE_CLASS_STATE_CLASSES
 
 
 def test_first_valid_float_preserves_zero() -> None:
@@ -45,6 +48,32 @@ def test_coerce_energy_consumption_unwraps_data_and_extra_keys() -> None:
     assert _coerce_energy_consumption_kwh({"data": {"totalKwh": 42.25}}) == 42.25
     assert _coerce_energy_consumption_kwh({"totalEnergyKWh": 10.0}) == 10.0
     assert _coerce_energy_consumption_kwh(3.5) == 3.5
+
+
+def test_energy_sensors_device_class_state_class_allowed_by_ha_matrix() -> None:
+    """HA core warns (``sensor`` platform) when ``state_class`` ∉ ``DEVICE_CLASS_STATE_CLASSES[dc]``.
+
+    Unit tests that only assert ``native_value`` never hit that path; this locks
+    metadata against Home Assistant's published allowlist.
+    """
+    entry = MagicMock()
+    entry.entry_id = "e1"
+
+    consumption_coord = MagicMock()
+    consumption_coord.get_energy_data = MagicMock(return_value={"consumption": 1.0})
+    consumption_coord.vessel_id = "v1"
+    consumption = GeckoEnergyConsumptionSensor(consumption_coord, entry)
+    dc_c, sc_c = consumption._attr_device_class, consumption._attr_state_class
+    assert dc_c is not None and sc_c is not None
+    assert sc_c in DEVICE_CLASS_STATE_CLASSES[dc_c], (dc_c, sc_c)
+
+    cost_coord = MagicMock()
+    cost_coord.get_energy_data = MagicMock(return_value={"cost": 2.5})
+    cost_coord.vessel_id = "v1"
+    cost = GeckoEnergyCostSensor(cost_coord, entry)
+    dc_m, sc_m = cost._attr_device_class, cost._attr_state_class
+    assert dc_m is not None and sc_m is not None
+    assert sc_m in DEVICE_CLASS_STATE_CLASSES[dc_m], (dc_m, sc_m)
 
 
 def test_energy_score_dict_unit_is_preserved() -> None:

@@ -74,7 +74,10 @@ class AppTokenSession:
             new_token = await self._implementation.async_refresh_token(self.token)
             if not isinstance(new_token, dict):
                 return
-            if "expires_at" not in new_token and new_token.get("expires_in") is not None:
+            if (
+                "expires_at" not in new_token
+                and new_token.get("expires_in") is not None
+            ):
                 new_token = {
                     **new_token,
                     "expires_at": time.time() + int(new_token["expires_in"]),

@@ -251,8 +251,7 @@ async def async_get_config_entry_diagnostics(
         diagnostics_data["runtime_data"] = {
             "api_client_type": type(getattr(rd, "api_client", None)).__name__,
             "coordinator_count": len(coordinators),
-            "premium_energy_client": getattr(rd, "app_api_client", None)
-            is not None,
+            "premium_energy_client": getattr(rd, "app_api_client", None) is not None,
             "energy_data_per_vessel": energy_summary,
         }
 
