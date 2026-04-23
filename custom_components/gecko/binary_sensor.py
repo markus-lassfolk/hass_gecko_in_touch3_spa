@@ -643,8 +643,8 @@ class GeckoCleaningModeBinarySensor(
         if operation_mode is not None:
             combined = (
                 f"{getattr(operation_mode, 'name', '')} "
-                f"{getattr(operation_mode, 'value', '')}".lower()
-            )
+                f"{getattr(operation_mode, 'value', '')}"
+            ).lower()
             if "clean" in combined:
                 return True
         return False

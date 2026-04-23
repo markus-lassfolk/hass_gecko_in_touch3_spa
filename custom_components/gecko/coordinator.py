@@ -208,11 +208,15 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return str(entry.data.get("account_id", "")).strip()
 
     def _get_community_api_client(self):
-        """Return the community API client for basic REST operations."""
+        """Return the community-token API client (tiles, alerts, account resolution).
+
+        Premium REST uses :meth:`_get_premium_api_client` so a failing app token
+        refresh does not break basic cloud polling.
+        """
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
         if not entry or not getattr(entry, "runtime_data", None):
             return None
-        return entry.runtime_data.api_client
+        return getattr(entry.runtime_data, "api_client", None)
 
     async def _async_lazy_resolve_account_id(self) -> str:
         """Resolve and persist ``account_id`` when missing (retries after transient failures).

@@ -427,8 +427,8 @@ def _safe_float(data: Any, *keys: str) -> float | None:
 
 def _first_valid_float(data: Any, *key_paths: tuple[str, ...]) -> float | None:
     """Try each key path and return the first non-None float result.
-    
-    Unlike or-chaining _safe_float calls, this correctly handles 0.0 values.
+
+    Unlike or-chaining ``_safe_float`` calls, this correctly handles ``0.0`` values.
     """
     for keys in key_paths:
         val = _safe_float(data, *keys)

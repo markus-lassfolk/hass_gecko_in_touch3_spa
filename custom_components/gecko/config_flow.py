@@ -425,14 +425,10 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
             exceptions = (ClientResponseError, ClientError, OAuth2TokenRequestError)
 
         try:
-            return await impl._token_request(  # noqa: SLF001
-                {
-                    "grant_type": "authorization_code",
-                    "code": code,
-                    "redirect_uri": OAUTH2_APP_REDIRECT_URI,
-                    "code_verifier": self._code_verifier,
-                    "client_id": OAUTH2_APP_CLIENT_ID,
-                }
+            return await impl.async_exchange_authorization_code(
+                code=code,
+                redirect_uri=OAUTH2_APP_REDIRECT_URI,
+                code_verifier=self._code_verifier,
             )
         except exceptions as err:
             _LOGGER.error("App-client token exchange failed: %s", err)

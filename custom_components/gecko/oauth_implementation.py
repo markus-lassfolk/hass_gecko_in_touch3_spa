@@ -127,6 +127,28 @@ class GeckoPKCEOAuth2Implementation(config_entry_oauth2_flow.LocalOAuth2Implemen
         finally:
             _active_pkce_verifier.reset(token)
 
+    async def async_exchange_authorization_code(
+        self,
+        *,
+        code: str,
+        redirect_uri: str,
+        code_verifier: str,
+    ) -> dict[str, Any]:
+        """Exchange an authorization code for tokens (PKCE).
+
+        Wraps the HA OAuth2 token HTTP call so callers (for example the options
+        flow) do not reach into ``LocalOAuth2Implementation._token_request``.
+        """
+        return await self._token_request(
+            {
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "code_verifier": code_verifier,
+                "client_id": self.client_id,
+            }
+        )
+
     async def async_refresh_token(self, token: dict) -> dict:
         """Refresh tokens, preserving the refresh_token if Auth0 omits it.
 
