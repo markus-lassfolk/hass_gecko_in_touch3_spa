@@ -155,11 +155,8 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
     def _resolve_flow_zone(self) -> FlowZone | None:
         """Return the live flow zone for this entity, or ``None`` if missing."""
         self._sync_zone_from_coordinator()
-        pump_zones = self._coordinator.get_zones_by_type(ZoneType.FLOW_ZONE)
-        my_id = getattr(self._zone, "id", None)
-        for z in pump_zones:
-            if gecko_zone_ids_equal(getattr(z, "id", None), my_id):
-                return z
+        if isinstance(self._zone, FlowZone):
+            return self._zone
         return None
 
     @property

@@ -299,7 +299,7 @@ class GeckoClimate(
                 raise HomeAssistantError(f"Failed to set temperature: {err}") from err
 
         self._attr_target_temperature = temperature
-        self.schedule_update_ha_state()
+        self.async_write_ha_state()
 
         _LOGGER.info(
             "Thermostat setpoint %.1f °C requested for zone %s (%s); "
