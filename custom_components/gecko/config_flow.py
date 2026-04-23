@@ -35,9 +35,11 @@ from .const import (
     CONF_ALERTS_POLL_INTERVAL,
     CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     CONF_CLOUD_REST_POLL_INTERVAL,
+    CONF_ENERGY_POLL_INTERVAL,
     DEFAULT_ALERTS_POLL_INTERVAL,
     DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
+    DEFAULT_ENERGY_POLL_INTERVAL,
     DOMAIN,
     OAUTH2_APP_CLIENT_ID,
     OAUTH2_APP_REDIRECT_URI,
@@ -346,6 +348,19 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             merged_options = dict(self.config_entry.options)
             merged_options.update(user_input)
+            # Partial ``user_input`` (tests, API) may omit keys added in later
+            # releases; keep stored options aligned with the settings schema.
+            for key, default in (
+                (CONF_CLOUD_REST_POLL_INTERVAL, DEFAULT_CLOUD_REST_POLL_INTERVAL),
+                (
+                    CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+                    DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
+                ),
+                (CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL),
+                (CONF_ENERGY_POLL_INTERVAL, DEFAULT_ENERGY_POLL_INTERVAL),
+            ):
+                if key not in merged_options:
+                    merged_options[key] = opts.get(key, default)
 
             old_alerts = int(
                 opts.get(CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL)
@@ -383,6 +398,13 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                     default=opts.get(
                         CONF_ALERTS_POLL_INTERVAL,
                         DEFAULT_ALERTS_POLL_INTERVAL,
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=0, max=86400)),
+                vol.Optional(
+                    CONF_ENERGY_POLL_INTERVAL,
+                    default=opts.get(
+                        CONF_ENERGY_POLL_INTERVAL,
+                        DEFAULT_ENERGY_POLL_INTERVAL,
                     ),
                 ): vol.All(vol.Coerce(int), vol.Range(min=0, max=86400)),
             }

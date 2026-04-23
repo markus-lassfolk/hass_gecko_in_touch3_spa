@@ -24,9 +24,11 @@ from custom_components.gecko.const import (
     CONF_ALERTS_POLL_INTERVAL,
     CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     CONF_CLOUD_REST_POLL_INTERVAL,
+    CONF_ENERGY_POLL_INTERVAL,
     DEFAULT_ALERTS_POLL_INTERVAL,
     DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
+    DEFAULT_ENERGY_POLL_INTERVAL,
     DOMAIN,
 )
 from homeassistant import config_entries
@@ -64,6 +66,7 @@ def _default_user_input(**overrides) -> dict:
         CONF_CLOUD_REST_POLL_INTERVAL: DEFAULT_CLOUD_REST_POLL_INTERVAL,
         CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN: DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
         CONF_ALERTS_POLL_INTERVAL: DEFAULT_ALERTS_POLL_INTERVAL,
+        CONF_ENERGY_POLL_INTERVAL: DEFAULT_ENERGY_POLL_INTERVAL,
     }
     base.update(overrides)
     return base
@@ -116,6 +119,7 @@ async def test_options_flow_settings_shows_form(hass: HomeAssistant) -> None:
     assert CONF_CLOUD_REST_POLL_INTERVAL in schema_keys
     assert CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN in schema_keys
     assert CONF_ALERTS_POLL_INTERVAL in schema_keys
+    assert CONF_ENERGY_POLL_INTERVAL in schema_keys
 
 
 async def test_options_flow_form_defaults_from_existing_options(
@@ -156,6 +160,7 @@ async def test_options_flow_save_without_reload(hass: HomeAssistant) -> None:
             CONF_CLOUD_REST_POLL_INTERVAL: 120,
             CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN: False,
             CONF_ALERTS_POLL_INTERVAL: 0,
+            CONF_ENERGY_POLL_INTERVAL: DEFAULT_ENERGY_POLL_INTERVAL,
         },
     )
 
@@ -163,6 +168,7 @@ async def test_options_flow_save_without_reload(hass: HomeAssistant) -> None:
     assert result["data"][CONF_CLOUD_REST_POLL_INTERVAL] == 120
     assert result["data"][CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN] is False
     assert result["data"][CONF_ALERTS_POLL_INTERVAL] == 0
+    assert result["data"][CONF_ENERGY_POLL_INTERVAL] == DEFAULT_ENERGY_POLL_INTERVAL
 
 
 async def test_options_flow_preserves_internal_migration_marker(
@@ -184,6 +190,7 @@ async def test_options_flow_preserves_internal_migration_marker(
             CONF_CLOUD_REST_POLL_INTERVAL: 120,
             CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN: False,
             CONF_ALERTS_POLL_INTERVAL: 0,
+            CONF_ENERGY_POLL_INTERVAL: DEFAULT_ENERGY_POLL_INTERVAL,
         },
     )
 
@@ -402,7 +409,9 @@ async def test_options_flow_unlink_energy_removes_token(hass: HomeAssistant) -> 
     mock_reload.assert_awaited_once_with(entry.entry_id)
 
 
-async def test_options_flow_unlink_energy_requires_checkbox(hass: HomeAssistant) -> None:
+async def test_options_flow_unlink_energy_requires_checkbox(
+    hass: HomeAssistant,
+) -> None:
     """Submitting unlink without confirming must show an error, not remove the token."""
     entry = _mock_config_entry(
         app_token={"access_token": "app-fake", "refresh_token": "r", "expires_at": 0}

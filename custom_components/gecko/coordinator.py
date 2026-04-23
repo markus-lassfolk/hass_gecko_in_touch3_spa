@@ -603,6 +603,15 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     candidate_vessel_ids,
                 )
 
+        any_success = any(v is not None for v in energy.values())
+        if not any_success:
+            _LOGGER.debug(
+                "Energy poll for %s: all premium endpoints returned no data; "
+                "not advancing poll interval or cache so the next cycle can retry",
+                self.vessel_name,
+            )
+            return
+
         self._energy_data = energy
         self._last_energy_poll_monotonic = now
 
