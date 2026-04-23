@@ -655,12 +655,12 @@ class GeckoCleaningModeBinarySensor(
                 return True
         return False
 
-    async def _async_update_state(self) -> None:
+    def _update_state(self) -> None:
         self._mode_name = None
         self._operation_mode_raw = None
         self._attr_is_on = False
         try:
-            status = await self.coordinator.async_get_operation_mode_status()
+            status = self.coordinator.get_cached_operation_mode_status()
             if not status:
                 return
             mode_name = getattr(status, "mode_name", None)
@@ -682,7 +682,7 @@ class GeckoCleaningModeBinarySensor(
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        await self._async_refresh_from_coordinator()
+        self._update_state()
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -691,14 +691,10 @@ class GeckoCleaningModeBinarySensor(
             "operation_mode": self._operation_mode_raw,
         }
 
-    async def _async_refresh_from_coordinator(self) -> None:
-        """Refresh cleaning state from the library, then publish to HA."""
-        await self._async_update_state()
-        self.async_write_ha_state()
-
     @callback
     def _handle_coordinator_update(self) -> None:
-        self.hass.async_create_task(self._async_refresh_from_coordinator())
+        self._update_state()
+        self.async_write_ha_state()
 
 
 class GeckoRestActiveAlertsBinarySensor(

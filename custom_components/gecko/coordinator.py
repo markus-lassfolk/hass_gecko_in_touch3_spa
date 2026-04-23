@@ -154,6 +154,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_energy_poll_monotonic: float | None = None
         self._logged_energy_api_forbidden: bool = False
 
+        # Cache operation mode status for synchronous access by entities
+        self._cached_operation_mode_status: Any | None = None
+
     def register_zone_update_callback(self, callback):
         """Register a callback to be called when zone data updates."""
         self._zone_update_callbacks.append(callback)
@@ -669,6 +672,20 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             client = await self.get_gecko_client()
             self.sync_refresh_shadow_metrics(client)
 
+            # Cache operation mode status for synchronous access by entities
+            if client:
+                try:
+                    self._cached_operation_mode_status = client.operation_mode_status
+                except Exception as ex:
+                    _LOGGER.debug(
+                        "Could not fetch operation_mode_status for %s: %s",
+                        self.vessel_name,
+                        ex,
+                    )
+                    self._cached_operation_mode_status = None
+            else:
+                self._cached_operation_mode_status = None
+
             return {"status": "active", "vessel_id": self.vessel_id}
         except Exception as exception:
             _LOGGER.debug(
@@ -1037,6 +1054,10 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if gecko_client:
             return gecko_client.operation_mode_status
         return None
+
+    def get_cached_operation_mode_status(self):
+        """Get cached operation mode status (synchronous, updated during coordinator refresh)."""
+        return self._cached_operation_mode_status
 
     def update_spa_state(self, state_data: dict[str, Any]) -> None:
         """Update spa state data and trigger coordinator update."""
