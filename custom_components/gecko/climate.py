@@ -211,10 +211,10 @@ class GeckoClimate(
 
         self._sync_zone_from_coordinator()
         try:
-            # set_target_temperature is a synchronous method, run in executor
-            await self.hass.async_add_executor_job(
-                self._zone.set_target_temperature, temperature
-            )
+            # Must run on the HA event loop thread: ``set_target_temperature`` publishes
+            # over MQTT via ``gecko_iot_client``; the transporter is not safe to call from
+            # ``async_add_executor_job`` worker threads (publish may no-op or fail silently).
+            self._zone.set_target_temperature(temperature)
 
             _LOGGER.debug(
                 "Set target temperature to %.1f°C for %s",
