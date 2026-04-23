@@ -250,22 +250,75 @@ async def async_get_config_entry_diagnostics(
                 parseable.append("cost")
             if coerce_energy_score_value(ed.get("score")) is not None:
                 parseable.append("score")
-            energy_summary.append(
-                {
-                    "vessel_name": getattr(coord, "vessel_name", None),
-                    "vessel_id": getattr(coord, "vessel_id", None),
-                    "monitor_id": getattr(coord, "monitor_id", None),
-                    "energy_keys_with_data": [
-                        k for k, v in ed.items() if v is not None
-                    ],
-                    "energy_keys_parseable_for_sensors": parseable,
-                }
-            )
+            vessel_energy: dict[str, Any] = {
+                "vessel_name": getattr(coord, "vessel_name", None),
+                "vessel_id": getattr(coord, "vessel_id", None),
+                "monitor_id": getattr(coord, "monitor_id", None),
+                "energy_keys_with_data": [
+                    k for k, v in ed.items() if v is not None
+                ],
+                "energy_keys_parseable_for_sensors": parseable,
+            }
+            for ek in ("consumption", "cost", "score"):
+                raw = ed.get(ek)
+                if raw is not None:
+                    vessel_energy[f"raw_{ek}"] = raw
+            energy_summary.append(vessel_energy)
         diagnostics_data["runtime_data"] = {
             "api_client_type": type(getattr(rd, "api_client", None)).__name__,
             "coordinator_count": len(coordinators),
             "premium_energy_client": getattr(rd, "app_api_client", None) is not None,
             "energy_data_per_vessel": energy_summary,
         }
+
+    # Full MQTT shadow state + flow zone runtime for debugging pump/thermostat issues.
+    shadow_dumps: list[dict[str, Any]] = []
+    for monitor_id, connection in (connection_manager._connections or {}).items():
+        gc = getattr(connection, "gecko_client", None)
+        if not gc:
+            continue
+        dump: dict[str, Any] = {"monitor_id": monitor_id}
+        state = getattr(gc, "_state", None)
+        if isinstance(state, dict):
+            st = state.get("state", {})
+            reported = st.get("reported", {}) if isinstance(st, dict) else {}
+            desired = st.get("desired", {}) if isinstance(st, dict) else {}
+            delta = st.get("delta", {}) if isinstance(st, dict) else {}
+            dump["reported_zones"] = (
+                reported.get("zones") if isinstance(reported, dict) else None
+            )
+            dump["desired_zones"] = (
+                desired.get("zones") if isinstance(desired, dict) else None
+            )
+            dump["delta_zones"] = (
+                delta.get("zones") if isinstance(delta, dict) else None
+            )
+            dump["reported_features"] = (
+                reported.get("features") if isinstance(reported, dict) else None
+            )
+        zones = getattr(gc, "_zones", None)
+        if isinstance(zones, dict):
+            flow_runtime: list[dict[str, Any]] = []
+            for zt, zlist in zones.items():
+                for z in zlist:
+                    flow_runtime.append(
+                        {
+                            "zone_type": zt.value if hasattr(zt, "value") else str(zt),
+                            "id": getattr(z, "id", None),
+                            "name": getattr(z, "name", None),
+                            "active": getattr(z, "active", None),
+                            "speed": getattr(z, "speed", None),
+                            "target_temperature": getattr(
+                                z, "target_temperature", None
+                            ),
+                            "temperature": getattr(z, "temperature", None),
+                            "set_point": getattr(z, "set_point", None),
+                            "status": str(getattr(z, "status", None)),
+                        }
+                    )
+            dump["zone_objects"] = flow_runtime
+        shadow_dumps.append(dump)
+    if shadow_dumps:
+        diagnostics_data["mqtt_shadow_state"] = shadow_dumps
 
     return diagnostics_data
