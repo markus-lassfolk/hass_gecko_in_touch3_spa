@@ -66,7 +66,12 @@ async def test_get_connection_diagnostics_with_connection() -> None:
             transporter=None,
         )
 
-    mgr = SimpleNamespace(_connections={"m1": _Conn()})
+    import asyncio
+
+    mgr = SimpleNamespace(
+        _connections={"m1": _Conn()},
+        _connection_lock=asyncio.Lock(),
+    )
     out = await gecko_diag._get_connection_diagnostics(mgr)
     assert "m1" in out
     assert out["m1"]["gecko_client"]["client_id"] == "gc"
