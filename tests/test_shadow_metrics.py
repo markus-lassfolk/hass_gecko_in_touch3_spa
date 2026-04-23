@@ -454,6 +454,14 @@ def test_string_enabled_by_default_actions(path: str, expected: bool) -> None:
         ("cloud.rest.readings.totalAlkalinity", None, "ppm"),
         ("cloud.rest.readings.freeChlorine", None, "ppm"),
         ("cloud.rest.readings.lsi", None, None),
+        ("cloud.rest.readings.wifiRssi", "signal_strength", "dB"),
+        ("cloud.rest.readings.phSTC20", "ph", None),
+        ("cloud.rest.readings.calciumHardness", None, "ppm"),
+        ("cloud.rest.readings.adjustedTotalAlkalinity", None, "ppm"),
+        ("cloud.rest.readings.totalChlorine", None, "ppm"),
+        ("cloud.rest.readings.totalHardness", None, "ppm"),
+        ("cloud.rest.readings.cyanuricAcid", None, "ppm"),
+        ("cloud.rest.disc_elements.temp_c", "temperature", "°C"),
     ],
 )
 def test_infer_sensor_metadata_readings(path, dc, unit) -> None:
@@ -463,3 +471,16 @@ def test_infer_sensor_metadata_readings(path, dc, unit) -> None:
     else:
         assert result_dc is not None and result_dc.value == dc
     assert result_unit == unit
+
+
+def test_infer_sensor_metadata_rssi_and_rf_strength() -> None:
+    """WiFi RSSI and RF signal strength paths get SIGNAL_STRENGTH device class."""
+    dc_rssi, u_rssi = shadow_metrics.infer_sensor_metadata(
+        "cloud.rest.readings.wifiRssi"
+    )
+    assert dc_rssi is not None and dc_rssi.value == "signal_strength"
+    assert u_rssi == "dB"
+
+    dc_rf, u_rf = shadow_metrics.infer_sensor_metadata("features.rf.strength_")
+    assert dc_rf is not None and dc_rf.value == "signal_strength"
+    assert u_rf == "dB"

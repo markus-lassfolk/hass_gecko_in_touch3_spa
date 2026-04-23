@@ -623,6 +623,13 @@ def infer_sensor_metadata(
     ):
         device_class = SensorDeviceClass.TEMPERATURE
         unit = UnitOfTemperature.CELSIUS
+    elif "rssi" in segs or "signalstrength" in segs or (
+        {"wifi", "rf", "signal"}.intersection(segs) and "strength" in segs
+    ):
+        dc = getattr(SensorDeviceClass, "SIGNAL_STRENGTH", None)
+        if dc is not None:
+            device_class = dc
+        unit = "dB"
     elif re.search(r"\b(humidity|rh)\b", lower):
         device_class = SensorDeviceClass.HUMIDITY
         unit = "%"
