@@ -23,11 +23,7 @@ def reenable_integration_disabled_energy_cost_score_entities(
         if reg_entry.domain != "sensor":
             continue
         uid = reg_entry.unique_id or ""
-        if not (
-            uid.endswith("_energy_consumption")
-            or uid.endswith("_energy_cost")
-            or uid.endswith("_energy_score")
-        ):
+        if not (uid.endswith("_energy_cost") or uid.endswith("_energy_score")):
             continue
         if reg_entry.disabled_by != RegistryEntryDisabler.INTEGRATION:
             continue

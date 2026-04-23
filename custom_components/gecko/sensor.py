@@ -519,7 +519,7 @@ class GeckoEnergyCostSensor(
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
     _attr_icon = "mdi:currency-usd"
-    _attr_entity_registry_enabled_default = False
+    _attr_entity_registry_enabled_default = True
 
     def __init__(
         self,

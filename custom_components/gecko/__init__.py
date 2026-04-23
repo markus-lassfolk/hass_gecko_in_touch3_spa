@@ -170,7 +170,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if resolved_account:
             data["account_id"] = resolved_account
             data_changed = True
-        target_version = 2
+            target_version = 2
+        else:
+            target_version = 2
 
     elif (
         resolved_account
@@ -179,7 +181,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         data["account_id"] = resolved_account
         data_changed = True
 
-    if current.version < 3:
+    if current.version < 3 and target_version >= 2:
         reenable_integration_disabled_energy_cost_score_entities(hass, current)
         target_version = 3
 
