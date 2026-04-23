@@ -27,6 +27,8 @@ async def test_async_get_config_entry_diagnostics_minimal(
 
     assert data["config_entry"]["domain"] == DOMAIN
     assert data["config_entry"]["entry_id"] == entry.entry_id
+    assert data["oauth_tokens"]["community"]["stored"] is False
+    assert data["oauth_tokens"]["app_premium"]["stored"] is False
     assert data["vessels"] == []
     assert data["connections"] == {}
 

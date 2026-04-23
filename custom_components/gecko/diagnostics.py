@@ -17,6 +17,20 @@ from .shadow_metrics import shadow_topology_summary
 _LOGGER = logging.getLogger(__name__)
 
 
+def _oauth_token_diagnostics(token: Any, *, label: str) -> dict[str, Any]:
+    """Non-secret metadata so support can verify which token is linked and expiry."""
+    if not isinstance(token, dict):
+        return {"label": label, "stored": False}
+    return {
+        "label": label,
+        "stored": True,
+        "expires_at": token.get("expires_at"),
+        "has_refresh_token": bool(token.get("refresh_token")),
+        "has_access_token": bool(token.get("access_token")),
+        "token_type": token.get("token_type"),
+    }
+
+
 def _temperature_control_zones_summary(coordinator: Any) -> list[dict[str, Any]]:
     """Per-zone current/target °C for diagnostics (same source as ``climate`` entities)."""
     getter = getattr(coordinator, "get_zones_by_type", None)
@@ -201,6 +215,14 @@ async def async_get_config_entry_diagnostics(
             "version": config_entry.version,
             "has_account_id": bool(
                 str(config_entry.data.get("account_id", "")).strip()
+            ),
+        },
+        "oauth_tokens": {
+            "community": _oauth_token_diagnostics(
+                config_entry.data.get("token"), label="community (HA OAuth)"
+            ),
+            "app_premium": _oauth_token_diagnostics(
+                config_entry.data.get("app_token"), label="mobile app (premium REST)"
             ),
         },
         "vessels": _get_vessel_coordinators_diagnostics(config_entry),
