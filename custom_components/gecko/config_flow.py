@@ -259,7 +259,7 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
         except Exception as err:
             _LOGGER.warning("Could not fetch Auth0 userinfo: %s", err)
 
-        if user_id:
+        if user_id is not None:
             try:
                 user_data = await api_client.async_get_user_info(user_id)
                 account_data = user_data.get("account", {})
@@ -423,8 +423,6 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                 token = await self._async_exchange_code(code)
                 if token is None:
                     errors["base"] = "token_exchange_failed"
-                    self._authorize_url = None
-                    self._code_verifier = None
                 else:
                     expires_in = int(token.get("expires_in", 3600))
                     token["expires_in"] = expires_in
