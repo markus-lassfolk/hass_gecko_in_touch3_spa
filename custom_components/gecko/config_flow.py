@@ -113,7 +113,9 @@ def _extract_code_from_callback(raw: str) -> str | None:
         qs = parse_qs(query_string)
         codes = qs.get("code")
         if codes:
-            return codes[0]
+            code = codes[0]
+            if code and code.strip():
+                return code
     except Exception:  # noqa: BLE001
         pass
 

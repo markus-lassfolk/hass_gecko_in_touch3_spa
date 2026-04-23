@@ -371,6 +371,8 @@ def derive_flow_percentage(zone: Any) -> int:
         return int(round((mode_index / len(supported_modes)) * 100))
 
     speed = getattr(zone, "speed", None)
+    if isinstance(speed, bool):
+        return 0
     if isinstance(speed, int | float):
         return max(0, min(100, int(speed)))
     return 0
