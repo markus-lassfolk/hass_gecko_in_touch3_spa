@@ -9,7 +9,7 @@ import time
 from datetime import timedelta
 from typing import Any
 
-from aiohttp import ClientError
+from aiohttp import ClientError, ClientResponseError
 
 # Import from geckoIotClient
 from gecko_iot_client.models.zone_types import (
@@ -152,6 +152,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Premium energy data (populated by _async_poll_energy_if_due)
         self._energy_data: dict[str, Any] = {}
         self._last_energy_poll_monotonic: float | None = None
+        self._logged_energy_api_forbidden: bool = False
 
     def register_zone_update_callback(self, callback):
         """Register a callback to be called when zone data updates."""
@@ -539,19 +540,61 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not api:
             return
 
+        candidate_vessel_ids: list[str] = []
+        for candidate in (vid, str(self.monitor_id)):
+            if candidate and candidate not in candidate_vessel_ids:
+                candidate_vessel_ids.append(candidate)
+
         energy: dict[str, Any] = {}
         for key, fetcher in (
             ("consumption", api.async_get_energy_consumption),
             ("score", api.async_get_energy_score),
             ("cost", api.async_get_energy_cost),
         ):
-            try:
-                energy[key] = await fetcher(aid, vid)
-            except (ClientError, TimeoutError, OSError) as err:
+            energy[key] = None
+            last_err: Exception | None = None
+            for candidate_vid in candidate_vessel_ids:
+                try:
+                    energy[key] = await fetcher(aid, candidate_vid)
+                    last_err = None
+                    break
+                except ClientResponseError as err:
+                    last_err = err
+                    if err.status == 404:
+                        _LOGGER.debug(
+                            "Energy %s HTTP 404 for %s (vessel id %s); trying next id",
+                            key,
+                            self.vessel_name,
+                            candidate_vid,
+                        )
+                        continue
+                    if err.status == 403 and not self._logged_energy_api_forbidden:
+                        self._logged_energy_api_forbidden = True
+                        _LOGGER.warning(
+                            "Gecko premium energy API returned HTTP 403 for %s. "
+                            "Open **Settings → Devices & services → Gecko → Configure** "
+                            "and complete **Link energy data (premium)** with the Gecko "
+                            "mobile app login, then reload the integration. "
+                            "Community OAuth alone cannot read consumption, score, or cost.",
+                            self.vessel_name,
+                        )
+                    _LOGGER.debug(
+                        "Energy %s poll failed for %s: %s", key, self.vessel_name, err
+                    )
+                    break
+                except (ClientError, TimeoutError, OSError) as err:
+                    last_err = err
+                    _LOGGER.debug(
+                        "Energy %s poll failed for %s: %s", key, self.vessel_name, err
+                    )
+                    break
+            if energy[key] is None and last_err is not None:
                 _LOGGER.debug(
-                    "Energy %s poll failed for %s: %s", key, self.vessel_name, err
+                    "Energy %s: no data for %s after trying ids %s",
+                    key,
+                    self.vessel_name,
+                    candidate_vessel_ids,
                 )
-                energy[key] = None
 
         self._energy_data = energy
         self._last_energy_poll_monotonic = now

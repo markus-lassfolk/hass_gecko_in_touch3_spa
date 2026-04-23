@@ -437,6 +437,42 @@ def _first_valid_float(data: Any, *key_paths: tuple[str, ...]) -> float | None:
     return None
 
 
+_ENERGY_CONSUMPTION_FLOAT_PATHS: tuple[tuple[str, ...], ...] = (
+    ("totalKwh",),
+    ("total_kwh",),
+    ("totalKWh",),
+    ("totalEnergyKwh",),
+    ("totalEnergyKWh",),
+    ("energyKwh",),
+    ("energy_kwh",),
+    ("kwh",),
+    ("consumptionKwh",),
+    ("consumption_kwh",),
+    ("value",),
+    ("consumption", "totalKwh"),
+    ("consumption", "value"),
+    ("reading",),
+)
+
+
+def _coerce_energy_consumption_kwh(raw: Any) -> float | None:
+    """Parse ``/energy-consumption`` payloads into kWh (vendor shapes vary)."""
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int | float):
+        return float(raw)
+    if not isinstance(raw, dict):
+        return None
+    inner = raw.get("data")
+    if isinstance(inner, dict):
+        from_inner = _first_valid_float(inner, *_ENERGY_CONSUMPTION_FLOAT_PATHS)
+        if from_inner is not None:
+            return from_inner
+    return _first_valid_float(raw, *_ENERGY_CONSUMPTION_FLOAT_PATHS)
+
+
 class GeckoEnergyConsumptionSensor(
     GeckoEntityAvailabilityMixin, CoordinatorEntity, SensorEntity
 ):
@@ -479,16 +515,7 @@ class GeckoEnergyConsumptionSensor(
             self._attr_extra_state_attributes = {}
             return
 
-        val = _first_valid_float(
-            raw,
-            ("totalKwh",),
-            ("total_kwh",),
-            ("totalKWh",),
-            ("kwh",),
-            ("value",),
-        )
-        if val is None and isinstance(raw, int | float):
-            val = float(raw)
+        val = _coerce_energy_consumption_kwh(raw)
 
         self._attr_native_value = val
         self._attr_extra_state_attributes = (

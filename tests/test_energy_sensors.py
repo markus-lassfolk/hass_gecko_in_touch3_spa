@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from custom_components.gecko.sensor import (
     GeckoEnergyScoreSensor,
+    _coerce_energy_consumption_kwh,
     _first_valid_float,
     _safe_float,
 )
@@ -38,6 +39,12 @@ def test_energy_score_scalar_payload_has_no_default_percent_unit() -> None:
     sensor = GeckoEnergyScoreSensor(coordinator, entry)
     assert sensor.native_value == 7.5
     assert sensor.native_unit_of_measurement is None
+
+
+def test_coerce_energy_consumption_unwraps_data_and_extra_keys() -> None:
+    assert _coerce_energy_consumption_kwh({"data": {"totalKwh": 42.25}}) == 42.25
+    assert _coerce_energy_consumption_kwh({"totalEnergyKWh": 10.0}) == 10.0
+    assert _coerce_energy_consumption_kwh(3.5) == 3.5
 
 
 def test_energy_score_dict_unit_is_preserved() -> None:

@@ -56,12 +56,19 @@ async def test_async_get_config_entry_diagnostics_runtime_data(
         _cloud_bool_metrics={},
         _last_cloud_poll_monotonic=None,
         get_all_zones=lambda: {_ZoneType.FLOW: {}},
+        get_energy_data=lambda: {"consumption": None, "score": 1.0},
     )
-    entry.runtime_data = SimpleNamespace(api_client=None, coordinators=[coord])
+    entry.runtime_data = SimpleNamespace(
+        api_client=None, coordinators=[coord], app_api_client=None
+    )
 
     data = await async_get_config_entry_diagnostics(hass, entry)
 
     assert data["runtime_data"]["api_client_type"] == "NoneType"
     assert data["runtime_data"]["coordinator_count"] == 1
+    assert data["runtime_data"]["premium_energy_client"] is False
+    assert data["runtime_data"]["energy_data_per_vessel"][0]["energy_keys_with_data"] == [
+        "score"
+    ]
     assert len(data["vessels"]) == 1
     assert data["vessels"][0]["monitor_id"] == "m1"

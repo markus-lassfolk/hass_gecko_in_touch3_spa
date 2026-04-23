@@ -209,9 +209,29 @@ async def async_get_config_entry_diagnostics(
 
     if hasattr(config_entry, "runtime_data") and config_entry.runtime_data:
         rd = config_entry.runtime_data
+        coordinators = getattr(rd, "coordinators", []) or []
+        energy_summary: list[dict[str, Any]] = []
+        for coord in coordinators:
+            getter = getattr(coord, "get_energy_data", None)
+            if not callable(getter):
+                continue
+            ed = getter()
+            energy_summary.append(
+                {
+                    "vessel_name": getattr(coord, "vessel_name", None),
+                    "vessel_id": getattr(coord, "vessel_id", None),
+                    "monitor_id": getattr(coord, "monitor_id", None),
+                    "energy_keys_with_data": [
+                        k for k, v in ed.items() if v is not None
+                    ],
+                }
+            )
         diagnostics_data["runtime_data"] = {
             "api_client_type": type(getattr(rd, "api_client", None)).__name__,
-            "coordinator_count": len(getattr(rd, "coordinators", []) or []),
+            "coordinator_count": len(coordinators),
+            "premium_energy_client": getattr(rd, "app_api_client", None)
+            is not None,
+            "energy_data_per_vessel": energy_summary,
         }
 
     return diagnostics_data
