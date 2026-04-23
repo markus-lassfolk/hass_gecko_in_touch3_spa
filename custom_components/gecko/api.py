@@ -1,9 +1,14 @@
 """Gecko REST helpers layered on ``gecko_iot_client`` (OAuth session, HA HTTP client)."""
 
+from __future__ import annotations
+
+import asyncio
 import logging
+import time
 from typing import Any
 
 from gecko_iot_client import GeckoApiClient
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -11,6 +16,51 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import API_BASE_URL, AUTH0_URL_BASE
 
 _LOGGER = logging.getLogger(__name__)
+
+CLOCK_OUT_OF_SYNC_MAX_SEC = 20
+
+
+class AppTokenSession:
+    """Token session for the optional app-client OAuth token.
+
+    Mirrors the interface of ``config_entry_oauth2_flow.OAuth2Session``
+    (``token``, ``async_ensure_token_valid``) but reads/writes
+    ``config_entry.data["app_token"]`` instead of ``data["token"]``.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        implementation: config_entry_oauth2_flow.AbstractOAuth2Implementation,
+    ) -> None:
+        """Initialize the app-token session."""
+        self.hass = hass
+        self.config_entry = config_entry
+        self._implementation = implementation
+        self._token_lock = asyncio.Lock()
+
+    @property
+    def token(self) -> dict:
+        """Return the app token dict."""
+        return self.config_entry.data.get("app_token") or {}
+
+    @property
+    def valid_token(self) -> bool:
+        """Return whether the app token is still valid."""
+        expires_at = self.token.get("expires_at", 0)
+        return float(expires_at) > time.time() + CLOCK_OUT_OF_SYNC_MAX_SEC
+
+    async def async_ensure_token_valid(self) -> None:
+        """Refresh the app token if expired."""
+        async with self._token_lock:
+            if self.valid_token:
+                return
+            new_token = await self._implementation.async_refresh_token(self.token)
+            data = {**self.config_entry.data, "app_token": new_token}
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=data
+            )
 
 
 class GeckoSpaApiMixin:

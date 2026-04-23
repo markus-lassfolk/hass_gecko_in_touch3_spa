@@ -34,16 +34,18 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 # ---------------------------------------------------------------------------
 
 
-def _mock_config_entry(*, options: dict | None = None) -> MockConfigEntry:
+def _mock_config_entry(*, options: dict | None = None, **data_overrides) -> MockConfigEntry:
     """Create a MockConfigEntry pre-loaded with typical Gecko data."""
+    data = {
+        "token": {"access_token": "fake"},
+        "vessels": [],
+        "account_id": "acct-1",
+        "user_id": "uid-1",
+    }
+    data.update(data_overrides)
     return MockConfigEntry(
         domain=DOMAIN,
-        data={
-            "token": {"access_token": "fake"},
-            "vessels": [],
-            "account_id": "acct-1",
-            "user_id": "uid-1",
-        },
+        data=data,
         options=options or {},
         version=2,
     )
@@ -72,19 +74,37 @@ def _create_options_flow(
 
 
 # ---------------------------------------------------------------------------
-# Options flow — form rendering
+# Options flow — menu
 # ---------------------------------------------------------------------------
 
 
-async def test_options_flow_shows_form(hass: HomeAssistant) -> None:
-    """Opening options without input must show the init form."""
+async def test_options_flow_shows_menu(hass: HomeAssistant) -> None:
+    """Opening options must show the init menu."""
     entry = _mock_config_entry()
     flow = _create_options_flow(hass, entry)
 
     result = await flow.async_step_init(user_input=None)
 
+    assert result["type"] is FlowResultType.MENU
+    assert "settings" in result["menu_options"]
+    assert "link_energy" in result["menu_options"]
+    assert "unlink_energy" in result["menu_options"]
+
+
+# ---------------------------------------------------------------------------
+# Options flow — settings form rendering
+# ---------------------------------------------------------------------------
+
+
+async def test_options_flow_settings_shows_form(hass: HomeAssistant) -> None:
+    """Selecting settings from the menu must show the settings form."""
+    entry = _mock_config_entry()
+    flow = _create_options_flow(hass, entry)
+
+    result = await flow.async_step_settings(user_input=None)
+
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "init"
+    assert result["step_id"] == "settings"
     schema_keys = {str(k) for k in result["data_schema"].schema}
     assert CONF_CLOUD_REST_POLL_INTERVAL in schema_keys
     assert CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN in schema_keys
@@ -104,7 +124,7 @@ async def test_options_flow_form_defaults_from_existing_options(
     )
     flow = _create_options_flow(hass, entry)
 
-    result = await flow.async_step_init(user_input=None)
+    result = await flow.async_step_settings(user_input=None)
     assert result["type"] is FlowResultType.FORM
 
 
@@ -124,7 +144,7 @@ async def test_options_flow_save_without_reload(hass: HomeAssistant) -> None:
     )
     flow = _create_options_flow(hass, entry)
 
-    result = await flow.async_step_init(
+    result = await flow.async_step_settings(
         user_input={
             CONF_CLOUD_REST_POLL_INTERVAL: 120,
             CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN: False,
@@ -152,7 +172,7 @@ async def test_options_flow_preserves_internal_migration_marker(
     )
     flow = _create_options_flow(hass, entry)
 
-    result = await flow.async_step_init(
+    result = await flow.async_step_settings(
         user_input={
             CONF_CLOUD_REST_POLL_INTERVAL: 120,
             CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN: False,
@@ -172,7 +192,7 @@ async def test_options_flow_save_nonzero_to_nonzero_no_reload(
     entry = _mock_config_entry(options={CONF_ALERTS_POLL_INTERVAL: 300})
     flow = _create_options_flow(hass, entry)
 
-    result = await flow.async_step_init(
+    result = await flow.async_step_settings(
         user_input=_default_user_input(**{CONF_ALERTS_POLL_INTERVAL: 600}),
     )
 
@@ -199,7 +219,7 @@ async def test_options_flow_reload_when_enabling_alerts(
     with patch.object(
         hass.config_entries, "async_reload", new_callable=AsyncMock
     ) as mock_reload:
-        result = await flow.async_step_init(
+        result = await flow.async_step_settings(
             user_input=_default_user_input(**{CONF_ALERTS_POLL_INTERVAL: 300}),
         )
 
@@ -222,7 +242,7 @@ async def test_options_flow_reload_preserves_internal_migration_marker(
     flow = _create_options_flow(hass, entry)
 
     with patch.object(hass.config_entries, "async_reload", new_callable=AsyncMock):
-        result = await flow.async_step_init(
+        result = await flow.async_step_settings(
             user_input=_default_user_input(**{CONF_ALERTS_POLL_INTERVAL: 300}),
         )
 
@@ -241,7 +261,7 @@ async def test_options_flow_reload_when_disabling_alerts(
     with patch.object(
         hass.config_entries, "async_reload", new_callable=AsyncMock
     ) as mock_reload:
-        result = await flow.async_step_init(
+        result = await flow.async_step_settings(
             user_input=_default_user_input(**{CONF_ALERTS_POLL_INTERVAL: 0}),
         )
 
@@ -258,7 +278,7 @@ async def test_options_flow_no_reload_when_alerts_stays_off(
     entry = _mock_config_entry(options={CONF_ALERTS_POLL_INTERVAL: 0})
     flow = _create_options_flow(hass, entry)
 
-    result = await flow.async_step_init(
+    result = await flow.async_step_settings(
         user_input=_default_user_input(**{CONF_ALERTS_POLL_INTERVAL: 0}),
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -294,6 +314,82 @@ async def test_options_flow_does_not_call_update_reload_and_abort() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Options flow — energy link / unlink
+# ---------------------------------------------------------------------------
+
+
+async def test_options_flow_link_energy_shows_form(hass: HomeAssistant) -> None:
+    """link_energy step must show a form with the authorize URL."""
+    entry = _mock_config_entry()
+    flow = _create_options_flow(hass, entry)
+
+    result = await flow.async_step_link_energy(user_input=None)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "link_energy"
+    assert "authorize_url" in result["description_placeholders"]
+    assert "gecko-prod.us.auth0.com" in result["description_placeholders"]["authorize_url"]
+
+
+async def test_options_flow_link_energy_rejects_invalid_url(hass: HomeAssistant) -> None:
+    """link_energy step must reject input without a code parameter."""
+    entry = _mock_config_entry()
+    flow = _create_options_flow(hass, entry)
+
+    await flow.async_step_link_energy(user_input=None)
+    result = await flow.async_step_link_energy(
+        user_input={"callback_url": "not-a-valid-url"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"]["callback_url"] == "invalid_callback_url"
+
+
+async def test_options_flow_unlink_energy_aborts_when_not_linked(
+    hass: HomeAssistant,
+) -> None:
+    """unlink_energy must abort immediately if no app_token exists."""
+    entry = _mock_config_entry()
+    flow = _create_options_flow(hass, entry)
+
+    result = await flow.async_step_unlink_energy(user_input=None)
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "energy_not_linked"
+
+
+async def test_options_flow_unlink_energy_shows_confirm(hass: HomeAssistant) -> None:
+    """unlink_energy must show a confirmation form when app_token exists."""
+    entry = _mock_config_entry(
+        app_token={"access_token": "app-fake", "refresh_token": "r", "expires_at": 0}
+    )
+    flow = _create_options_flow(hass, entry)
+
+    result = await flow.async_step_unlink_energy(user_input=None)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "unlink_energy"
+
+
+async def test_options_flow_unlink_energy_removes_token(hass: HomeAssistant) -> None:
+    """Confirming unlink must remove app_token and reload."""
+    entry = _mock_config_entry(
+        app_token={"access_token": "app-fake", "refresh_token": "r", "expires_at": 0}
+    )
+    flow = _create_options_flow(hass, entry)
+
+    with patch.object(
+        hass.config_entries, "async_reload", new_callable=AsyncMock
+    ) as mock_reload:
+        result = await flow.async_step_unlink_energy(user_input={})
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "energy_unlinked"
+    assert "app_token" not in entry.data
+    mock_reload.assert_awaited_once_with(entry.entry_id)
+
+
+# ---------------------------------------------------------------------------
 # ConfigFlow — basic plumbing
 # ---------------------------------------------------------------------------
 
@@ -316,14 +412,6 @@ def test_options_flow_inherits_from_options_flow() -> None:
     OptionsFlowWithConfigEntry or ConfigFlow."""
     assert issubclass(GeckoOptionsFlow, config_entries.OptionsFlow)
     assert not issubclass(GeckoOptionsFlow, config_entries.ConfigFlow)
-
-
-def test_options_flow_no_custom_constructor() -> None:
-    """Modern OptionsFlow should not override __init__ (HA 2025.1+)."""
-    assert "__init__" not in GeckoOptionsFlow.__dict__, (
-        "GeckoOptionsFlow should not define its own __init__. "
-        "HA 2025.1+ passes config_entry via property, not constructor."
-    )
 
 
 # ---------------------------------------------------------------------------

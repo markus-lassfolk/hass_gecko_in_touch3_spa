@@ -1,11 +1,9 @@
 """Config flow for Gecko.
 
-Uses the Gecko mobile-app OAuth client which requires a native Capacitor
-redirect URI.  Because Home Assistant's standard OAuth popup cannot follow a
-``com.geckoportal.gecko://`` redirect, the flow asks the user to open the
-authorize URL manually, complete login, and paste the resulting callback URL
-back into a text field.  This is a one-time step; subsequent token refreshes
-are automatic.
+Initial setup uses HA's standard OAuth popup (community client) for a seamless
+experience.  Power users can optionally link a second token from the Gecko
+mobile-app client via the Options flow to unlock energy, charts, activities,
+routines, and other premium REST endpoints.
 """
 
 from __future__ import annotations
@@ -34,11 +32,17 @@ from .const import (
     OAUTH2_APP_CLIENT_ID,
     OAUTH2_APP_REDIRECT_URI,
     OAUTH2_AUTHORIZE,
+    OAUTH2_CLIENT_ID,
     OAUTH2_TOKEN,
 )
 from .oauth_implementation import GeckoPKCEOAuth2Implementation
 
 _LOGGER = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Helpers shared by the options-flow energy link step
+# ---------------------------------------------------------------------------
 
 
 def _extract_code_from_callback(raw: str) -> str | None:
@@ -52,7 +56,11 @@ def _extract_code_from_callback(raw: str) -> str | None:
         return None
 
     if raw.startswith("code=") or raw.startswith("?code="):
-        raw = f"https://placeholder/{raw}" if raw.startswith("?") else f"https://placeholder/?{raw}"
+        raw = (
+            f"https://placeholder/{raw}"
+            if raw.startswith("?")
+            else f"https://placeholder/?{raw}"
+        )
 
     try:
         parsed = urlparse(raw)
@@ -66,30 +74,24 @@ def _extract_code_from_callback(raw: str) -> str | None:
     return None
 
 
-class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMAIN):
-    """Config flow to handle Gecko OAuth2 authentication.
+# ---------------------------------------------------------------------------
+# ConfigFlow — standard HA OAuth popup (community client)
+# ---------------------------------------------------------------------------
 
-    Bypasses the standard HA OAuth external-step popup because the mobile-app
-    client requires a native redirect URI.  Instead, the user pastes the
-    callback URL manually after completing login in their browser.
-    """
+
+class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMAIN):
+    """Config flow to handle Gecko OAuth2 authentication."""
 
     DOMAIN = DOMAIN
     VERSION = 2
 
-    def __init__(self) -> None:
-        """Initialize the config flow."""
-        super().__init__()
-        self._code_verifier: str | None = None
-        self._authorize_url: str | None = None
-
     async def async_step_user(self, user_input=None):
         """Handle a flow initialized by the user."""
         await self._async_ensure_implementation()
-        return await self.async_step_authorize()
+        return await super().async_step_user(user_input)
 
     async def _async_ensure_implementation(self) -> None:
-        """Register the OAuth implementation and set ``flow_impl``."""
+        """Register the community-client OAuth implementation if needed."""
         implementations = await config_entry_oauth2_flow.async_get_implementations(
             self.hass, DOMAIN
         )
@@ -100,98 +102,23 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
                 GeckoPKCEOAuth2Implementation(
                     self.hass,
                     DOMAIN,
-                    client_id=OAUTH2_APP_CLIENT_ID,
+                    client_id=OAUTH2_CLIENT_ID,
                     authorize_url=OAUTH2_AUTHORIZE,
                     token_url=OAUTH2_TOKEN,
                 ),
             )
-            implementations = await config_entry_oauth2_flow.async_get_implementations(
-                self.hass, DOMAIN
-            )
-        self.flow_impl = implementations[DOMAIN]
-
-    async def async_step_authorize(
-        self, user_input: dict[str, Any] | None = None
-    ) -> config_entries.ConfigFlowResult:
-        """Show the authorize URL and accept the pasted callback."""
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            code = _extract_code_from_callback(user_input.get("callback_url", ""))
-            if code is None:
-                errors["callback_url"] = "invalid_callback_url"
-            else:
-                token = await self._async_exchange_code(code)
-                if token is None:
-                    errors["base"] = "token_exchange_failed"
-                else:
-                    token["expires_in"] = int(token["expires_in"])
-                    token["expires_at"] = time.time() + token["expires_in"]
-                    return await self.async_oauth_create_entry(
-                        {"auth_implementation": DOMAIN, "token": token}
-                    )
-
-        if self._authorize_url is None:
-            self._code_verifier = GeckoPKCEOAuth2Implementation.generate_code_verifier()
-            challenge = GeckoPKCEOAuth2Implementation.compute_code_challenge(
-                self._code_verifier
-            )
-            self._authorize_url = str(
-                URL(OAUTH2_AUTHORIZE).with_query(
-                    {
-                        "response_type": "code",
-                        "client_id": OAUTH2_APP_CLIENT_ID,
-                        "redirect_uri": OAUTH2_APP_REDIRECT_URI,
-                        "code_challenge": challenge,
-                        "code_challenge_method": "S256",
-                        "scope": "openid profile email offline_access",
-                        "audience": "https://api.geckowatermonitor.com",
-                    }
-                )
-            )
-
-        return self.async_show_form(
-            step_id="authorize",
-            data_schema=vol.Schema(
-                {vol.Required("callback_url"): str}
-            ),
-            description_placeholders={"authorize_url": self._authorize_url},
-            errors=errors,
-        )
-
-    async def _async_exchange_code(self, code: str) -> dict | None:
-        """Exchange an authorization code for tokens using the stored PKCE verifier."""
-        if self._code_verifier is None or self.flow_impl is None:
-            return None
-        try:
-            return await self.flow_impl._token_request(  # noqa: SLF001
-                {
-                    "grant_type": "authorization_code",
-                    "code": code,
-                    "redirect_uri": OAUTH2_APP_REDIRECT_URI,
-                    "code_verifier": self._code_verifier,
-                    "client_id": OAUTH2_APP_CLIENT_ID,
-                }
-            )
-        except (ClientResponseError, ClientError) as err:
-            _LOGGER.error("Token exchange failed: %s", err)
-            return None
 
     async def async_oauth_create_entry(self, data: dict):
         """Create an entry after OAuth authentication."""
-        # Get available vessels from the cloud API
         try:
-            # Create a simple API client using just the access token for initial API calls
             from .api import ConfigFlowGeckoApi
 
             api_client = ConfigFlowGeckoApi(self.hass, data["token"]["access_token"])
 
-            # Get user ID and account information
             user_id, account_data, account_id = await self._resolve_user_and_account(
                 data, api_client
             )
 
-            # Get vessels for the account
             vessels = await api_client.async_get_vessels(account_id)
 
             if not vessels:
@@ -207,7 +134,6 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
                     },
                 )
 
-            # Fetch spa configuration for each vessel
             vessels_with_config = []
             for vessel in vessels:
                 try:
@@ -222,16 +148,15 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
                         _LOGGER.warning(
                             "No monitor ID found for vessel %s", vessel.get("name")
                         )
-                        vessels_with_config.append(vessel)  # Add without config
+                        vessels_with_config.append(vessel)
                 except Exception as config_err:
                     _LOGGER.warning(
                         "Failed to get spa config for vessel %s: %s",
                         vessel.get("name"),
                         config_err,
                     )
-                    vessels_with_config.append(vessel)  # Add without config
+                    vessels_with_config.append(vessel)
 
-            # Create one main entry for the account with all vessels and their configurations
             return self.async_create_entry(
                 title=f"Gecko - {account_data.get('name', 'Account')} ({len(vessels_with_config)} vessels)",
                 data={
@@ -251,10 +176,7 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
     ) -> tuple[str, dict, str]:
         """Resolve user ID and account information."""
         try:
-            # Step 1: Get user ID from Auth0 userinfo endpoint
             user_id = await api_client.async_get_user_id()
-
-            # Step 2: Call our own API's /v2/user/:userId endpoint to get account information
             user_data = await api_client.async_get_user_info(user_id)
 
             account_data = user_data.get("account", {})
@@ -267,36 +189,6 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
 
         except Exception as err:
             raise ConnectionError(f"Failed to resolve user and account: {err}") from err
-
-    async def _get_user_id_from_api(self, api_client) -> str | None:
-        """Try to get user ID from API calls."""
-        # First, try to extract user ID directly from the JWT token
-        user_id = api_client.extract_user_id_from_token()
-        if user_id:
-            return user_id
-
-        # If token extraction fails, try OAuth userinfo endpoint
-        try:
-            userinfo = await api_client.async_get_oauth_userinfo()
-            return userinfo.get("sub")
-        except Exception:
-            return None
-
-    def _extract_user_id_from_token(self, token: dict[str, Any]) -> str | None:
-        """Extract user ID from the OAuth token."""
-        # Try direct fields in token first
-        for field in ["user_id", "userId", "uid", "id", "sub"]:
-            if field in token:
-                return str(token[field])
-
-        # Check user_info nested object
-        user_info = token.get("user_info", {})
-        if isinstance(user_info, dict):
-            for field in ["user_id", "id", "userId", "uid"]:
-                if field in user_info:
-                    return str(user_info[field])
-
-        return None
 
     @property
     def logger(self) -> logging.Logger:
@@ -312,16 +204,32 @@ class ConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMA
         return GeckoOptionsFlow()
 
 
+# ---------------------------------------------------------------------------
+# OptionsFlow — settings + optional energy data link
+# ---------------------------------------------------------------------------
+
+
 class GeckoOptionsFlow(config_entries.OptionsFlow):
-    """Integration options (REST poll for app-style tiles when MQTT is quiet)."""
+    """Integration options (REST poll settings and optional energy-data link)."""
+
+    def __init__(self) -> None:
+        """Initialize the options flow."""
+        super().__init__()
+        self._code_verifier: str | None = None
+        self._authorize_url: str | None = None
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
+        """Show a menu with settings and energy link actions."""
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["settings", "link_energy", "unlink_energy"],
+        )
+
+    async def async_step_settings(self, user_input: dict[str, Any] | None = None):
         """Configure optional cloud REST polling."""
         opts = dict(self.config_entry.options)
 
         if user_input is not None:
-            # Merge onto existing options so internal keys (e.g. one-time migration
-            # stamps from ``_migrate_options_defaults``) are not dropped.
             merged_options = dict(self.config_entry.options)
             merged_options.update(user_input)
 
@@ -332,9 +240,6 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                 user_input.get(CONF_ALERTS_POLL_INTERVAL, DEFAULT_ALERTS_POLL_INTERVAL)
             )
             if (old_alerts > 0) != (new_alerts > 0):
-                # Crossing zero changes which platforms register REST alert entities.
-                # Reload here — do not also register an entry update listener that
-                # reloads on the same toggle (double reload / duplicate MQTT setup).
                 self.hass.config_entries.async_update_entry(
                     self.config_entry,
                     options=merged_options,
@@ -368,4 +273,107 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                 ): vol.All(vol.Coerce(int), vol.Range(min=0, max=86400)),
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(step_id="settings", data_schema=schema)
+
+    # -- Energy link (app-client paste flow) --------------------------------
+
+    async def async_step_link_energy(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Link a Gecko mobile-app token for energy/premium data."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            code = _extract_code_from_callback(user_input.get("callback_url", ""))
+            if code is None:
+                errors["callback_url"] = "invalid_callback_url"
+            else:
+                token = await self._async_exchange_code(code)
+                if token is None:
+                    errors["base"] = "token_exchange_failed"
+                else:
+                    token["expires_in"] = int(token["expires_in"])
+                    token["expires_at"] = time.time() + token["expires_in"]
+                    data = {**self.config_entry.data, "app_token": token}
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry, data=data
+                    )
+                    await self.hass.config_entries.async_reload(
+                        self.config_entry.entry_id
+                    )
+                    return self.async_abort(reason="energy_linked")
+
+        if self._authorize_url is None:
+            self._code_verifier = (
+                GeckoPKCEOAuth2Implementation.generate_code_verifier()
+            )
+            challenge = GeckoPKCEOAuth2Implementation.compute_code_challenge(
+                self._code_verifier
+            )
+            self._authorize_url = str(
+                URL(OAUTH2_AUTHORIZE).with_query(
+                    {
+                        "response_type": "code",
+                        "client_id": OAUTH2_APP_CLIENT_ID,
+                        "redirect_uri": OAUTH2_APP_REDIRECT_URI,
+                        "code_challenge": challenge,
+                        "code_challenge_method": "S256",
+                        "scope": "openid profile email offline_access",
+                        "audience": "https://api.geckowatermonitor.com",
+                    }
+                )
+            )
+
+        return self.async_show_form(
+            step_id="link_energy",
+            data_schema=vol.Schema({vol.Required("callback_url"): str}),
+            description_placeholders={"authorize_url": self._authorize_url},
+            errors=errors,
+        )
+
+    async def _async_exchange_code(self, code: str) -> dict | None:
+        """Exchange an authorization code for app-client tokens."""
+        if self._code_verifier is None:
+            return None
+        impl = GeckoPKCEOAuth2Implementation(
+            self.hass,
+            DOMAIN,
+            client_id=OAUTH2_APP_CLIENT_ID,
+            authorize_url=OAUTH2_AUTHORIZE,
+            token_url=OAUTH2_TOKEN,
+        )
+        try:
+            return await impl._token_request(  # noqa: SLF001
+                {
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": OAUTH2_APP_REDIRECT_URI,
+                    "code_verifier": self._code_verifier,
+                    "client_id": OAUTH2_APP_CLIENT_ID,
+                }
+            )
+        except (ClientResponseError, ClientError) as err:
+            _LOGGER.error("App-client token exchange failed: %s", err)
+            return None
+
+    # -- Energy unlink ------------------------------------------------------
+
+    async def async_step_unlink_energy(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Remove the linked app-client token."""
+        if not self.config_entry.data.get("app_token"):
+            return self.async_abort(reason="energy_not_linked")
+
+        if user_input is not None:
+            data = {
+                k: v for k, v in self.config_entry.data.items() if k != "app_token"
+            }
+            self.hass.config_entries.async_update_entry(self.config_entry, data=data)
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            return self.async_abort(reason="energy_unlinked")
+
+        return self.async_show_form(
+            step_id="unlink_energy",
+            data_schema=vol.Schema({}),
+        )
