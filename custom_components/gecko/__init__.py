@@ -29,6 +29,7 @@ from .const import (
     DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN,
     DEFAULT_CLOUD_REST_POLL_INTERVAL,
     DOMAIN,
+    OAUTH2_APP_CLIENT_ID,
     OAUTH2_AUTHORIZE,
     OAUTH2_CLIENT_ID,
     OAUTH2_TOKEN,
@@ -344,7 +345,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Create optional app-token API client for premium features if linked
     app_api_client: OAuthGeckoApi | None = None
     if entry.data.get("app_token"):
-        app_session = AppTokenSession(hass, entry, implementation)
+        app_implementation = GeckoPKCEOAuth2Implementation(
+            hass,
+            DOMAIN,
+            client_id=OAUTH2_APP_CLIENT_ID,
+            authorize_url=OAUTH2_AUTHORIZE,
+            token_url=OAUTH2_TOKEN,
+        )
+        app_session = AppTokenSession(hass, entry, app_implementation)
         app_api_client = OAuthGeckoApi(hass, app_session)
         _LOGGER.debug(
             "App token detected for entry %s; premium API client initialized",
