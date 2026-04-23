@@ -301,6 +301,13 @@ class GeckoClimate(
         self._attr_target_temperature = temperature
         self.schedule_update_ha_state()
 
+        _LOGGER.info(
+            "Thermostat setpoint %.1f °C requested for zone %s (%s); "
+            "waiting for spa shadow reported state to match",
+            temperature,
+            zone_id,
+            self.entity_id,
+        )
         _LOGGER.debug(
             "Applied target temperature %.1f°C for zone %s (%s)",
             temperature,
