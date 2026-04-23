@@ -86,8 +86,9 @@ API_BASE_URL = "https://api.geckowatermonitor.com"
 
 # Client configuration
 CONFIG_TIMEOUT = (
-    # MQTT ``config/get`` round-trip: HA OS / VM / slow Wi‑Fi can exceed 45s (seen
-    # ~47s+). gecko_iot_client raises ``Configuration loading failed`` when this elapses.
+    # Upper bound for gecko_iot_client ``load_configuration`` (``config/get`` reply).
+    # Slow HA OS / VM / Wi‑Fi can exceed ~45s on a healthy path; if nothing answers,
+    # the client still waits this full duration (bounded wait, not an endless hang).
     90.0
 )
 

@@ -29,6 +29,37 @@ _LOGGER = logging.getLogger(__name__)
 TOKEN_REFRESH_DELAY = 1  # seconds to wait before getting new token
 RECONNECT_DELAY = 2  # seconds to wait before reconnecting
 
+
+def _log_gecko_configuration_load_failed(
+    monitor_id: str,
+    vessel_name: str,
+    elapsed_s: float,
+    exc: GeckoConfigurationError,
+) -> None:
+    """Explain bounded ``config/get`` waits from gecko_iot_client (not an infinite hang)."""
+    detail = str(exc).strip()
+    if "Subscriptions not ready" in detail:
+        hint = (
+            "MQTT connected, but topic subscriptions were not ready before the wait "
+            "elapsed (unstable link, slow broker, or handshake still in progress)."
+        )
+    else:
+        hint = (
+            "MQTT session is up, but the Gecko ``config/get`` round-trip did not finish "
+            "in time—usually the spa gateway is offline, asleep, or has no cloud path; "
+            "less often outbound filtering from Home Assistant or a cloud-side stall."
+        )
+    _LOGGER.warning(
+        "Gecko MQTT configuration load failed for monitor %s (%s) after %.1fs "
+        "(config_timeout=%.1fs): %s. %s",
+        monitor_id,
+        vessel_name,
+        elapsed_s,
+        CONFIG_TIMEOUT,
+        detail,
+        hint,
+    )
+
 # Global key for the connection manager
 GECKO_CONNECTION_MANAGER_KEY: HassKey[GeckoConnectionManager] = HassKey(
     f"{DOMAIN}_connection_manager"
@@ -223,14 +254,8 @@ class GeckoConnectionManager:
             except Exception as e:
                 elapsed = time.monotonic() - _t0
                 if isinstance(e, GeckoConfigurationError):
-                    _LOGGER.warning(
-                        "Gecko MQTT configuration load failed for monitor %s (%s) "
-                        "after %.1fs (config_timeout=%.1fs): %s",
-                        mid,
-                        vessel_name,
-                        elapsed,
-                        CONFIG_TIMEOUT,
-                        e,
+                    _log_gecko_configuration_load_failed(
+                        str(mid), vessel_name, elapsed, e
                     )
                 else:
                     _LOGGER.debug(
