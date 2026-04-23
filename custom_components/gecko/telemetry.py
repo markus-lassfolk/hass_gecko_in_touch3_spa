@@ -217,7 +217,7 @@ def _get_zone_runtime_state(
             .get(zone_type.value, {})
             .get(str(zone_id), {})
         )
-        if isinstance(zone_state, dict):
+        if zone_state:
             return zone_state
 
     return {}
