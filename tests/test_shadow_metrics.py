@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 from custom_components.gecko import shadow_metrics
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
-from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import UnitOfTemperature
 
 
@@ -193,6 +193,16 @@ def test_apply_numeric_shadow_sensor_hints_sets_attrs() -> None:
     ent = SimpleNamespace()
     shadow_metrics.apply_numeric_shadow_sensor_hints(ent, "zones.z.phReading")
     assert ent._attr_device_class == SensorDeviceClass.PH
+    assert ent._attr_state_class == SensorStateClass.MEASUREMENT
+    assert ent._attr_suggested_display_precision == 2
+
+
+def test_apply_numeric_shadow_sensor_hints_lsi_gets_measurement_state_class() -> None:
+    """LSI has no device_class but must still be a statistical numeric (line graph)."""
+    ent = SimpleNamespace()
+    shadow_metrics.apply_numeric_shadow_sensor_hints(ent, "cloud.rest.readings.lsi")
+    assert ent._attr_device_class is None
+    assert ent._attr_state_class == SensorStateClass.MEASUREMENT
     assert ent._attr_suggested_display_precision == 2
 
 

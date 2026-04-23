@@ -41,6 +41,8 @@ def _shadow_paths_exercising_infer_hints() -> list[str]:
         "cloud.rest.readings.tds",
         "cloud.rest.readings.salinity",
         "cloud.rest.readings.freeChlorine",
+        "cloud.rest.readings.lsi",
+        "cloud.rest.readings.phStc20",
         "features.waterlab.zone1.temp_c",
     ]
 
@@ -53,9 +55,9 @@ def test_apply_numeric_shadow_sensor_hints_device_class_state_class_matrix(
     shadow_metrics.apply_numeric_shadow_sensor_hints(ent, path)
     dc = getattr(ent, "_attr_device_class", None)
     sc = getattr(ent, "_attr_state_class", None)
+    assert sc is not None, f"{path}: state_class required for statistics / graphs"
     if dc is None:
         return
-    assert sc is not None, f"{path}: device_class set without state_class"
     allowed = DEVICE_CLASS_STATE_CLASSES.get(dc)
     assert allowed is not None, f"{path}: unknown device_class {dc!r}"
     assert sc in allowed, f"{path}: {dc=} {sc=} not in {allowed}"

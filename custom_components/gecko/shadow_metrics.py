@@ -771,19 +771,25 @@ def shadow_metric_icon(path: str) -> str:
 
 
 def apply_numeric_shadow_sensor_hints(entity: Any, path: str) -> None:
-    """Configure a ``SensorEntity`` from ``infer_sensor_metadata``."""
+    """Configure a ``SensorEntity`` from ``infer_sensor_metadata``.
+
+    ``state_class`` is set for **every** numeric shadow metric. Values like LSI
+    (no ``device_class`` / no unit) still need ``SensorStateClass.MEASUREMENT`` so
+    Home Assistant records long-term statistics and shows line graphs instead of
+    treating each decimal string as a discrete categorical state.
+    """
     dc, unit = infer_sensor_metadata(path)
     entity._attr_native_unit_of_measurement = unit
     entity._attr_device_class = dc
-    if dc == SensorDeviceClass.PH:
-        entity._attr_state_class = SensorStateClass.MEASUREMENT
-        entity._attr_suggested_display_precision = 2
-    elif dc == SensorDeviceClass.TEMPERATURE:
-        entity._attr_state_class = SensorStateClass.MEASUREMENT
-    elif dc == SensorDeviceClass.ENERGY:
+    if dc == SensorDeviceClass.ENERGY:
         entity._attr_state_class = SensorStateClass.TOTAL_INCREASING
-    elif dc is not None:
+    else:
         entity._attr_state_class = SensorStateClass.MEASUREMENT
+    if dc == SensorDeviceClass.PH:
+        entity._attr_suggested_display_precision = 2
+    lower = path.lower()
+    if re.search(r"(^|\.)(lsi|phstc20)(\.|$)", lower):
+        entity._attr_suggested_display_precision = 2
 
 
 def chemistry_metric_enabled_by_default(path: str) -> bool:
