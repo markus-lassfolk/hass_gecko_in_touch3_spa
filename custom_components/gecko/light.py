@@ -206,6 +206,7 @@ class GeckoLight(GeckoEntityAvailabilityMixin, CoordinatorEntity, LightEntity):
                 activate_method()
             else:
                 _LOGGER.warning("Zone %s has no activate or set_color method", zone.id)
+                return
 
             self._attr_is_on = True
             self.async_write_ha_state()
