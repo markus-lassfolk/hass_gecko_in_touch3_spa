@@ -23,6 +23,7 @@ from .telemetry import (
     get_flow_speed_mode_for_percentage,
     get_flow_speed_value_for_mode,
     get_supported_flow_speed_modes,
+    zone_supports_speed_control,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -101,7 +102,7 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
             FanEntityFeature.TURN_OFF | FanEntityFeature.TURN_ON
         )
 
-        if get_supported_flow_speed_modes(self._zone):
+        if zone_supports_speed_control(self._zone):
             self._attr_supported_features |= FanEntityFeature.SET_SPEED
             self._speed_list = list(get_supported_flow_speed_modes(self._zone))
             self._attr_speed_list = self._speed_list
