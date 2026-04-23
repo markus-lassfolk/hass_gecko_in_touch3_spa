@@ -181,14 +181,21 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         data["account_id"] = resolved_account
         data_changed = True
 
-    if current.version < 3 and target_version >= 2:
-        reenable_integration_disabled_energy_cost_score_entities(hass, current)
+    needs_v3_reenable = current.version < 3 and target_version >= 2
+    if needs_v3_reenable:
         target_version = 3
 
     if data_changed or target_version != current.version:
         hass.config_entries.async_update_entry(
             current, data=data, version=target_version
         )
+
+    if needs_v3_reenable:
+        updated_entry = hass.config_entries.async_get_entry(entry.entry_id)
+        if updated_entry:
+            reenable_integration_disabled_energy_cost_score_entities(
+                hass, updated_entry
+            )
 
     return True
 
