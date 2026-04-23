@@ -314,6 +314,19 @@ class GeckoConnectionManager:
             return None
         return self._connections.get(key)
 
+    def get_connections_snapshot(self) -> dict[Any, GeckoMonitorConnection]:
+        """Get a shallow snapshot of all connections without blocking.
+
+        Returns a new dict containing the current connections. This is safe to
+        iterate over even if connections are added/removed concurrently, since
+        dict() creates a shallow copy in a single atomic operation in CPython.
+
+        This method intentionally does not acquire _connection_lock to avoid
+        blocking diagnostics callers when the lock is held during long-running
+        MQTT connect operations (up to CONFIG_TIMEOUT seconds).
+        """
+        return dict(self._connections)
+
     async def async_remove_callback(
         self, monitor_id: str, callback: Callable[[dict], None]
     ) -> None:

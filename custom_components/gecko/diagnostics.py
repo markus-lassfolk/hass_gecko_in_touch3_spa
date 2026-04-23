@@ -167,8 +167,7 @@ async def _get_connection_diagnostics(connection_manager: Any) -> dict[str, Any]
     if not connection_manager:
         return {}
 
-    async with connection_manager._connection_lock:
-        connections_snapshot = dict(connection_manager._connections)
+    connections_snapshot = connection_manager.get_connections_snapshot()
 
     connections: dict[str, Any] = {}
     for monitor_id, connection in connections_snapshot.items():
@@ -556,8 +555,7 @@ async def async_get_config_entry_diagnostics(
 
     # Full MQTT shadow state + flow zone runtime for debugging pump/thermostat issues.
     shadow_dumps: list[dict[str, Any]] = []
-    async with connection_manager._connection_lock:
-        connections_snapshot = dict(connection_manager._connections)
+    connections_snapshot = connection_manager.get_connections_snapshot()
     for monitor_id, connection in connections_snapshot.items():
         gc = getattr(connection, "gecko_client", None)
         if not gc:
