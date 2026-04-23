@@ -65,6 +65,7 @@ def _extract_premium_energy_currency(raw: Any) -> str | None:
         return _extract_premium_energy_currency(data[0])
     return None
 
+
 SpaTempKind = Literal["target", "current"]
 
 
@@ -549,7 +550,9 @@ class GeckoEnergyCostSensor(
 
         val = coerce_energy_cost_amount(raw)
 
-        currency = _extract_premium_energy_currency(raw) if isinstance(raw, dict) else None
+        currency = (
+            _extract_premium_energy_currency(raw) if isinstance(raw, dict) else None
+        )
 
         if self._latched_currency is None and currency:
             self._latched_currency = currency

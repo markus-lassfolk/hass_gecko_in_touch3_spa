@@ -130,12 +130,14 @@ def test_extract_premium_energy_currency_nested_energy_cost() -> None:
 
 def test_coerce_energy_cost_total_and_formatted_variants() -> None:
     """Gecko often omits ``amount``; use ``total`` / formatted strings / deep scan."""
-    assert _coerce_energy_cost_amount(
-        {"energyCost": {"currency": "SEK", "total": 19.95}}
-    ) == 19.95
-    assert _coerce_energy_cost_amount(
-        {"energyCost": {"formattedEnergyCost": "12,50 kr"}}
-    ) == 12.5
+    assert (
+        _coerce_energy_cost_amount({"energyCost": {"currency": "SEK", "total": 19.95}})
+        == 19.95
+    )
+    assert (
+        _coerce_energy_cost_amount({"energyCost": {"formattedEnergyCost": "12,50 kr"}})
+        == 12.5
+    )
     assert _coerce_energy_cost_amount({"formattedEnergyCost": "3.25 SEK"}) == 3.25
     assert (
         _coerce_energy_cost_amount(
@@ -197,7 +199,10 @@ def test_insufficient_data_status_yields_none_for_all_parsers() -> None:
         "formattedEnergyCost": "",
         "formattedWorstCaseEnergyCost": "",
         "formattedSavings": "",
-        "period": {"from": "2026-03-01T00:00:00.000Z", "to": "2026-03-31T23:59:59.999Z"},
+        "period": {
+            "from": "2026-03-01T00:00:00.000Z",
+            "to": "2026-03-31T23:59:59.999Z",
+        },
         "generatedAt": "2026-04-23T15:32:13.242Z",
         "status": "insufficient_data",
         "isPremium": True,
@@ -206,7 +211,11 @@ def test_insufficient_data_status_yields_none_for_all_parsers() -> None:
     assert _coerce_energy_cost_amount(raw_consumption) is None
     assert _coerce_energy_score_value(raw_consumption) is None
     assert not premium_energy_poll_has_usable_values(
-        {"consumption": raw_consumption, "cost": raw_consumption, "score": raw_consumption}
+        {
+            "consumption": raw_consumption,
+            "cost": raw_consumption,
+            "score": raw_consumption,
+        }
     )
 
 

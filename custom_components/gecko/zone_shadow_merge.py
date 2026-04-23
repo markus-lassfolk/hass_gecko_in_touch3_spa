@@ -156,7 +156,9 @@ def install_mqtt_shadow_document_patch() -> None:
 
     lib_logger = logging.getLogger("gecko_iot_client.transporters.mqtt.transporter")
 
-    def _on_state_document_update(self: MqttTransporter, topic: str, payload: str) -> None:
+    def _on_state_document_update(
+        self: MqttTransporter, topic: str, payload: str
+    ) -> None:
         lib_logger.debug("State document update received")
         document = parse_json_safely(payload)
         if not document:
@@ -183,9 +185,7 @@ def install_zone_parser_merge_patch() -> None:
     """Idempotently replace ``apply_state_to_zones`` on the vendored parser class."""
     from gecko_iot_client.models.zone_parser import ZoneConfigurationParser
 
-    existing = getattr(
-        ZoneConfigurationParser.apply_state_to_zones, _PATCH_ATTR, False
-    )
+    existing = getattr(ZoneConfigurationParser.apply_state_to_zones, _PATCH_ATTR, False)
     if existing:
         return
 

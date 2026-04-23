@@ -155,7 +155,8 @@ async def test_pending_target_temperature_holds_against_stale_report(mock_hass):
     with (
         patch(
             "custom_components.gecko.climate.async_get_connection_manager",
-            new=AsyncMock(return_value=mgr)),
+            new=AsyncMock(return_value=mgr),
+        ),
         patch("custom_components.gecko.climate.time.monotonic", return_value=1000.0),
     ):
         await ent.async_set_temperature(temperature=31.5)
@@ -213,7 +214,8 @@ async def test_pending_target_temperature_expires_after_grace(mock_hass):
     with (
         patch(
             "custom_components.gecko.climate.async_get_connection_manager",
-            new=AsyncMock(return_value=mgr)),
+            new=AsyncMock(return_value=mgr),
+        ),
         patch("custom_components.gecko.climate.time.monotonic", fake_mono),
     ):
         mono_at[0] = 0.0

@@ -623,8 +623,10 @@ def infer_sensor_metadata(
     ):
         device_class = SensorDeviceClass.TEMPERATURE
         unit = UnitOfTemperature.CELSIUS
-    elif "rssi" in segs or "signalstrength" in segs or (
-        {"wifi", "rf", "signal"}.intersection(segs) and "strength" in segs
+    elif (
+        "rssi" in segs
+        or "signalstrength" in segs
+        or ({"wifi", "rf", "signal"}.intersection(segs) and "strength" in segs)
     ):
         dc = getattr(SensorDeviceClass, "SIGNAL_STRENGTH", None)
         if dc is not None:

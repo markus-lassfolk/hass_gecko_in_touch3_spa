@@ -125,7 +125,7 @@ def _extract_code_from_callback(raw: str) -> str | None:
 
     # Fallback: search for code= in the raw string if urlparse failed
     try:
-        match = re.search(r'[?&]?code=([^&\s]+)', raw)
+        match = re.search(r"[?&]?code=([^&\s]+)", raw)
         if match:
             code = match.group(1)
             if code and code.strip():
@@ -456,6 +456,9 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                 token = await self._async_exchange_code(code)
                 if token is None:
                     errors["base"] = "token_exchange_failed"
+                    # Force fresh PKCE URL/verifier on next render; the old code is invalid.
+                    self._authorize_url = None
+                    self._code_verifier = None
                 else:
                     expires_in = int(token.get("expires_in", 3600))
                     token["expires_in"] = expires_in
@@ -496,9 +499,18 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
         )
 
         # Build exception tuple based on what's available
-        exceptions = (ClientResponseError, ClientError)
+        exceptions: tuple[type[Exception], ...] = (
+            ClientResponseError,
+            ClientError,
+            TimeoutError,
+        )
         if OAuth2TokenRequestError is not None:
-            exceptions = (ClientResponseError, ClientError, OAuth2TokenRequestError)
+            exceptions = (
+                ClientResponseError,
+                ClientError,
+                TimeoutError,
+                OAuth2TokenRequestError,
+            )
 
         try:
             return await impl.async_exchange_authorization_code(

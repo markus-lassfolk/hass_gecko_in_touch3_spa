@@ -152,8 +152,8 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
             getattr(self, "entity_id", "?"),
         )
 
-    def _resolve_flow_zone(self) -> FlowZone | None:
-        """Return the live flow zone for this entity, or ``None`` if missing."""
+    def _resolve_flow_zone(self) -> FlowZone:
+        """Return the live flow zone for this entity after re-syncing from coordinator."""
         self._sync_zone_from_coordinator()
         # Production coordinators only attach ``FlowZone`` instances; tests may use
         # lightweight stubs that are not subclasses of ``FlowZone``.
@@ -211,15 +211,15 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
     ) -> None:
         """Turn the fan on. Optionally set speed by percentage or preset."""
         _LOGGER.debug("Turning on pump %s", self._attr_name)
-        self._sync_zone_from_coordinator()
-        if zone_supports_speed_control(self._zone):
-            supported = tuple(get_supported_flow_speed_modes(self._zone))
+        zone = self._resolve_flow_zone()
+        if zone_supports_speed_control(zone):
+            supported = tuple(get_supported_flow_speed_modes(zone))
             if preset_mode is not None:
                 pm = str(preset_mode).lower()
                 if pm in supported:
                     await self.async_set_speed(pm)
                     return
-            speed = get_flow_speed_mode_for_percentage(self._zone, percentage)
+            speed = get_flow_speed_mode_for_percentage(zone, percentage)
             await self.async_set_speed(speed)
             return
 
@@ -242,14 +242,14 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
 
     async def async_set_percentage(self, percentage: int) -> None:
         """Set the fan speed by percentage."""
-        self._sync_zone_from_coordinator()
         if percentage <= 0:
             await self.async_turn_off()
             return
-        if not zone_supports_speed_control(self._zone):
+        zone = self._resolve_flow_zone()
+        if not zone_supports_speed_control(zone):
             await self.async_turn_on()
             return
-        speed = get_flow_speed_mode_for_percentage(self._zone, percentage)
+        speed = get_flow_speed_mode_for_percentage(zone, percentage)
         await self.async_set_speed(speed)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:

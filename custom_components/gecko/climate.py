@@ -183,9 +183,10 @@ class GeckoClimate(
         deadline = self._pending_target_deadline_mono
         now = time.monotonic()
         if pend is not None and deadline is not None and now < deadline:
-            if reported_target is not None and abs(
-                float(reported_target) - float(pend)
-            ) < 0.05:
+            if (
+                reported_target is not None
+                and abs(float(reported_target) - float(pend)) < 0.05
+            ):
                 self._pending_target_temperature = None
                 self._pending_target_deadline_mono = None
                 self._attr_target_temperature = reported_target

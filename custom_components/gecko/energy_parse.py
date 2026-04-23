@@ -178,18 +178,23 @@ def _best_positive_wh_kwh_deep(obj: Any, depth: int = 0) -> float | None:
     return best
 
 
-_ENERGY_NO_DATA_STATUSES = frozenset({
-    "insufficient_data",
-    "no_data",
-    "unavailable",
-    "pending",
-})
+_ENERGY_NO_DATA_STATUSES = frozenset(
+    {
+        "insufficient_data",
+        "no_data",
+        "unavailable",
+        "pending",
+    }
+)
 
 
 def _energy_status_means_no_data(raw: dict[str, Any]) -> bool:
     """True when the API explicitly declares the response has no usable readings."""
     status = raw.get("status")
-    if isinstance(status, str) and status.strip().lower().replace(" ", "_") in _ENERGY_NO_DATA_STATUSES:
+    if (
+        isinstance(status, str)
+        and status.strip().lower().replace(" ", "_") in _ENERGY_NO_DATA_STATUSES
+    ):
         return True
     return False
 

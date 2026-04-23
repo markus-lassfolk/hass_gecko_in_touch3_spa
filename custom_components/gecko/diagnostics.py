@@ -295,9 +295,7 @@ def _sensor_values_snapshot(coord: Any) -> dict[str, Any]:
     and unit are set correctly.
     """
     numeric: dict[str, Any] = {}
-    for path, val in sorted(
-        getattr(coord, "_shadow_metric_values", {}).items()
-    ):
+    for path, val in sorted(getattr(coord, "_shadow_metric_values", {}).items()):
         dc, unit = infer_sensor_metadata(path)
         numeric[path] = {
             "value": val,
@@ -442,9 +440,7 @@ async def async_get_config_entry_diagnostics(
                 "vessel_name": getattr(coord, "vessel_name", None),
                 "vessel_id": getattr(coord, "vessel_id", None),
                 "monitor_id": getattr(coord, "monitor_id", None),
-                "energy_keys_with_data": [
-                    k for k, v in ed.items() if v is not None
-                ],
+                "energy_keys_with_data": [k for k, v in ed.items() if v is not None],
                 "energy_keys_parseable_for_sensors": parseable,
             }
             for ek in ("consumption", "cost", "score"):
@@ -577,16 +573,14 @@ async def async_get_config_entry_diagnostics(
                         "name": getattr(z, "name", None),
                         "active": getattr(z, "active", None),
                         "speed": getattr(z, "speed", None),
-                        "target_temperature": getattr(
-                            z, "target_temperature", None
-                        ),
+                        "target_temperature": getattr(z, "target_temperature", None),
                         "temperature": getattr(z, "temperature", None),
                         "set_point": getattr(z, "set_point", None),
                         "status": str(getattr(z, "status", None)),
                     }
                     initiators = getattr(z, "initiators", None)
                     if initiators is not None:
-                        zone_info["initiators"] = list(initiators)
+                        zone_info["initiators"] = [str(i) for i in initiators]
                     flow_runtime.append(zone_info)
             dump["zone_objects"] = flow_runtime
         shadow_dumps.append(dump)
@@ -609,9 +603,7 @@ async def async_get_config_entry_diagnostics(
                     "pending_target_temperature": getattr(
                         ent, "_pending_target_temperature", None
                     ),
-                    "pending_target_grace_remaining_s": _pending_grace_remaining(
-                        ent
-                    ),
+                    "pending_target_grace_remaining_s": _pending_grace_remaining(ent),
                     "target_temperature": getattr(
                         ent, "_attr_target_temperature", None
                     ),
