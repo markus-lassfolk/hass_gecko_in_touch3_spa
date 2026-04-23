@@ -96,12 +96,30 @@ def get_flow_speed_step_values(zone: Any) -> tuple[float, ...]:
 
 
 def _uses_binary_near_max_speed_encoding(zone: Any) -> bool:
-    """Return True when Gecko reports low/high as 99/100 style values."""
+    """Return True when Gecko reports low/high as 99/100 style values.
+    
+    Detection is based on the zone's speed_config hardware characteristics,
+    not on the current runtime speed value (which is 0 when off).
+    """
     if get_flow_speed_step_values(zone):
         return False
 
-    speed = _as_float(getattr(zone, "speed", None))
-    return speed is not None and 98.5 <= speed <= 100.5
+    # Check the hardware speed_config for binary encoding indicators
+    speed_config = getattr(zone, "speed_config", None)
+    if isinstance(speed_config, dict):
+        minimum = _as_float(speed_config.get("minimum"))
+        maximum = _as_float(speed_config.get("maximum"))
+        
+        # Binary encoding zones have min/max in the 98-100 range
+        if minimum is not None and maximum is not None:
+            if 98.5 <= minimum <= 100.5 and 98.5 <= maximum <= 100.5:
+                return True
+            # Has explicit config but not binary range
+            return False
+    
+    # No speed_config available - default to standard 4-mode encoding
+    # (Cannot reliably detect binary encoding without hardware config)
+    return False
 
 
 def _get_mode_label_for_step_index(step_index: int, step_count: int) -> str:

@@ -369,8 +369,9 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                 if token is None:
                     errors["base"] = "token_exchange_failed"
                 else:
-                    token["expires_in"] = int(token["expires_in"])
-                    token["expires_at"] = time.time() + token["expires_in"]
+                    expires_in = int(token.get("expires_in", 3600))
+                    token["expires_in"] = expires_in
+                    token["expires_at"] = time.time() + expires_in
                     data = {**self.config_entry.data, "app_token": token}
                     self.hass.config_entries.async_update_entry(
                         self.config_entry, data=data
