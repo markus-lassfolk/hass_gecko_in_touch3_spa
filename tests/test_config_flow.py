@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from aiohttp import ClientResponseError
 from custom_components.gecko.config_flow import (
+    AccountResolutionError,
     ConfigFlow,
     GeckoOptionsFlow,
     _decode_jwt_payload,
@@ -514,7 +515,7 @@ async def test_resolve_user_jwt_fallback_requires_sub_when_no_user_id(
     api.async_get_user_id = AsyncMock(return_value=None)
     data = _oauth_data_with_jwt_payload({"org_id": "only-org"})
 
-    with pytest.raises(ConnectionError):
+    with pytest.raises(AccountResolutionError):
         await flow._resolve_user_and_account(data, api)
 
 
@@ -533,7 +534,7 @@ async def test_oauth_create_entry_aborts_on_account_resolution_failure(
         patch.object(
             flow,
             "_resolve_user_and_account",
-            AsyncMock(side_effect=ConnectionError("No account.")),
+            AsyncMock(side_effect=AccountResolutionError("No account.")),
         ),
     ):
         result = await flow.async_oauth_create_entry(data)
