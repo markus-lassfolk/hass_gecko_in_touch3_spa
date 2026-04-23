@@ -201,6 +201,14 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return ""
         return str(entry.data.get("account_id", "")).strip()
 
+    def _get_api_client(self):
+        """Return the app API client if available, otherwise the community API client."""
+        entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if not entry or not getattr(entry, "runtime_data", None):
+            return None
+        rd = entry.runtime_data
+        return rd.app_api_client if rd.app_api_client else rd.api_client
+
     async def _async_lazy_resolve_account_id(self) -> str:
         """Resolve and persist ``account_id`` when missing (retries after transient failures).
 
@@ -212,7 +220,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
         if not entry or not getattr(entry, "runtime_data", None):
             return ""
-        api = entry.runtime_data.api_client
+        api = self._get_api_client()
+        if not api:
+            return ""
         try:
             user_id = await api.async_get_user_id()
             user_data = await api.async_get_user_info(user_id)
@@ -290,7 +300,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
         if not entry or not getattr(entry, "runtime_data", None):
             return
-        api = entry.runtime_data.api_client
+        api = self._get_api_client()
+        if not api:
+            return
         rd = entry.runtime_data
         vessels: list[Any] | None = None
         try:
@@ -387,7 +399,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
         if not entry or not getattr(entry, "runtime_data", None):
             return
-        api = entry.runtime_data.api_client
+        api = self._get_api_client()
+        if not api:
+            return
         rd = entry.runtime_data
         messages_payload: Any | None = None
         actions_payload: Any | None = None
