@@ -29,6 +29,7 @@ from .energy_parse import (
     coerce_energy_consumption_kwh,
     coerce_energy_cost_amount,
     coerce_energy_score_value,
+    extract_electricity_rate,
 )
 from .entity import GeckoEntityAvailabilityMixin, gecko_zone_ids_equal
 from .shadow_metrics import (
@@ -252,6 +253,7 @@ async def async_setup_entry(
                     GeckoEnergyConsumptionSensor(coordinator, config_entry),
                     GeckoEnergyCostSensor(coordinator, config_entry),
                     GeckoEnergyScoreSensor(coordinator, config_entry),
+                    GeckoElectricityRateSensor(coordinator, config_entry),
                 ]
             )
         if energy_entities:
@@ -637,6 +639,66 @@ class GeckoEnergyScoreSensor(
     @property
     def available(self) -> bool:
         """REST energy score stays available when MQTT transport is disconnected."""
+        if self.coordinator.has_premium_energy_api():
+            return self._attr_native_value is not None
+        return super().available
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._refresh_value()
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._refresh_value()
+
+
+class GeckoElectricityRateSensor(
+    GeckoEntityAvailabilityMixin, CoordinatorEntity, SensorEntity
+):
+    """Configured electricity rate from the Gecko app (cost per kWh)."""
+
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+    _attr_translation_key = "electricity_rate"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 2
+    _attr_icon = "mdi:cash-clock"
+    _attr_entity_registry_enabled_default = True
+
+    def __init__(
+        self,
+        coordinator: GeckoVesselCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{coordinator.vessel_id}_electricity_rate"
+        )
+        self._attr_device_info = dr.DeviceInfo(
+            identifiers={(DOMAIN, str(coordinator.vessel_id))},
+        )
+        self._attr_available = False
+        self._refresh_value()
+
+    def _refresh_value(self) -> None:
+        energy = self.coordinator.get_energy_data()
+        raw = energy.get("cost")
+        if raw is None:
+            self._attr_native_value = None
+            self._attr_extra_state_attributes = {}
+            return
+
+        rate, currency = extract_electricity_rate(raw)
+        self._attr_native_value = rate
+        if currency:
+            self._attr_native_unit_of_measurement = f"{currency}/kWh"
+        self._attr_extra_state_attributes = (
+            {"raw_response": raw} if isinstance(raw, dict) else {}
+        )
+
+    @property
+    def available(self) -> bool:
         if self.coordinator.has_premium_energy_api():
             return self._attr_native_value is not None
         return super().available

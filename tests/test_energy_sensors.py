@@ -8,9 +8,11 @@ from custom_components.gecko.energy_parse import (
     _coerce_energy_score_value,
     _first_valid_float,
     _safe_float,
+    extract_electricity_rate,
     premium_energy_poll_has_usable_values,
 )
 from custom_components.gecko.sensor import (
+    GeckoElectricityRateSensor,
     GeckoEnergyConsumptionSensor,
     GeckoEnergyCostSensor,
     GeckoEnergyScoreSensor,
@@ -229,3 +231,77 @@ def test_energy_score_dict_unit_is_preserved() -> None:
     sensor = GeckoEnergyScoreSensor(coordinator, entry)
     assert sensor.native_value == 82.0
     assert sensor.native_unit_of_measurement == "%"
+
+
+def test_cost_per_kwh_minor_units_not_treated_as_total_cost() -> None:
+    """The Gecko cost endpoint only returns an electricity rate, not a total cost.
+
+    ``costPerKwhMinorUnits: 12`` means $0.12/kWh, not $12 of accumulated cost.
+    """
+    raw_cost = {
+        "energyCost": {
+            "energyCostId": "d73a18f4-b254-49a3-a6e0-eab84d77a2df",
+            "costPerKwhMinorUnits": 12,
+            "currency": "USD",
+        }
+    }
+    assert _coerce_energy_cost_amount(raw_cost) is None
+
+
+def test_extract_electricity_rate_from_gecko_cost_payload() -> None:
+    raw_cost = {
+        "energyCost": {
+            "energyCostId": "d73a18f4",
+            "costPerKwhMinorUnits": 12,
+            "currency": "USD",
+        }
+    }
+    rate, currency = extract_electricity_rate(raw_cost)
+    assert rate == 0.12
+    assert currency == "USD"
+
+
+def test_extract_electricity_rate_missing_data() -> None:
+    assert extract_electricity_rate(None) == (None, None)
+    assert extract_electricity_rate({}) == (None, None)
+    assert extract_electricity_rate({"energyCost": {}}) == (None, None)
+
+
+def test_electricity_rate_sensor_shows_rate_per_kwh() -> None:
+    coordinator = MagicMock()
+    coordinator.get_energy_data = MagicMock(
+        return_value={
+            "cost": {
+                "energyCost": {
+                    "costPerKwhMinorUnits": 150,
+                    "currency": "SEK",
+                }
+            }
+        }
+    )
+    coordinator.vessel_id = "v1"
+    entry = MagicMock()
+    entry.entry_id = "e1"
+    sensor = GeckoElectricityRateSensor(coordinator, entry)
+    assert sensor.native_value == 1.50
+    assert sensor.native_unit_of_measurement == "SEK/kWh"
+
+
+def test_cost_sensor_returns_none_for_rate_only_payload() -> None:
+    """When only a rate is configured (no accumulated cost), cost sensor shows unknown."""
+    coordinator = MagicMock()
+    coordinator.get_energy_data = MagicMock(
+        return_value={
+            "cost": {
+                "energyCost": {
+                    "costPerKwhMinorUnits": 12,
+                    "currency": "USD",
+                }
+            }
+        }
+    )
+    coordinator.vessel_id = "v1"
+    entry = MagicMock()
+    entry.entry_id = "e1"
+    sensor = GeckoEnergyCostSensor(coordinator, entry)
+    assert sensor.native_value is None

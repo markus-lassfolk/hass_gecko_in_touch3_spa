@@ -138,6 +138,9 @@
       },
       "energy_score": {
         "name": "Energy score"
+      },
+      "electricity_rate": {
+        "name": "Electricity rate"
       }
     },
     "select": {

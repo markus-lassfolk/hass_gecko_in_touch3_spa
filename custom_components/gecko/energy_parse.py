@@ -337,6 +337,9 @@ def _scan_dict_for_cost_number(obj: Any, depth: int = 0) -> float | None:
         "status",
         "generated",
         "ispremium",
+        "perkwh",
+        "minorunits",
+        "costid",
     )
     for key, val in obj.items():
         kl = str(key).lower()
@@ -471,6 +474,30 @@ def premium_energy_poll_has_usable_values(energy: dict[str, Any]) -> bool:
     if coerce_energy_score_value(energy.get("score")) is not None:
         return True
     return False
+
+
+def extract_electricity_rate(raw: Any) -> tuple[float | None, str | None]:
+    """Extract the configured electricity rate from ``energyCost`` payloads.
+
+    Returns ``(rate_per_kwh, currency)`` or ``(None, None)``.
+    ``costPerKwhMinorUnits`` is cents/öre/pennies per kWh.
+    """
+    if not isinstance(raw, dict):
+        return None, None
+    ec = raw.get("energyCost")
+    if not isinstance(ec, dict):
+        return None, None
+    minor = ec.get("costPerKwhMinorUnits")
+    if not isinstance(minor, int | float) or isinstance(minor, bool):
+        return None, None
+    rate = float(minor) / 100.0
+    currency: str | None = None
+    for ck in ("currency", "currencyCode"):
+        v = ec.get(ck)
+        if isinstance(v, str) and v.strip():
+            currency = v.strip().upper()
+            break
+    return rate, currency
 
 
 # Back-compat for tests and older call sites.
