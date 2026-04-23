@@ -151,6 +151,7 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
             my_id,
             getattr(self, "entity_id", "?"),
         )
+        self._zone = None
 
     def _resolve_flow_zone(self) -> FlowZone | None:
         """Return the live flow zone for this entity, or ``None`` if missing."""
@@ -207,20 +208,25 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
         return None
 
     async def async_turn_on(
-        self, percentage: int | None = None, preset_mode: str | None = None, **kwargs
+        self,
+        percentage: int | None = None,
+        preset_mode: str | None = None,
+        _skip_sync: bool = False,
+        **kwargs,
     ) -> None:
         """Turn the fan on. Optionally set speed by percentage or preset."""
         _LOGGER.debug("Turning on pump %s", self._attr_name)
-        self._sync_zone_from_coordinator()
+        if not _skip_sync:
+            self._sync_zone_from_coordinator()
         if zone_supports_speed_control(self._zone):
             supported = tuple(get_supported_flow_speed_modes(self._zone))
             if preset_mode is not None:
                 pm = str(preset_mode).lower()
                 if pm in supported:
-                    await self.async_set_speed(pm)
+                    await self.async_set_speed(pm, _skip_sync=True)
                     return
             speed = get_flow_speed_mode_for_percentage(self._zone, percentage)
-            await self.async_set_speed(speed)
+            await self.async_set_speed(speed, _skip_sync=True)
             return
 
         try:
@@ -244,13 +250,13 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
         """Set the fan speed by percentage."""
         self._sync_zone_from_coordinator()
         if percentage <= 0:
-            await self.async_turn_off()
+            await self.async_turn_off(_skip_sync=True)
             return
         if not zone_supports_speed_control(self._zone):
-            await self.async_turn_on()
+            await self.async_turn_on(_skip_sync=True)
             return
         speed = get_flow_speed_mode_for_percentage(self._zone, percentage)
-        await self.async_set_speed(speed)
+        await self.async_set_speed(speed, _skip_sync=True)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set pump speed from a named preset (multi-speed pumps only)."""
@@ -258,9 +264,10 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
             return
         await self.async_set_speed(str(preset_mode).lower())
 
-    async def async_turn_off(self, **kwargs) -> None:
+    async def async_turn_off(self, _skip_sync: bool = False, **kwargs) -> None:
         """Turn the fan off."""
-        self._sync_zone_from_coordinator()
+        if not _skip_sync:
+            self._sync_zone_from_coordinator()
         try:
             self._zone.deactivate()
         except RuntimeError as err:
@@ -276,8 +283,9 @@ class GeckoFan(GeckoEntityAvailabilityMixin, CoordinatorEntity, FanEntity):
         """Return true if the entity is on."""
         return self._attr_is_on
 
-    async def async_set_speed(self, speed: str) -> None:
-        self._sync_zone_from_coordinator()
+    async def async_set_speed(self, speed: str, _skip_sync: bool = False) -> None:
+        if not _skip_sync:
+            self._sync_zone_from_coordinator()
         speed_value = get_flow_speed_value_for_mode(self._zone, speed)
         if speed_value is None:
             _LOGGER.warning("Unsupported speed %s for pump %s", speed, self._attr_name)
