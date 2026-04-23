@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from gecko_iot_client.models.zone_types import ZoneType
 from homeassistant.components.sensor import (
@@ -42,6 +42,27 @@ from .shadow_metrics import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _extract_premium_energy_currency(raw: Any) -> str | None:
+    """Resolve ISO currency from nested Gecko ``energyCost`` / ``data`` payloads."""
+    if not isinstance(raw, dict):
+        return None
+    for key in ("currency", "currencyCode", "currency_code"):
+        v = raw.get(key)
+        if isinstance(v, str) and v.isalpha() and 3 <= len(v) <= 4:
+            return v.upper()
+    nested = raw.get("energyCost")
+    if isinstance(nested, dict):
+        got = _extract_premium_energy_currency(nested)
+        if got:
+            return got
+    data = raw.get("data")
+    if isinstance(data, dict):
+        return _extract_premium_energy_currency(data)
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        return _extract_premium_energy_currency(data[0])
+    return None
 
 SpaTempKind = Literal["target", "current"]
 
@@ -526,9 +547,7 @@ class GeckoEnergyCostSensor(
 
         val = coerce_energy_cost_amount(raw)
 
-        currency = None
-        if isinstance(raw, dict):
-            currency = raw.get("currency") or raw.get("currencyCode") or raw.get("unit")
+        currency = _extract_premium_energy_currency(raw) if isinstance(raw, dict) else None
 
         if self._latched_currency is None and currency:
             self._latched_currency = currency

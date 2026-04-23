@@ -14,6 +14,7 @@ from custom_components.gecko.sensor import (
     GeckoEnergyConsumptionSensor,
     GeckoEnergyCostSensor,
     GeckoEnergyScoreSensor,
+    _extract_premium_energy_currency,
 )
 from homeassistant.components.sensor.const import DEVICE_CLASS_STATE_CLASSES
 
@@ -101,6 +102,30 @@ def test_coerce_energy_prefers_total_wh_over_period_wh() -> None:
     assert _coerce_energy_consumption_kwh(raw) == 500.0
 
 
+def test_coerce_energy_consumption_deep_string_wh_when_period_zero() -> None:
+    """Some payloads nest a string Wh meter while top-level period counters stay at 0."""
+    raw = {
+        "energyConsumptionWh": 0,
+        "readings": {"meterSampleWh": "2500"},
+    }
+    assert _coerce_energy_consumption_kwh(raw) == 2.5
+
+
+def test_extract_premium_energy_currency_nested_energy_cost() -> None:
+    assert (
+        _extract_premium_energy_currency(
+            {"energyCost": {"amount": 12.0, "currencyCode": "sek"}}
+        )
+        == "SEK"
+    )
+    assert (
+        _extract_premium_energy_currency(
+            {"data": {"energyCost": {"total": 1.0, "currency": "EUR"}}}
+        )
+        == "EUR"
+    )
+
+
 def test_coerce_energy_cost_total_and_formatted_variants() -> None:
     """Gecko often omits ``amount``; use ``total`` / formatted strings / deep scan."""
     assert _coerce_energy_cost_amount(
@@ -147,6 +172,19 @@ def test_energy_sensors_device_class_state_class_allowed_by_ha_matrix() -> None:
     dc_m, sc_m = cost._attr_device_class, cost._attr_state_class
     assert dc_m is not None and sc_m is not None
     assert sc_m in DEVICE_CLASS_STATE_CLASSES[dc_m], (dc_m, sc_m)
+
+
+def test_energy_cost_sensor_latches_currency_from_nested_energy_cost() -> None:
+    coordinator = MagicMock()
+    coordinator.get_energy_data = MagicMock(
+        return_value={"cost": {"energyCost": {"amount": 12.0, "currency": "SEK"}}}
+    )
+    coordinator.vessel_id = "v1"
+    entry = MagicMock()
+    entry.entry_id = "e1"
+    sensor = GeckoEnergyCostSensor(coordinator, entry)
+    assert sensor.native_value == 12.0
+    assert sensor.native_unit_of_measurement == "SEK"
 
 
 def test_energy_score_dict_unit_is_preserved() -> None:

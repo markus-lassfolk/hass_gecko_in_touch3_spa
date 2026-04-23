@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from gecko_iot_client.models.temperature_control_zone import (
@@ -110,6 +111,7 @@ class GeckoClimate(
     _attr_hvac_modes = [HVACMode.HEAT]
     _attr_hvac_mode = HVACMode.HEAT
     _attr_target_temperature_step = 0.5
+    _PENDING_TARGET_GRACE_S = 90.0
 
     def __init__(
         self,
@@ -136,6 +138,8 @@ class GeckoClimate(
         self._attr_available = False
 
         # Initialize state from zone
+        self._pending_target_temperature: float | None = None
+        self._pending_target_deadline_mono: float | None = None
         self._update_from_zone()
 
     def _sync_zone_from_coordinator(self) -> None:
@@ -174,7 +178,24 @@ class GeckoClimate(
             self._attr_hvac_action = HVACAction.IDLE
 
         self._attr_current_temperature = self._zone.temperature
-        self._attr_target_temperature = self._zone.target_temperature
+        reported_target = self._zone.target_temperature
+        pend = self._pending_target_temperature
+        deadline = self._pending_target_deadline_mono
+        now = time.monotonic()
+        if pend is not None and deadline is not None and now < deadline:
+            if reported_target is not None and abs(
+                float(reported_target) - float(pend)
+            ) < 0.05:
+                self._pending_target_temperature = None
+                self._pending_target_deadline_mono = None
+                self._attr_target_temperature = reported_target
+            else:
+                self._attr_target_temperature = pend
+        else:
+            if deadline is not None and now >= deadline:
+                self._pending_target_temperature = None
+                self._pending_target_deadline_mono = None
+            self._attr_target_temperature = reported_target
         self._attr_max_temp = self._zone.max_temperature_set_point_c
         self._attr_min_temp = self._zone.min_temperature_set_point_c
 
@@ -298,8 +319,12 @@ class GeckoClimate(
                 )
                 raise HomeAssistantError(f"Failed to set temperature: {err}") from err
 
+        self._pending_target_temperature = temperature
+        self._pending_target_deadline_mono = (
+            time.monotonic() + self._PENDING_TARGET_GRACE_S
+        )
         self._attr_target_temperature = temperature
-        self.async_write_ha_state()
+        self.schedule_update_ha_state()
 
         _LOGGER.info(
             "Thermostat setpoint %.1f °C requested for zone %s (%s); "

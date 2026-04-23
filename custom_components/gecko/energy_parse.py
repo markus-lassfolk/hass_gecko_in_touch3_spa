@@ -108,6 +108,8 @@ _WH_CONSUMPTION_KEYS: tuple[str, ...] = (
     "totalEnergyConsumptionWh",
     "lifetimeEnergyConsumptionWh",
     "cumulativeEnergyConsumptionWh",
+    "totalConsumptionWh",
+    "consumptionWh",
     "energyConsumptionWh",
     "worstCaseConsumptionWh",
 )
@@ -123,7 +125,57 @@ def _kwh_from_wh_dict(d: dict[str, Any]) -> float | None:
             kwh = float(wh) / 1000.0
             if kwh >= 0:
                 return kwh
+        if isinstance(wh, str):
+            try:
+                kwh = float(wh.strip()) / 1000.0
+            except ValueError:
+                continue
+            if kwh >= 0:
+                return kwh
     return None
+
+
+def _best_positive_wh_kwh_deep(obj: Any, depth: int = 0) -> float | None:
+    """Largest positive kWh from any ``*Wh`` numeric leaf (unknown vendor layouts)."""
+    if depth > 10:
+        return None
+    best: float | None = None
+    if isinstance(obj, dict):
+        for key, val in obj.items():
+            kl = str(key)
+            if isinstance(val, bool):
+                continue
+            key_l = kl.lower()
+            # ``totalEnergyKWh`` / ``*kwh`` totals are kWh, not watt-hour counters.
+            if key_l.endswith("kwh"):
+                if isinstance(val, dict | list):
+                    sub = _best_positive_wh_kwh_deep(val, depth + 1)
+                    if sub is not None and (best is None or sub > best):
+                        best = sub
+                continue
+            if kl.endswith("Wh") or "consumptionwh" in key_l.replace("_", ""):
+                if isinstance(val, str):
+                    try:
+                        wh = float(val.strip())
+                    except ValueError:
+                        continue
+                elif isinstance(val, int | float):
+                    wh = float(val)
+                else:
+                    continue
+                kwh = wh / 1000.0
+                if kwh > 0 and (best is None or kwh > best):
+                    best = kwh
+            elif isinstance(val, dict | list):
+                sub = _best_positive_wh_kwh_deep(val, depth + 1)
+                if sub is not None and (best is None or sub > best):
+                    best = sub
+    elif isinstance(obj, list):
+        for item in obj:
+            sub = _best_positive_wh_kwh_deep(item, depth + 1)
+            if sub is not None and (best is None or sub > best):
+                best = sub
+    return best
 
 
 def coerce_energy_consumption_kwh(raw: Any) -> float | None:
@@ -147,6 +199,12 @@ def coerce_energy_consumption_kwh(raw: Any) -> float | None:
     if not isinstance(raw, dict):
         return None
     got_wh = _kwh_from_wh_dict(raw)
+    deep_wh = _best_positive_wh_kwh_deep(raw)
+    if deep_wh is not None and deep_wh > 0:
+        if got_wh is None or got_wh == 0.0:
+            got_wh = deep_wh
+        else:
+            got_wh = max(got_wh, deep_wh)
     if got_wh is not None:
         return got_wh
     inner = raw.get("data")
@@ -393,3 +451,9 @@ def premium_energy_poll_has_usable_values(energy: dict[str, Any]) -> bool:
     if coerce_energy_score_value(energy.get("score")) is not None:
         return True
     return False
+
+
+# Back-compat for tests and older call sites.
+_coerce_energy_consumption_kwh = coerce_energy_consumption_kwh
+_coerce_energy_cost_amount = coerce_energy_cost_amount
+_coerce_energy_score_value = coerce_energy_score_value

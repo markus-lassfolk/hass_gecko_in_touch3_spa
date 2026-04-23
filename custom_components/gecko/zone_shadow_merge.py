@@ -27,6 +27,37 @@ _PATCH_ATTR = "_gecko_ha_zone_shadow_merge_patch"
 _DOC_PATCH_ATTR = "_gecko_ha_shadow_document_merge_patch"
 
 
+def _shadow_zone_ids_equal(zone_id: object, other: object) -> bool:
+    """Compare zone ids (int/str) without importing ``entity`` (avoids import cycles)."""
+    if zone_id is None or other is None:
+        return False
+    try:
+        return int(zone_id) == int(other)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return zone_id == other
+
+
+def _normalize_merged_zone_runtime_state(
+    zone_type_key: str, runtime: dict[str, Any]
+) -> dict[str, Any]:
+    """Align shadow keys Gecko reports vs what ``gecko_iot_client`` publishes.
+
+    Flow zones publish ``active`` but many shadows still carry ``isActive`` under
+    ``reported``. A shallow merge leaves both keys; if ``isActive`` is processed
+    last, it can wipe a user ``active`` true and the pump rubberbands off.
+    """
+    out = dict(runtime)
+    if zone_type_key == "flow":
+        if "active" in out:
+            out["isActive"] = out["active"]
+        if "isActive" in out:
+            out["active"] = out["isActive"]
+    if zone_type_key == "temperatureControl":
+        if "setpoint" in out and "setPoint" not in out:
+            out["setPoint"] = out["setpoint"]
+    return out
+
+
 def merge_shadow_zone_trees(
     reported_zones: Any,
     desired_zones: Any,
@@ -207,10 +238,24 @@ def install_zone_parser_merge_patch() -> None:
             )
 
             for zone_id, zone_runtime_state in zones_of_type_state.items():
-                zone = next((z for z in zone_list if z.id == zone_id), None)
+                zone = next(
+                    (
+                        z
+                        for z in zone_list
+                        if _shadow_zone_ids_equal(getattr(z, "id", None), zone_id)
+                    ),
+                    None,
+                )
                 if zone:
                     try:
-                        zone.update_from_state(zone_runtime_state)
+                        st = (
+                            _normalize_merged_zone_runtime_state(
+                                zone_type_key, dict(zone_runtime_state)
+                            )
+                            if isinstance(zone_runtime_state, dict)
+                            else zone_runtime_state
+                        )
+                        zone.update_from_state(st)
                         lib_logger.debug(
                             "Updated zone %s of type %s with state: %s",
                             zone_id,

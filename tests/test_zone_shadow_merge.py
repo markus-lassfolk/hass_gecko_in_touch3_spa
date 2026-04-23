@@ -1,11 +1,13 @@
 """Tests for merging AWS IoT shadow reported + desired zone trees."""
 
 from custom_components.gecko.zone_shadow_merge import (
+    _normalize_merged_zone_runtime_state,
     enrich_document_current_state_with_previous_desired,
     install_mqtt_shadow_document_patch,
     install_zone_parser_merge_patch,
     merge_shadow_zone_trees,
 )
+from gecko_iot_client.models.flow_zone import FlowZone
 from gecko_iot_client.models.zone_parser import ZoneConfigurationParser
 from gecko_iot_client.models.zone_types import ZoneType
 
@@ -123,3 +125,51 @@ def test_enrich_document_empty_current_desired_dict_still_merges_zones() -> None
     }
     out = enrich_document_current_state_with_previous_desired(current, previous)
     assert out["desired"]["zones"]["temperatureControl"]["1"]["setPoint"] == 34.5
+
+
+def test_normalize_flow_runtime_aligns_active_and_isactive() -> None:
+    """Merged shadows may carry both keys; last writer must not flip ``active`` off."""
+    merged = _normalize_merged_zone_runtime_state(
+        "flow", {"active": True, "isActive": False}
+    )
+    assert merged["active"] is True and merged["isActive"] is True
+    merged_off = _normalize_merged_zone_runtime_state(
+        "flow", {"active": False, "isActive": True}
+    )
+    assert merged_off["active"] is False and merged_off["isActive"] is False
+
+
+def test_apply_state_flow_zone_string_id_matches_int_zone_id() -> None:
+    """Shadow zone ids are often JSON strings while library zones may use int ids."""
+    zone = FlowZone(1, {"name": "Pump 1"})
+    zone._publish_desired_state = lambda *_a, **_k: None  # type: ignore[assignment]
+    zones = {ZoneType.FLOW_ZONE: [zone]}
+    state_data = {
+        "state": {
+            "reported": {
+                "zones": {
+                    "flow": {"1": {"active": True, "isActive": False}},
+                },
+            },
+        }
+    }
+    parser = ZoneConfigurationParser()
+    parser.apply_state_to_zones(zones, state_data)
+    assert zone.active is True
+
+
+def test_apply_state_flow_keeps_pump_on_when_reported_keys_conflict() -> None:
+    """``isActive`` maps onto ``active``; conflicting booleans must be reconciled first."""
+    zone = FlowZone("1", {"name": "Pump 1"})
+    zone._publish_desired_state = lambda *_a, **_k: None  # type: ignore[assignment]
+    zones = {ZoneType.FLOW_ZONE: [zone]}
+    state_data = {
+        "state": {
+            "reported": {
+                "zones": {"flow": {"1": {"active": True, "isActive": False}}},
+            },
+        }
+    }
+    parser = ZoneConfigurationParser()
+    parser.apply_state_to_zones(zones, state_data)
+    assert zone.active is True
