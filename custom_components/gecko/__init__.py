@@ -179,25 +179,28 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if current is None:
         return False
 
+    data = dict(current.data)
+    target_version = current.version
+    data_changed = False
+
     if need_account_migrate:
-        data = dict(current.data)
         if resolved_account:
             data["account_id"] = resolved_account
-        hass.config_entries.async_update_entry(current, data=data, version=2)
-        current = hass.config_entries.async_get_entry(entry.entry_id)
-        if current is None:
-            return False
+            data_changed = True
+        target_version = 2
     elif (
         resolved_account
         and str(current.data.get("account_id", "")).strip() != resolved_account
     ):
-        data = dict(current.data)
         data["account_id"] = resolved_account
-        hass.config_entries.async_update_entry(current, data=data)
+        data_changed = True
 
     if current.version < 3:
         _migrate_v3_enable_premium_energy_cost_score(hass, current)
-        hass.config_entries.async_update_entry(current, version=3)
+        target_version = 3
+
+    if data_changed or target_version != current.version:
+        hass.config_entries.async_update_entry(current, data=data, version=target_version)
 
     return True
 

@@ -421,6 +421,8 @@ class GeckoOptionsFlow(config_entries.OptionsFlow):
                 token = await self._async_exchange_code(code)
                 if token is None:
                     errors["base"] = "token_exchange_failed"
+                    self._authorize_url = None
+                    self._code_verifier = None
                 else:
                     expires_in = int(token.get("expires_in", 3600))
                     token["expires_in"] = expires_in

@@ -126,12 +126,12 @@ def _get_mode_label_for_step_index(step_index: int, step_count: int) -> str:
     if step_count <= 1:
         return "high"
     if step_count == 2:
-        return ("low", "high")[step_index]
+        return ("low", "high")[min(step_index, 1)]
     if step_count == 3:
-        return ("low", "medium", "high")[step_index]
+        return ("low", "medium", "high")[min(step_index, 2)]
 
     normalized_index = int((step_index * 3) / (step_count - 1) + 0.5)
-    return ("low", "medium", "high", "max")[normalized_index]
+    return ("low", "medium", "high", "max")[min(normalized_index, 3)]
 
 
 def zone_supports_speed_control(zone: Any) -> bool:
