@@ -269,8 +269,7 @@ class GeckoClimate(
             )
             raise HomeAssistantError(f"Failed to set temperature: {err}") from err
 
-        self._zone.set_point = temperature
-        self._update_from_zone()
+        self._attr_target_temperature = temperature
         # ``async_add_executor_job`` runs the publish off the event loop; defer state write.
         self.schedule_update_ha_state()
 
