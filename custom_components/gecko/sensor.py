@@ -425,6 +425,18 @@ def _safe_float(data: Any, *keys: str) -> float | None:
         return None
 
 
+def _first_valid_float(data: Any, *key_paths: tuple[str, ...]) -> float | None:
+    """Try each key path and return the first non-None float result.
+    
+    Unlike or-chaining _safe_float calls, this correctly handles 0.0 values.
+    """
+    for keys in key_paths:
+        val = _safe_float(data, *keys)
+        if val is not None:
+            return val
+    return None
+
+
 class GeckoEnergyConsumptionSensor(CoordinatorEntity, SensorEntity):
     """Total energy consumed by the spa (kWh).
 
@@ -464,12 +476,13 @@ class GeckoEnergyConsumptionSensor(CoordinatorEntity, SensorEntity):
             self._attr_extra_state_attributes = {}
             return
 
-        val = (
-            _safe_float(raw, "totalKwh")
-            or _safe_float(raw, "total_kwh")
-            or _safe_float(raw, "totalKWh")
-            or _safe_float(raw, "kwh")
-            or _safe_float(raw, "value")
+        val = _first_valid_float(
+            raw,
+            ("totalKwh",),
+            ("total_kwh",),
+            ("totalKWh",),
+            ("kwh",),
+            ("value",),
         )
         if val is None and isinstance(raw, int | float):
             val = float(raw)
@@ -529,11 +542,12 @@ class GeckoEnergyCostSensor(CoordinatorEntity, SensorEntity):
             self._attr_extra_state_attributes = {}
             return
 
-        val = (
-            _safe_float(raw, "totalCost")
-            or _safe_float(raw, "total_cost")
-            or _safe_float(raw, "cost")
-            or _safe_float(raw, "value")
+        val = _first_valid_float(
+            raw,
+            ("totalCost",),
+            ("total_cost",),
+            ("cost",),
+            ("value",),
         )
         if val is None and isinstance(raw, int | float):
             val = float(raw)
@@ -594,10 +608,11 @@ class GeckoEnergyScoreSensor(CoordinatorEntity, SensorEntity):
             self._attr_extra_state_attributes = {}
             return
 
-        val = (
-            _safe_float(raw, "score")
-            or _safe_float(raw, "value")
-            or _safe_float(raw, "rating")
+        val = _first_valid_float(
+            raw,
+            ("score",),
+            ("value",),
+            ("rating",),
         )
         if val is None and isinstance(raw, int | float):
             val = float(raw)

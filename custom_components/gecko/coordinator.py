@@ -207,14 +207,12 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return ""
         return str(entry.data.get("account_id", "")).strip()
 
-    def _get_api_client(self):
-        """Return the app API client if available, otherwise the community API client."""
+    def _get_community_api_client(self):
+        """Return the community API client for basic REST operations."""
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
         if not entry or not getattr(entry, "runtime_data", None):
             return None
-        rd = entry.runtime_data
-        app = getattr(rd, "app_api_client", None)
-        return app if app else getattr(rd, "api_client", None)
+        return entry.runtime_data.api_client
 
     async def _async_lazy_resolve_account_id(self) -> str:
         """Resolve and persist ``account_id`` when missing (retries after transient failures).
@@ -227,7 +225,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
         if not entry or not getattr(entry, "runtime_data", None):
             return ""
-        api = self._get_api_client()
+        api = self._get_community_api_client()
         if not api:
             return ""
         try:
@@ -307,7 +305,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
         if not entry or not getattr(entry, "runtime_data", None):
             return
-        api = self._get_api_client()
+        api = self._get_community_api_client()
         if not api:
             return
         rd = entry.runtime_data
@@ -406,7 +404,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry = self.hass.config_entries.async_get_entry(self.entry_id)
         if not entry or not getattr(entry, "runtime_data", None):
             return
-        api = self._get_api_client()
+        api = self._get_community_api_client()
         if not api:
             return
         rd = entry.runtime_data

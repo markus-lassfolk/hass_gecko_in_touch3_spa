@@ -90,6 +90,21 @@
       },
       "active_alerts": {
         "name": "Active Alerts"
+      },
+      "spa_in_use": {
+        "name": "Spa In Use"
+      },
+      "eco_mode": {
+        "name": "Eco Mode"
+      },
+      "zone_heating": {
+        "name": "Zone Heating"
+      },
+      "vessel_heating": {
+        "name": "Vessel Heating"
+      },
+      "cleaning_mode": {
+        "name": "Cleaning Mode"
       }
     },
     "sensor": {
