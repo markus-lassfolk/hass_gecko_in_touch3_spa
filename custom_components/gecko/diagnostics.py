@@ -32,6 +32,7 @@ from .energy_parse import (
     extract_electricity_rate,
 )
 from .shadow_metrics import infer_sensor_metadata, shadow_topology_summary
+from .spa_config_summary import summarize_spa_configuration_zones
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -266,6 +267,36 @@ def _pending_grace_remaining(entity: Any) -> float | None:
     return round(max(remaining, 0.0), 1)
 
 
+def _spa_configuration_dict_for_coordinator(
+    config_entry: ConfigEntry, coord: Any
+) -> dict[str, Any] | None:
+    """Return the vessel's ``spa_configuration`` dict from config entry data, if any."""
+    vessels = config_entry.data.get("vessels") or []
+    cid = str(getattr(coord, "vessel_id", ""))
+    mid = str(getattr(coord, "monitor_id", ""))
+    matches: list[dict[str, Any]] = []
+    for v in vessels:
+        if not isinstance(v, dict):
+            continue
+        if str(v.get("vesselId", "")) != cid:
+            continue
+        matches.append(v)
+    if not matches:
+        return None
+    chosen: dict[str, Any] | None = None
+    if len(matches) == 1:
+        chosen = matches[0]
+    else:
+        for v in matches:
+            if str(v.get("monitorId", "")) == mid:
+                chosen = v
+                break
+        if chosen is None:
+            chosen = matches[0]
+    sc = chosen.get("spa_configuration")
+    return sc if isinstance(sc, dict) else None
+
+
 def _get_vessel_coordinators_diagnostics(
     config_entry: ConfigEntry,
 ) -> list[dict[str, Any]]:
@@ -302,6 +333,11 @@ def _get_vessel_coordinators_diagnostics(
         if tcz:
             entry["temperature_control_zones"] = tcz
         entry["health"] = _coordinator_health(coord)
+        scfg = _spa_configuration_dict_for_coordinator(config_entry, coord)
+        if scfg is not None:
+            entry["spa_configuration_summary"] = summarize_spa_configuration_zones(
+                scfg
+            )
         out.append(entry)
     return out
 

@@ -41,8 +41,13 @@ logger:
 
 Then paste the relevant section (redact tokens / URLs with embedded JWTs if you paste raw lines).
 
-## Diagnostics (optional)
-If the issue is entities or shadow mapping: **Settings → Devices & services → Gecko → Download diagnostics** and attach the JSON (it is structured for support; still review for anything you do not want public).
+## Diagnostics and attachments (strongly recommended)
+
+Please attach as much as you safely can:
+
+1. **Download diagnostics** — **Settings → Devices & services → Gecko → ⋮ → Download diagnostics**. Includes connection state, coordinator health, shadow topology hints, **`spa_configuration_summary`** (accessory ↔ zone IDs from link-time REST), and entity snapshots. Skim the file before uploading.
+2. **Relevant logs** — With `custom_components.gecko: debug`, paste a focused excerpt (redact tokens and any URL containing a JWT).
+3. **Optional:** run **`scripts/verify_shadow_live.py`** from a Python venv (see the script’s header comment for `pip install` and env files) and attach **redacted** JSON or console output if the problem involves OAuth, REST, or MQTT outside HA.
 
 ## Additional context
 MQTT vs REST behavior, automations using `gecko.*` actions, or anything else that helps reproduce the issue.

@@ -379,6 +379,26 @@ class GeckoConnectionManager:
             else:
                 _LOGGER.debug("No connection to disconnect for monitor %s", monitor_id)
 
+    async def _async_dispose_gecko_client_object(self, client: Any | None) -> None:
+        """Best-effort MQTT teardown for a client that may never have connected."""
+        if client is None:
+            return
+        try:
+            await self.hass.async_add_executor_job(client.disconnect)
+        except Exception:
+            _LOGGER.debug(
+                "Gecko client disconnect during dispose failed (ignored)",
+                exc_info=True,
+            )
+
+    async def _async_clear_connection_client_after_failure(
+        self, connection: GeckoMonitorConnection
+    ) -> None:
+        """Release client resources after failed connect/reconnect (issue #205 style leaks)."""
+        await self._async_dispose_gecko_client_object(connection.gecko_client)
+        connection.gecko_client = None
+        connection.is_connected = False
+
     async def async_reconnect_monitor(self, monitor_id: str) -> bool:
         """Reconnect a specific monitor connection.
 
@@ -451,8 +471,11 @@ class GeckoConnectionManager:
                     mid, transporter, config_timeout=CONFIG_TIMEOUT
                 )
 
-                # Set up handlers using the helper method (DRY principle)
-                self._setup_client_handlers(gecko_client, connection, mid)
+                try:
+                    self._setup_client_handlers(gecko_client, connection, mid)
+                except Exception:
+                    await self._async_dispose_gecko_client_object(gecko_client)
+                    raise
 
                 # Update connection object with new client and URL
                 connection.gecko_client = gecko_client
@@ -476,7 +499,8 @@ class GeckoConnectionManager:
                 time.monotonic() - _t0,
                 e,
             )
-            connection.is_connected = False
+            async with self._connection_lock:
+                await self._async_clear_connection_client_after_failure(connection)
             return False
 
     async def _async_shutdown(self, _event: Event) -> None:
@@ -554,8 +578,11 @@ class GeckoConnectionManager:
                     mid, transporter, config_timeout=CONFIG_TIMEOUT
                 )
 
-                # Set up handlers using the helper method (DRY principle)
-                self._setup_client_handlers(gecko_client, connection, mid)
+                try:
+                    self._setup_client_handlers(gecko_client, connection, mid)
+                except Exception:
+                    await self._async_dispose_gecko_client_object(gecko_client)
+                    raise
 
                 # Update connection with new client
                 connection.gecko_client = gecko_client
@@ -582,8 +609,7 @@ class GeckoConnectionManager:
                     time.monotonic() - _t0,
                     e,
                 )
-                # State is already set to False within the lock if disconnect succeeded
-                # No need to set it again outside the lock (fixes race condition)
+                await self._async_clear_connection_client_after_failure(connection)
                 return False
 
     def add_shutdown_callback(self, callback: Callable[[], None]) -> None:

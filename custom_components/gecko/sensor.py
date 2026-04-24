@@ -32,6 +32,7 @@ from .energy_parse import (
     extract_electricity_rate,
 )
 from .entity import GeckoEntityAvailabilityMixin, gecko_zone_ids_equal
+from .temperature_sanity import coerce_spa_water_temperature_c
 from .shadow_metrics import (
     apply_numeric_shadow_sensor_hints,
     chemistry_metric_enabled_by_default,
@@ -119,9 +120,10 @@ class GeckoSpaTemperatureSensor(
         try:
             if self._kind == "target":
                 raw = getattr(zone, "target_temperature", None)
+                self._attr_native_value = float(raw) if raw is not None else None
             else:
                 raw = getattr(zone, "temperature", None)
-            self._attr_native_value = float(raw) if raw is not None else None
+                self._attr_native_value = coerce_spa_water_temperature_c(raw)
         except (TypeError, ValueError):
             self._attr_native_value = None
 

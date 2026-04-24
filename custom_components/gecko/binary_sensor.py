@@ -535,6 +535,7 @@ class GeckoEcoModeBinarySensor(GeckoTemperatureZoneBinarySensorBase):
 class GeckoTemperatureHeatingBinarySensor(GeckoTemperatureZoneBinarySensorBase):
     """Heating state for a single temperature control zone."""
 
+    _attr_device_class = BinarySensorDeviceClass.HEAT
     _attr_icon = "mdi:fire"
 
     def __init__(
@@ -564,6 +565,7 @@ class GeckoVesselHeatingBinarySensor(
     """Aggregate heating state across all temperature zones for a vessel."""
 
     _attr_has_entity_name = True
+    _attr_device_class = BinarySensorDeviceClass.HEAT
     _attr_icon = "mdi:fire"
 
     def __init__(
