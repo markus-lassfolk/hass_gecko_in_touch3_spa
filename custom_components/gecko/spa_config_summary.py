@@ -45,8 +45,6 @@ def summarize_spa_configuration_zones(
                 target[str(aid)] = zone_id
 
         for zone_id, zone_info in flow_zones.items():
-            if len(pump_to_flow) >= _MAX_MAPPED_IDS:
-                break
             if not isinstance(zone_info, dict):
                 continue
             zkey = str(zone_id)
