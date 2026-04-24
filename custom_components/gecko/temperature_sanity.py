@@ -9,6 +9,7 @@ bogus °C.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 # Aligns with plausible spa water from ``infer_number_setpoint_limits`` (shadow),
@@ -27,6 +28,8 @@ def coerce_spa_water_temperature_c(raw: Any) -> float | None:
     try:
         t = float(raw)
     except (TypeError, ValueError):
+        return None
+    if not math.isfinite(t):
         return None
     if t == 0.0:
         return None
