@@ -113,6 +113,35 @@ async def test_lazy_resolve_account_id_retries_after_transient_error(
     assert coord._account_id_resolve_attempted is True
 
 
+async def test_cloud_rest_only_when_mqtt_up_does_not_clear_tile_cache(
+    hass: HomeAssistant,
+) -> None:
+    """REST-as-backup must keep last ``cloud.rest.*`` merge while MQTT is connected."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"vessels": [], "account_id": "99"},
+        options={
+            CONF_CLOUD_REST_POLL_INTERVAL: DEFAULT_CLOUD_REST_POLL_INTERVAL,
+            CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN: True,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    from custom_components.gecko.coordinator import GeckoVesselCoordinator
+
+    coord = GeckoVesselCoordinator(hass, entry.entry_id, "v1", "m1", "Spa")
+    coord._cloud_tile_metrics = {"cloud.rest.readings.ph": 7.4}
+    coord._cloud_string_metrics = {"cloud.rest.readings.ph.title": "pH"}
+    coord._cloud_bool_metrics = {"cloud.rest.status.foo": True}
+
+    connection = SimpleNamespace(is_connected=True)
+    await coord._async_poll_cloud_tiles_if_due(connection)
+
+    assert coord._cloud_tile_metrics == {"cloud.rest.readings.ph": 7.4}
+    assert coord._cloud_string_metrics == {"cloud.rest.readings.ph.title": "pH"}
+    assert coord._cloud_bool_metrics == {"cloud.rest.status.foo": True}
+
+
 async def test_async_migrate_entry_bumps_version_and_account(
     hass: HomeAssistant,
 ) -> None:

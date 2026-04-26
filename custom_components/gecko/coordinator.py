@@ -291,18 +291,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         mqtt_up = bool(connection and connection.is_connected)
         if only_when_mqtt_down and mqtt_up:
-            # MQTT is healthy again: drop stale REST tile caches so cloud.rest.* does not
-            # keep outage-era values merged into shadow metrics.
-            if (
-                self._cloud_tile_metrics
-                or self._cloud_string_metrics
-                or self._cloud_bool_metrics
-            ):
-                self._cloud_tile_metrics = {}
-                self._cloud_string_metrics = {}
-                self._cloud_bool_metrics = {}
-                client = await self.get_gecko_client()
-                self.sync_refresh_shadow_metrics(client)
+            # Skip REST while MQTT is up. Retain the last tile snapshot: many
+            # water-quality sensors use cloud.rest.* only; clearing forced unavailable
+            # until the next outage. MQTT still wins on key overlap at merge time.
             return
 
         now = time.monotonic()

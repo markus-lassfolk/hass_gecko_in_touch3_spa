@@ -6,6 +6,18 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0
 
 ---
 
+## [2.5.1] — 2026-04-26
+
+### Fixed
+
+- **REST tile sensors (`cloud.rest.*`) with “Cloud REST only when MQTT is down”:** the coordinator no longer clears the last REST tile snapshot whenever MQTT is connected. That clear made chemistry-style and other REST-only sensors **unavailable** until the next MQTT outage, even though values should persist until the next successful REST poll.
+
+### Added
+
+- **Test** `test_cloud_rest_only_when_mqtt_up_does_not_clear_tile_cache` to lock in the behaviour above.
+
+---
+
 ## [2.5.0] — 2026-04-27
 
 ### Breaking changes
