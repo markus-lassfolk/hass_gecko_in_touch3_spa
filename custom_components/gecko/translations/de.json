@@ -35,8 +35,8 @@
           "alerts_poll_interval": "Alarm-Abrufintervall (Sekunden)"
         },
         "data_description": {
-          "cloud_rest_poll_interval": "Wie oft Chemiewerte (pH, ORP, Wassertemperatur, Alkalinität, Chlor, usw.) von der Gecko-Cloud abgerufen werden. Standard: 300 Sekunden (5 Minuten). Auf 0 setzen, um zu deaktivieren.",
-          "cloud_rest_only_when_mqtt_down": "Wenn aktiviert, läuft das REST-Polling nur, während MQTT getrennt ist. Standard: aus — hält REST-Polling aktiv, damit Chemiewerte immer aktualisiert werden.",
+          "cloud_rest_poll_interval": "Wie oft Kachel- und Chemie-Anreicherung (pH, ORP, Wassertemperatur, Alkalinität, Chlor usw.) über die Gecko-Cloud-REST-API abgerufen wird. Standard: 86400 Sekunden (einmal täglich). Live-Zustand kommt weiter per MQTT im Koordinator-Takt. Auf 0 setzen zum Deaktivieren.",
+          "cloud_rest_only_when_mqtt_down": "Wenn aktiviert, läuft das REST-Polling nur, während MQTT getrennt ist. Standard: aus — REST-Anreicherung läuft im konfigurierten Intervall auch bei verbundenem MQTT (Live-Daten kommen trotzdem per MQTT).",
           "alerts_poll_interval": "Wie oft ungelesene Nachrichten und Schiffsaktion-Alarme abgerufen werden. Standard: 0 (deaktiviert). Empfohlen: 300 Sekunden (5 Minuten), wenn Alarmbenachrichtigungen gewünscht sind."
         }
       }

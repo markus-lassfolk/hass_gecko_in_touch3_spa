@@ -143,7 +143,7 @@ On the Gecko card → **Configure**:
 
 | Option | Meaning |
 |--------|---------|
-| **Cloud REST poll interval** | Seconds between optional polls of the account **vessels** list for summary **tile** numbers/strings (`0` = disabled). Default is off. |
+| **Cloud REST poll interval** | Seconds between optional Gecko **cloud REST** polls (vessels list, tile/readings enrichment). **`0`** = disabled. **Default: once per day (86400 s)** — live spa state still updates from **MQTT** on the normal coordinator cycle (~30 s), same pattern as typical HA cloud coordinators; REST merges in when a poll runs. |
 | **Only poll when MQTT is disconnected** | When enabled, REST tile polling runs only if the live MQTT link for that monitor is down — useful to avoid duplicating data while MQTT is healthy. |
 | **Alerts poll interval** | Seconds between optional REST calls for **unread-messages** (account-scoped) and **vessel actions** (`0` = disabled). Feeds the **REST active alerts** sensor/binary pair. |
 
@@ -304,7 +304,7 @@ These use `device_class: temperature` and `state_class: measurement` so pool/spa
 
 The **energy consumption** sensor reports total kWh consumed by the spa. Because it uses `total_increasing`, Home Assistant automatically calculates hourly/daily/monthly usage — no template sensors or utility meters needed. Add it to the Energy Dashboard under **Individual devices**.
 
-Energy data is polled hourly by default (configurable via `energy_poll_interval` in options). The raw API response is available as an `raw_response` attribute on each entity for debugging.
+Energy data uses the same gentle default as other premium REST (**once per day**; configurable via `energy_poll_interval` in options, **`0`** disables). The raw API response is available as an `raw_response` attribute on each entity for debugging.
 
 **Dynamic shadow numeric sensors**
 

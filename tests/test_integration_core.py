@@ -84,6 +84,40 @@ async def test_migrate_options_defaults_stamps_flag_when_already_at_defaults(
     assert _call[1]["options"].get("_options_defaults_migrated") is True
 
 
+async def test_migrate_cloud_rest_legacy_five_min_to_daily(
+    hass: HomeAssistant,
+) -> None:
+    """Persisted former default (300 s) becomes daily REST once."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"vessels": [], "account_id": "a1"},
+        options={CONF_CLOUD_REST_POLL_INTERVAL: 300},
+    )
+    entry.add_to_hass(hass)
+    gecko_pkg._migrate_cloud_rest_legacy_five_min(hass, entry)
+    assert (
+        entry.options[CONF_CLOUD_REST_POLL_INTERVAL] == DEFAULT_CLOUD_REST_POLL_INTERVAL
+    )
+    assert entry.options["_cloud_rest_daily_legacy_migrated"] is True
+    gecko_pkg._migrate_cloud_rest_legacy_five_min(hass, entry)
+    assert (
+        entry.options[CONF_CLOUD_REST_POLL_INTERVAL] == DEFAULT_CLOUD_REST_POLL_INTERVAL
+    )
+
+
+async def test_migrate_cloud_rest_legacy_skips_non_300(hass: HomeAssistant) -> None:
+    """Explicit intervals other than the old default are not rewritten."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"vessels": [], "account_id": "a1"},
+        options={CONF_CLOUD_REST_POLL_INTERVAL: 7200},
+    )
+    entry.add_to_hass(hass)
+    with patch.object(hass.config_entries, "async_update_entry") as mock_upd:
+        gecko_pkg._migrate_cloud_rest_legacy_five_min(hass, entry)
+    mock_upd.assert_not_called()
+
+
 async def test_lazy_resolve_account_id_retries_after_transient_error(
     hass: HomeAssistant,
 ) -> None:

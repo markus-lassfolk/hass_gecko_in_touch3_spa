@@ -288,12 +288,31 @@ _PLATFORMS: list[Platform] = [
 ]
 
 
+def _migrate_cloud_rest_legacy_five_min(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """One-time: persisted 300s cloud REST default becomes daily."""
+    opts = dict(entry.options)
+    if opts.get("_cloud_rest_daily_legacy_migrated"):
+        return
+    if opts.get(CONF_CLOUD_REST_POLL_INTERVAL) != 300:
+        return
+    opts[CONF_CLOUD_REST_POLL_INTERVAL] = DEFAULT_CLOUD_REST_POLL_INTERVAL
+    opts["_cloud_rest_daily_legacy_migrated"] = True
+    _LOGGER.info(
+        "Gecko: cloud REST poll 300s -> %ss (daily), entry %s",
+        DEFAULT_CLOUD_REST_POLL_INTERVAL,
+        entry.entry_id,
+    )
+    hass.config_entries.async_update_entry(entry, options=opts)
+
+
 def _migrate_options_defaults(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """One-time migration: update saved options that still carry old disabled-by-default values.
 
     Before v2.2.0 the defaults were poll_interval=0 and mqtt_only=True which
     got persisted when the user opened the options flow.  Update them to the
-    new defaults so chemistry polling starts automatically.
+    current defaults (REST enrichment on a gentle schedule; live data is MQTT).
     """
     opts = dict(entry.options)
 
@@ -345,6 +364,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     install_mqtt_shadow_document_patch()
 
     _migrate_options_defaults(hass, entry)
+    _migrate_cloud_rest_legacy_five_min(hass, entry)
 
     # Fallback: resolve missing account_id for current-version entries (recovery path)
     if (

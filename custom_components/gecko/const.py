@@ -46,7 +46,9 @@ def _oauth_public_id_from_env(env_key: str, default: str) -> str:
 # Config entry options (REST enrichment; IDs always from entry data at runtime)
 CONF_CLOUD_REST_POLL_INTERVAL = "cloud_rest_poll_interval"
 CONF_CLOUD_REST_ONLY_WHEN_MQTT_DOWN = "cloud_rest_only_when_mqtt_down"
-DEFAULT_CLOUD_REST_POLL_INTERVAL = 300
+# Gecko cloud REST is rate-sensitive; live state comes from MQTT every coordinator
+# tick — REST is enrichment only (tiles/readings/energy), default once per day.
+DEFAULT_CLOUD_REST_POLL_INTERVAL = 86400
 DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN = False
 
 # Optional REST poll for account unread messages + per-vessel actions (not history).
@@ -55,7 +57,7 @@ DEFAULT_ALERTS_POLL_INTERVAL = 0
 
 # Premium energy data polling (only active when app token is linked).
 CONF_ENERGY_POLL_INTERVAL = "energy_poll_interval"
-DEFAULT_ENERGY_POLL_INTERVAL = 3600  # 1 hour — energy data is slow-moving
+DEFAULT_ENERGY_POLL_INTERVAL = 86400  # daily — premium REST; slow-moving
 
 # Legacy community client — basic access only (energy/premium endpoints return 403).
 OAUTH2_CLIENT_ID = "L81oh6hgUsvMg40TgTGoz4lxNy8eViM0"
