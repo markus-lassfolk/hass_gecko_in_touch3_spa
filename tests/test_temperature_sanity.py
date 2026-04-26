@@ -2,20 +2,12 @@
 
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
-
 import pytest
-
-_ROOT = Path(__file__).resolve().parents[1]
-_MOD_PATH = _ROOT / "custom_components" / "gecko" / "temperature_sanity.py"
-_spec = importlib.util.spec_from_file_location("gecko_temperature_sanity", _MOD_PATH)
-assert _spec and _spec.loader
-_ts = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_ts)
-coerce_spa_water_temperature_c = _ts.coerce_spa_water_temperature_c
-SPA_CURRENT_WATER_TEMP_MAX_C = _ts.SPA_CURRENT_WATER_TEMP_MAX_C
-SPA_CURRENT_WATER_TEMP_MIN_C = _ts.SPA_CURRENT_WATER_TEMP_MIN_C
+from custom_components.gecko.temperature_sanity import (
+    SPA_CURRENT_WATER_TEMP_MAX_C,
+    SPA_CURRENT_WATER_TEMP_MIN_C,
+    coerce_spa_water_temperature_c,
+)
 
 
 @pytest.mark.parametrize(
@@ -32,6 +24,10 @@ SPA_CURRENT_WATER_TEMP_MIN_C = _ts.SPA_CURRENT_WATER_TEMP_MIN_C
         ("36.5", 36.5),
         (45.0, 45.0),
         (45.1, None),
+        (float("nan"), None),
+        ("nan", None),
+        (float("inf"), None),
+        ("-inf", None),
     ],
 )
 def test_coerce_spa_water_temperature_c(raw, expected: float | None) -> None:

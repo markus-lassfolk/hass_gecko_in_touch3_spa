@@ -2,16 +2,7 @@
 
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
-
-_ROOT = Path(__file__).resolve().parents[1]
-_MOD_PATH = _ROOT / "custom_components" / "gecko" / "spa_config_summary.py"
-_spec = importlib.util.spec_from_file_location("gecko_spa_config_summary", _MOD_PATH)
-assert _spec and _spec.loader
-_sc = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_sc)
-summarize_spa_configuration_zones = _sc.summarize_spa_configuration_zones
+from custom_components.gecko.spa_config_summary import summarize_spa_configuration_zones
 
 
 def test_summarize_missing_or_empty() -> None:

@@ -134,7 +134,26 @@ def test_get_vessel_coordinators_diagnostics_with_coordinator() -> None:
     coord.get_all_zones = get_all_zones  # type: ignore[method-assign]
 
     rd = SimpleNamespace(coordinators=[coord])
-    entry = SimpleNamespace(runtime_data=rd)
+    entry = SimpleNamespace(
+        runtime_data=rd,
+        data={
+            "vessels": [
+                {
+                    "vesselId": "v1",
+                    "monitorId": "m1",
+                    "spa_configuration": {
+                        "accessories": {
+                            "pumps": {"9": {}},
+                            "lights": {},
+                            "waterfalls": {},
+                            "blowers": {},
+                        },
+                        "zones": {"flow": {"7": {"pumps": [9]}}},
+                    },
+                },
+            ],
+        },
+    )
     rows = gecko_diag._get_vessel_coordinators_diagnostics(entry)
     assert len(rows) == 1
     assert rows[0]["monitor_id"] == "m1"
@@ -148,6 +167,63 @@ def test_get_vessel_coordinators_diagnostics_with_coordinator() -> None:
             "max_setpoint_c": 40.0,
         }
     ]
+    summ = rows[0]["spa_configuration_summary"]
+    assert summ["present"] is True
+    assert summ["pump_id_to_flow_zone_id"] == {"9": "7"}
+
+
+def test_spa_configuration_summary_disambiguates_monitor_id() -> None:
+    """When two vessels share vesselId, diagnostics pick spa_configuration by monitorId."""
+    coord = SimpleNamespace(
+        vessel_id="vx",
+        vessel_name="Dup",
+        monitor_id="mon-b",
+        _has_initial_zones=True,
+        _shadow_metric_values={},
+        _cloud_tile_metrics={},
+        _cloud_string_metrics={},
+        _cloud_bool_metrics={},
+        _last_cloud_poll_monotonic=None,
+        get_zones_by_type=lambda zt: [],
+        get_all_zones=lambda: {_ZoneType.FLOW: {}},
+    )
+    rd = SimpleNamespace(coordinators=[coord])
+    entry = SimpleNamespace(
+        runtime_data=rd,
+        data={
+            "vessels": [
+                {
+                    "vesselId": "vx",
+                    "monitorId": "mon-a",
+                    "spa_configuration": {
+                        "accessories": {
+                            "pumps": {"1": {}},
+                            "lights": {},
+                            "waterfalls": {},
+                            "blowers": {},
+                        },
+                        "zones": {"flow": {"1": {"pumps": [1]}}},
+                    },
+                },
+                {
+                    "vesselId": "vx",
+                    "monitorId": "mon-b",
+                    "spa_configuration": {
+                        "accessories": {
+                            "pumps": {"2": {}},
+                            "lights": {},
+                            "waterfalls": {},
+                            "blowers": {},
+                        },
+                        "zones": {"flow": {"2": {"pumps": [2]}}},
+                    },
+                },
+            ],
+        },
+    )
+    rows = gecko_diag._get_vessel_coordinators_diagnostics(entry)
+    assert len(rows) == 1
+    assert rows[0]["spa_configuration_summary"]["pump_id_to_flow_zone_id"] == {"2": "2"}
 
 
 def test_get_gecko_client_info_handles_exception() -> None:

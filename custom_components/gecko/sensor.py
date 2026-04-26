@@ -32,7 +32,6 @@ from .energy_parse import (
     extract_electricity_rate,
 )
 from .entity import GeckoEntityAvailabilityMixin, gecko_zone_ids_equal
-from .temperature_sanity import coerce_spa_water_temperature_c
 from .shadow_metrics import (
     apply_numeric_shadow_sensor_hints,
     chemistry_metric_enabled_by_default,
@@ -42,6 +41,7 @@ from .shadow_metrics import (
     shadow_metric_icon,
     string_extension_enabled_by_default,
 )
+from .temperature_sanity import coerce_spa_water_temperature_c
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -335,9 +335,7 @@ def _get_vessel_coordinators_diagnostics(
         entry["health"] = _coordinator_health(coord)
         scfg = _spa_configuration_dict_for_coordinator(config_entry, coord)
         if scfg is not None:
-            entry["spa_configuration_summary"] = summarize_spa_configuration_zones(
-                scfg
-            )
+            entry["spa_configuration_summary"] = summarize_spa_configuration_zones(scfg)
         out.append(entry)
     return out
 

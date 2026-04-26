@@ -416,6 +416,10 @@ class GeckoConnectionManager:
             return False
 
         connection = self._connections[key]
+        # Only dispose/clear the client after failures that occur once we have
+        # started tearing down the prior session — otherwise a refresh error
+        # would drop a still-healthy MQTT client (Codex review).
+        reconnect_cleanup_needed = False
 
         try:
             _t0 = time.monotonic()
@@ -444,6 +448,7 @@ class GeckoConnectionManager:
 
             # Disconnect existing connection
             async with self._connection_lock:
+                reconnect_cleanup_needed = True
                 if connection.is_connected and connection.gecko_client:
                     try:
                         await self.hass.async_add_executor_job(
@@ -499,8 +504,9 @@ class GeckoConnectionManager:
                 time.monotonic() - _t0,
                 e,
             )
-            async with self._connection_lock:
-                await self._async_clear_connection_client_after_failure(connection)
+            if reconnect_cleanup_needed:
+                async with self._connection_lock:
+                    await self._async_clear_connection_client_after_failure(connection)
             return False
 
     async def _async_shutdown(self, _event: Event) -> None:
