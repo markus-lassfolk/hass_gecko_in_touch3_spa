@@ -329,7 +329,9 @@ def _get_vessel_coordinators_diagnostics(
                 :48
             ]
         entry["last_cloud_poll_monotonic"] = coord._last_cloud_poll_monotonic
-        entry["cloud_rest_bootstrap_complete"] = coord._cloud_rest_bootstrap_complete
+        entry["cloud_rest_bootstrap_complete"] = getattr(
+            coord, "_cloud_rest_bootstrap_complete", False
+        )
         tcz = _temperature_control_zones_summary(coord)
         if tcz:
             entry["temperature_control_zones"] = tcz
