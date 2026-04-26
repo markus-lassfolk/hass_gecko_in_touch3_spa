@@ -130,6 +130,7 @@ async def test_cloud_rest_only_when_mqtt_up_does_not_clear_tile_cache(
     from custom_components.gecko.coordinator import GeckoVesselCoordinator
 
     coord = GeckoVesselCoordinator(hass, entry.entry_id, "v1", "m1", "Spa")
+    coord._cloud_rest_bootstrap_complete = True
     coord._cloud_tile_metrics = {"cloud.rest.readings.ph": 7.4}
     coord._cloud_string_metrics = {"cloud.rest.readings.ph.title": "pH"}
     coord._cloud_bool_metrics = {"cloud.rest.status.foo": True}

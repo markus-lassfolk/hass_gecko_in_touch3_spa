@@ -137,6 +137,9 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._cloud_string_metrics: dict[str, str] = {}
         self._cloud_bool_metrics: dict[str, bool] = {}
         self._last_cloud_poll_monotonic: float | None = None
+        # After first successful cloud tile merge this HA process; gates "REST only when
+        # MQTT down" so we still run one poll on cold start when caches are empty.
+        self._cloud_rest_bootstrap_complete: bool = False
 
         # REST: unread messages (scoped) + vessel actions — not history.
         self._rest_alerts_snapshot: dict[str, Any] = {
@@ -290,16 +293,16 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
         )
         mqtt_up = bool(connection and connection.is_connected)
-        if only_when_mqtt_down and mqtt_up:
-            # Skip REST while MQTT is up. Retain the last tile snapshot: many
-            # water-quality sensors use cloud.rest.* only; clearing forced unavailable
-            # until the next outage. MQTT still wins on key overlap at merge time.
+        if only_when_mqtt_down and mqtt_up and self._cloud_rest_bootstrap_complete:
+            # Skip REST while MQTT is up, after we have merged tiles at least once this
+            # process. Retain the last snapshot until an MQTT outage (then poll resumes).
             return
 
         now = time.monotonic()
         if (
             self._last_cloud_poll_monotonic is not None
             and (now - self._last_cloud_poll_monotonic) < interval
+            and self._cloud_rest_bootstrap_complete
         ):
             return
 
@@ -330,8 +333,6 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "Cloud tile REST poll skipped for %s: %s", self.vessel_name, err
             )
             return
-
-        self._last_cloud_poll_monotonic = now
 
         if not isinstance(vessels, list):
             return
@@ -381,9 +382,11 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "v6 vessel detail poll skipped for %s: %s", self.vessel_name, err
             )
 
+        self._last_cloud_poll_monotonic = now
         self._cloud_tile_metrics = tile_metrics
         self._cloud_string_metrics = tile_strings
         self._cloud_bool_metrics = tile_bools
+        self._cloud_rest_bootstrap_complete = True
 
     async def _async_poll_alerts_if_due(self) -> None:
         """Poll Gecko REST for new/active alerts (messages + vessel actions)."""
@@ -1173,6 +1176,7 @@ class GeckoVesselCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._cloud_string_metrics.clear()
         self._cloud_bool_metrics.clear()
         self._last_cloud_poll_monotonic = None
+        self._cloud_rest_bootstrap_complete = False
         self._energy_data.clear()
         self._last_energy_poll_monotonic = None
         self._rest_alerts_snapshot = {

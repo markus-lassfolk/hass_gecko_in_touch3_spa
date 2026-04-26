@@ -6,6 +6,18 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0
 
 ---
 
+## [2.5.2] — 2026-04-26
+
+### Fixed
+
+- **Cold start with “Cloud REST only when MQTT is down”:** Home Assistant restart left **empty** in-memory REST tile caches while MQTT stayed up, so **no** `cloud.rest.*` merge ran and diagnostics showed **`cloud_tile_metric_count: 0`** until the next MQTT outage. The coordinator now performs **one** REST tile fetch after startup (same merge rules as before), then resumes skipping polls while MQTT is healthy.
+
+### Changed
+
+- **`_last_cloud_poll_monotonic`** is set only after a vessel row is found and tile payloads are merged, so a failed vessels response does not block retries for a full poll interval.
+
+---
+
 ## [2.5.1] — 2026-04-26
 
 ### Fixed

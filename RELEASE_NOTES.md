@@ -1,4 +1,4 @@
-# Release notes — Gecko Full Community **2.5.1**
+# Release notes — Gecko Full Community **2.5.2**
 
 *User-oriented summary. Technical detail lives in [`CHANGELOG.md`](CHANGELOG.md).*
 
@@ -6,25 +6,16 @@
 
 ## At a glance
 
-Patch release: fixes **REST-backed sensors** going **unavailable** when **“Cloud REST only when MQTT is down”** is enabled and MQTT stays connected.
-
----
-
-## What changed
-
-If you use **Configure → Cloud REST only when MQTT is down**, the integration used to **wipe cached REST tile data** on every update while MQTT was up. Many water-quality and tile fields exist only under **`cloud.rest.*`**, so those entities showed **unavailable** for long periods even though you only wanted to **skip new REST calls**, not discard the last values.
-
-**2.5.1** keeps the **last successful REST snapshot** merged until the next time a REST poll actually runs (for example after a short MQTT dropout with that option, or if you turn the option off so your poll interval can refresh while MQTT is up). Live **MQTT / shadow** data still **wins on overlapping keys** when merged.
+Patch after **2.5.1**: if you use **“Cloud REST only when MQTT is down”** and restart Home Assistant while the spa stays on MQTT, **2.5.1** still never ran a first REST poll, so **`cloud.rest.*` stayed empty** in diagnostics until MQTT dropped. **2.5.2** runs **one** REST tile fetch on startup to seed chemistry-style fields, then keeps **2.5.1** behaviour (no further REST polls while MQTT is up; last snapshot retained).
 
 ---
 
 ## Upgrade path
 
-1. Update the custom component to **2.5.1** (HACS or manual copy).
-2. **Restart Home Assistant.**
+1. Update to **2.5.2** and restart Home Assistant.
 
 ---
 
 ## Thanks
 
-Thanks for the report that led to this fix.
+Thanks for the follow-up diagnostics that highlighted the cold-start gap.

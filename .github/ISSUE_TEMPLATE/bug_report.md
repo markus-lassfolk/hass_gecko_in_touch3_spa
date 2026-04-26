@@ -25,7 +25,7 @@ If applicable, add screenshots.
 
 ## Environment
 - **Home Assistant:** [e.g. 2026.4.0]
-- **Integration:** Gecko Full Community (`custom_components/gecko` — check **manifest.json** `version`, e.g. 2.5.1)
+- **Integration:** Gecko Full Community (`custom_components/gecko` — check **manifest.json** `version`, e.g. 2.5.2)
 - **Spa / gateway:** [e.g. in.touch 3+, monitor firmware if known]
 - **Relevant options:** [e.g. cloud REST poll interval, alerts poll interval, “only when MQTT down” on/off]
 
