@@ -391,14 +391,6 @@ class GeckoConnectionManager:
                 exc_info=True,
             )
 
-    async def _async_clear_connection_client_after_failure(
-        self, connection: GeckoMonitorConnection
-    ) -> None:
-        """Release client resources after failed connect/reconnect (issue #205 style leaks)."""
-        await self._async_dispose_gecko_client_object(connection.gecko_client)
-        connection.gecko_client = None
-        connection.is_connected = False
-
     async def async_reconnect_monitor(self, monitor_id: str) -> bool:
         """Reconnect a specific monitor connection.
 
@@ -416,10 +408,11 @@ class GeckoConnectionManager:
             return False
 
         connection = self._connections[key]
-        # Only dispose/clear the client after failures that occur once we have
-        # started tearing down the prior session — otherwise a refresh error
-        # would drop a still-healthy MQTT client (Codex review).
+        # Only clear the client after failures that occur once we have started
+        # tearing down the prior session — otherwise a refresh error would drop
+        # a still-healthy MQTT client (Codex review).
         reconnect_cleanup_needed = False
+        stray_client: Any | None = None
 
         try:
             _t0 = time.monotonic()
@@ -506,7 +499,11 @@ class GeckoConnectionManager:
             )
             if reconnect_cleanup_needed:
                 async with self._connection_lock:
-                    await self._async_clear_connection_client_after_failure(connection)
+                    stray_client = connection.gecko_client
+                    connection.gecko_client = None
+                    connection.is_connected = False
+            if stray_client is not None:
+                await self._async_dispose_gecko_client_object(stray_client)
             return False
 
     async def _async_shutdown(self, _event: Event) -> None:
@@ -529,6 +526,7 @@ class GeckoConnectionManager:
         This method acquires the connection lock at entry to prevent race conditions
         where the connection could be modified or removed by concurrent operations.
         """
+        stray_client: Any | None = None
         async with self._connection_lock:
             mid = self._canonical_monitor_id(monitor_id)
             key = self._resolved_connection_key(monitor_id)
@@ -615,8 +613,13 @@ class GeckoConnectionManager:
                     time.monotonic() - _t0,
                     e,
                 )
-                await self._async_clear_connection_client_after_failure(connection)
-                return False
+                stray_client = connection.gecko_client
+                connection.gecko_client = None
+                connection.is_connected = False
+
+        if stray_client is not None:
+            await self._async_dispose_gecko_client_object(stray_client)
+        return False
 
     def add_shutdown_callback(self, callback: Callable[[], None]) -> None:
         """Add a callback to be called during shutdown."""
