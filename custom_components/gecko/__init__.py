@@ -293,7 +293,7 @@ def _migrate_options_defaults(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
     Before v2.2.0 the defaults were poll_interval=0 and mqtt_only=True which
     got persisted when the user opened the options flow.  Update them to the
-    new defaults so chemistry polling starts automatically.
+    current defaults (REST enrichment on a gentle schedule; live data is MQTT).
     """
     opts = dict(entry.options)
 

@@ -1,0 +1,7 @@
+version = 1
+requires-python = ">=3.13"
+
+[[package]]
+name = "hass-gecko-integration"
+version = "0"
+source = { virtual = "." }

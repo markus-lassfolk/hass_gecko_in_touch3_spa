@@ -30,7 +30,7 @@ This repository ([**markus-lassfolk/hass_gecko_in_touch3_spa**](https://github.c
 | **Unknown-zone setpoints** | **Number** entities for supported setpoint paths in unknown zone types so you can write **desired** shadow fragments consistent with the Gecko app / library. |
 | **Optional Gecko Cloud REST** | Integration **options** (see below) can poll account/vessel REST data for **summary tile** metrics and strings, merged under paths prefixed with `cloud.rest.*` where **MQTT shadow values take precedence** when both exist. A separate optional poll surfaces **account unread messages** and **per-vessel actions** as **sensor + binary sensor** (counts/previews, not full message history). |
 | **Actions (services)** | Publish validated **`state.desired`** JSON for **`zones`** and/or **`features`**, and export a **JSON shadow snapshot** (sanitized by default) for sharing with maintainers. |
-| **Diagnostics** | **Download diagnostics** on the config entry includes **shadow topology** summaries (structure-oriented) to inspect what the spa exposes without embedding full live values. |
+| **Diagnostics** | **Download diagnostics** includes **shadow topology** summaries, per-vessel **`spa_configuration_summary`** (REST link-time pump/light ↔ zone ID maps), and entity snapshots — structured for support without dumping raw secrets. |
 
 ---
 
@@ -143,7 +143,7 @@ On the Gecko card → **Configure**:
 
 | Option | Meaning |
 |--------|---------|
-| **Cloud REST poll interval** | Seconds between optional polls of the account **vessels** list for summary **tile** numbers/strings (`0` = disabled). Default is off. |
+| **Cloud REST poll interval** | Seconds between optional Gecko **cloud REST** polls (vessels list, tile/readings enrichment). **`0`** = disabled. **Default: once per day (86400 s)** — live spa state still updates from **MQTT** on the normal coordinator cycle (~30 s), same pattern as typical HA cloud coordinators; REST merges in when a poll runs. |
 | **Only poll when MQTT is disconnected** | When enabled, REST tile polling runs only if the live MQTT link for that monitor is down — useful to avoid duplicating data while MQTT is healthy. |
 | **Alerts poll interval** | Seconds between optional REST calls for **unread-messages** (account-scoped) and **vessel actions** (`0` = disabled). Feeds the **REST active alerts** sensor/binary pair. |
 
@@ -304,7 +304,7 @@ These use `device_class: temperature` and `state_class: measurement` so pool/spa
 
 The **energy consumption** sensor reports total kWh consumed by the spa. Because it uses `total_increasing`, Home Assistant automatically calculates hourly/daily/monthly usage — no template sensors or utility meters needed. Add it to the Energy Dashboard under **Individual devices**.
 
-Energy data is polled hourly by default (configurable via `energy_poll_interval` in options). The raw API response is available as an `raw_response` attribute on each entity for debugging.
+Energy data uses the same gentle default as other premium REST (**once per day**; configurable via `energy_poll_interval` in options, **`0`** disables). The raw API response is available as an `raw_response` attribute on each entity for debugging.
 
 **Dynamic shadow numeric sensors**
 
@@ -416,6 +416,15 @@ Call **`gecko.dump_shadow_snapshot`** with defaults for a **community-safe** exp
 - Ensure poll intervals are **greater than zero**
 - For tiles, confirm **Only poll when MQTT is disconnected** is not blocking polls while MQTT is up
 - Many Gecko Cloud routes return **403** for consumer tokens; unsupported routes fail quietly in logs
+
+### Reporting issues (GitHub)
+
+When you open a bug, please include as much of the following as you can (redact anything you do not want public):
+
+1. **Download diagnostics** — **Settings → Devices & services → Gecko → ⋮ → Download diagnostics**. The JSON includes connection health, shadow topology hints, per-vessel **`spa_configuration_summary`** (pump/light IDs ↔ zone IDs from link-time REST), and entity snapshots.
+2. **Versions** — Home Assistant version and integration **`version`** from `custom_components/gecko/manifest.json`.
+3. **Debug logs** — Short excerpt with `custom_components.gecko: debug` (see the bug report template); strip tokens and broker URLs with embedded JWTs from pasted lines.
+4. **Optional live probe** — From a venv, `scripts/verify_shadow_live.py` (see script docstring) can capture REST/MQTT probes; attach **redacted** output if it helps reproduce auth or shadow issues.
 
 ---
 

@@ -41,6 +41,7 @@ from .shadow_metrics import (
     shadow_metric_icon,
     string_extension_enabled_by_default,
 )
+from .temperature_sanity import coerce_spa_water_temperature_c
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -119,9 +120,10 @@ class GeckoSpaTemperatureSensor(
         try:
             if self._kind == "target":
                 raw = getattr(zone, "target_temperature", None)
+                self._attr_native_value = float(raw) if raw is not None else None
             else:
                 raw = getattr(zone, "temperature", None)
-            self._attr_native_value = float(raw) if raw is not None else None
+                self._attr_native_value = coerce_spa_water_temperature_c(raw)
         except (TypeError, ValueError):
             self._attr_native_value = None
 

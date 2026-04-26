@@ -29,6 +29,7 @@ from .connection_manager import async_get_connection_manager
 from .const import DOMAIN
 from .coordinator import GeckoVesselCoordinator
 from .entity import GeckoEntityAvailabilityMixin, gecko_zone_ids_equal
+from .temperature_sanity import coerce_spa_water_temperature_c
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -177,7 +178,9 @@ class GeckoClimate(
             )
             self._attr_hvac_action = HVACAction.IDLE
 
-        self._attr_current_temperature = self._zone.temperature
+        self._attr_current_temperature = coerce_spa_water_temperature_c(
+            self._zone.temperature
+        )
         reported_target = self._zone.target_temperature
         pend = self._pending_target_temperature
         deadline = self._pending_target_deadline_mono

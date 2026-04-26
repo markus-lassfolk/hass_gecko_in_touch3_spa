@@ -19,9 +19,9 @@ from custom_components.gecko.const import (
 )
 
 
-def test_cloud_rest_defaults_enable_polling() -> None:
-    """Cloud REST polling is active by default so chemistry readings appear."""
-    assert DEFAULT_CLOUD_REST_POLL_INTERVAL == 300
+def test_cloud_rest_defaults_are_daily() -> None:
+    """Cloud REST defaults are gentle; live chemistry comes from MQTT each cycle."""
+    assert DEFAULT_CLOUD_REST_POLL_INTERVAL == 86400
     assert DEFAULT_CLOUD_REST_ONLY_WHEN_MQTT_DOWN is False
 
 

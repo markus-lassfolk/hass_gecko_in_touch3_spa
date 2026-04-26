@@ -48,10 +48,10 @@
           "energy_poll_interval": "Premium energy poll interval (seconds)"
         },
         "data_description": {
-          "cloud_rest_poll_interval": "How often to fetch chemistry readings (pH, ORP, water temp, alkalinity, chlorine, etc.) from the Gecko cloud. Default: 300 seconds (5 minutes). Set to 0 to disable.",
+          "cloud_rest_poll_interval": "How often to fetch tile and chemistry enrichment (pH, ORP, water temp, alkalinity, chlorine, etc.) from the Gecko cloud REST API. Default: 86400 seconds (once per day). Live state still updates from MQTT every coordinator cycle. Set to 0 to disable.",
           "cloud_rest_only_when_mqtt_down": "When enabled, REST polling only runs while MQTT is disconnected. Default: off — keeps REST polling active so chemistry readings always update.",
           "alerts_poll_interval": "How often to fetch unread messages and vessel action alerts. Default: 0 (disabled). Recommended: 300 seconds (5 minutes) if you want alert notifications.",
-          "energy_poll_interval": "How often to refresh premium energy metrics (consumption, score, cost) when energy data is linked. Default: 3600 seconds (1 hour). Set to 0 to disable polling."
+          "energy_poll_interval": "How often to refresh premium energy metrics (consumption, score, cost) when energy data is linked. Default: 86400 seconds (once per day). Set to 0 to disable polling."
         }
       },
       "link_energy": {
