@@ -1,4 +1,4 @@
-# Release notes — Gecko Full Community **2.4.0**
+# Release notes — Gecko Full Community **2.5.0**
 
 *User-oriented summary. Technical detail lives in [`CHANGELOG.md`](CHANGELOG.md).*
 
@@ -52,7 +52,7 @@ When the integration **reconnects** or **refreshes tokens**, failed attempts are
 ## Upgrade path
 
 1. **Read the polling section above** and decide whether you want faster REST than “once per day”.
-2. **Update** the custom component (HACS or manual copy) to **2.4.0**.
+2. **Update** the custom component (HACS or manual copy) to **2.5.0**.
 3. **Restart Home Assistant.**
 4. Optionally open **Configure** on the Gecko integration and set **Cloud REST poll interval** / **Energy poll interval** to your preferred values.
 

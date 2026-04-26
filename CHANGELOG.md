@@ -6,7 +6,7 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0
 
 ---
 
-## [2.4.0] — 2026-04-26
+## [2.5.0] — 2026-04-27
 
 ### Breaking changes
 
@@ -54,4 +54,4 @@ To reduce load on Gecko cloud APIs and avoid account throttling or bans, **defau
 
 ## Earlier versions
 
-Releases **before 2.4.0** did not ship a root-level changelog in this repository; use [GitHub Releases](https://github.com/markus-lassfolk/hass_gecko_in_touch3_spa/releases) and commit history for older notes.
+Releases **before 2.5.0** did not ship a root-level changelog in this repository; use [GitHub Releases](https://github.com/markus-lassfolk/hass_gecko_in_touch3_spa/releases) and commit history for older notes.
